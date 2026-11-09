@@ -1,0 +1,18 @@
+{
+  "base_version": "1.0.5",
+  "release": "1.0.5-private-preview.8-redemption",
+  "frontend": "Existing glass UI plus reviewed service-account component",
+  "production_login_tested": true,
+  "production_server_modified": true,
+  "client_revision": "r8",
+  "production_game_login_tested_in_previous_r5": true,
+  "live_email_delivery_confirmed": true,
+  "live_user_registration_completed": true,
+  "registration_browser_fixture_tested": true,
+  "password_policy": "8-30, ASCII upper+lower, Unicode punctuation/symbol; legacy login accepted",
+  "forgot_password_browser_tested": true,
+  "legacy_token_manual_ui_removed": true,
+  "subscription_enforcement": true,
+  "one_time_redemption": true,
+  "admin_test_exemption_server_configured": true
+}

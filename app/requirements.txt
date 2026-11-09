@@ -1,0 +1,23 @@
+# 小光运行依赖（W1，Python 3.12）
+#
+# 逐个 grep 过 app/ 里的 import；版本是本机验证过的：
+#   numpy 2.5.4 / requests 2.34.2 / cryptography 50.0.2 /
+#   zstandard 0.25.0 / PySocks 1.7.1 / psutil 7.2.2
+#
+# 没有列 websockets：base 里已经不用 websockets 库（qfsky.skyws 是手写
+# WebSocket 帧、账号 WS 走 qfsky 自己的传输），grep 不到 import websockets。
+# 服务端/分析用的 capstone、pyelftools、fastapi、uvicorn、uvloop、qrcode
+# 都不进这个清单，原因写在 REPORT.md。
+
+numpy>=2.0,<3
+requests>=2.31
+cryptography>=42
+zstandard>=0.22
+PySocks>=1.7
+psutil>=5.9
+
+# W4a2/W5：catalog 的 scene/cache 现场生成（APK 里的 native 构造器/序列化器）
+# unicorn 2.1.4: GPLv2（wheel METADATA 写 BSD 是上游旧字段，按 GPLv2 处理；见 THIRD_PARTY_NOTICES）
+# capstone 5.0.9: BSD-3-Clause（Copyright (c) 2013, COSEINC.）
+unicorn==2.1.4
+capstone==5.0.9

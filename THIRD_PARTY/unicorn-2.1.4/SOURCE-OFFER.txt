@@ -1,0 +1,25 @@
+Unicorn CPU emulator engine 2.1.4 — 源码获取说明 / GPLv2 书面要约
+================================================================
+
+本安装包随附的 unicorn 2.1.4 是 PyPI 官方发布的**未修改** wheel
+（Windows amd64，`unicorn-2.1.4-cp37-abi3-win_amd64.whl`），只以动态库
+`unicorn/lib/unicorn.dll` + Python 绑定的形式随包；本程序没有修改它的源码，
+也没有静态链接。
+
+对应源码（同一版本、含构建脚本）：
+
+  https://github.com/unicorn-engine/unicorn/tree/2.1.4
+  https://pypi.org/project/unicorn/2.1.4/#files
+  https://www.unicorn-engine.org/
+
+书面要约：本安装包的发布者承诺，自本包交付之日起至少三年内，任何收到本包的
+个人或组织都可以通过本项目的发布渠道联系发布者，免费取得 unicorn 2.1.4 的
+完整对应源码（以官方发布的同版本源码包/仓库 tag 为准）。取得源码的合理复制/
+介质成本由索取方承担。
+
+许可证：GNU General Public License version 2（GPLv2）。全文见同目录 `LICENSE`。
+注意：unicorn 2.1.4 的 PyPI `METADATA` 里仍写着 `License: BSD License` 和
+BSD classifier，但同一文件的 README 行写明 “Distributed under free software
+license GPLv2”，上游实际许可证是 GPLv2；本包按 GPLv2（更保守）分发。
+`unicorn/lib/unicorn.dll` 的 sha256：
+010d85dce84b8f6ffaec3d5420f1b5f7768f859eb831be574c7da23e656ee8f1

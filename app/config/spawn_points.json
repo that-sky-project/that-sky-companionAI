@@ -1,0 +1,1753 @@
+{
+ "destinations": [
+  {
+   "aliases": [
+    "千鸟城",
+    "千鸟城（霞谷神殿）",
+    "qianniaocheng"
+   ],
+   "id": "landmark:qianniaocheng",
+   "map_id": 507487826,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetEnd2",
+   "variant": "qianniaocheng"
+  },
+  {
+   "aliases": [
+    "AR_Bedroom",
+    "scene:AR_Bedroom",
+    "AR卧室（内部场景）",
+    "AR卧室内部场景",
+    "AR卧室",
+    "卧室"
+   ],
+   "id": "scene:AR_Bedroom",
+   "map_id": 3463762797,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "AR_Bedroom"
+  },
+  {
+   "aliases": [
+    "AR_TestLevel",
+    "scene:AR_TestLevel",
+    "AR测试场景"
+   ],
+   "id": "scene:AR_TestLevel",
+   "map_id": 1012996619,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "AR_TestLevel"
+  },
+  {
+   "aliases": [
+    "AR_WheatField",
+    "scene:AR_WheatField",
+    "AR麦田（内部场景）",
+    "AR麦田内部场景",
+    "AR麦田",
+    "麦田"
+   ],
+   "id": "scene:AR_WheatField",
+   "map_id": 112616686,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "AR_WheatField"
+  },
+  {
+   "aliases": [
+    "CandleSpace",
+    "遇境",
+    "遇境（CandleSpace）",
+    "scene:CandleSpace",
+    "老遇境",
+    "家",
+    "回城",
+    "主城",
+    "城"
+   ],
+   "id": "scene:CandleSpace",
+   "map_id": 3526133726,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "CandleSpace"
+  },
+  {
+   "aliases": [
+    "CandleSpaceEnd",
+    "重生之路（CandleSpaceEnd）",
+    "scene:CandleSpaceEnd",
+    "星轨"
+   ],
+   "id": "scene:CandleSpaceEnd",
+   "map_id": 2251284635,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "CandleSpaceEnd"
+  },
+  {
+   "aliases": [
+    "Credits",
+    "重生之路（Credits）",
+    "scene:Credits",
+    "重生之路（鸣谢场景）",
+    "重生之路鸣谢场景",
+    "片尾",
+    "鸣谢",
+    "重生之路片尾",
+    "片尾鸣谢"
+   ],
+   "id": "scene:Credits",
+   "map_id": 261807733,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Credits"
+  },
+  {
+   "aliases": [
+    "Dawn",
+    "晨岛",
+    "晨岛（Dawn）",
+    "scene:Dawn",
+    "晨岛入口"
+   ],
+   "id": "scene:Dawn",
+   "map_id": 1649439303,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dawn"
+  },
+  {
+   "aliases": [
+    "DawnCave",
+    "scene:DawnCave",
+    "预言山谷",
+    "晨岛：预言山谷",
+    "晨岛:预言山谷",
+    "晨岛：预言山谷（DawnCave）"
+   ],
+   "id": "scene:DawnCave",
+   "map_id": 748712866,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DawnCave"
+  },
+  {
+   "aliases": [
+    "Dawn_TrialsAir",
+    "风之试炼",
+    "风之试炼（Dawn_TrialsAir）",
+    "scene:Dawn_TrialsAir"
+   ],
+   "id": "scene:Dawn_TrialsAir",
+   "map_id": 2050064391,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dawn_TrialsAir"
+  },
+  {
+   "aliases": [
+    "Dawn_TrialsEarth",
+    "土之试炼",
+    "土之试炼（Dawn_TrialsEarth）",
+    "scene:Dawn_TrialsEarth"
+   ],
+   "id": "scene:Dawn_TrialsEarth",
+   "map_id": 1887730855,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dawn_TrialsEarth"
+  },
+  {
+   "aliases": [
+    "Dawn_TrialsFire",
+    "火之试炼",
+    "火之试炼（Dawn_TrialsFire）",
+    "scene:Dawn_TrialsFire"
+   ],
+   "id": "scene:Dawn_TrialsFire",
+   "map_id": 1241316521,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dawn_TrialsFire"
+  },
+  {
+   "aliases": [
+    "Dawn_TrialsWater",
+    "水之试炼",
+    "水之试炼（Dawn_TrialsWater）",
+    "scene:Dawn_TrialsWater"
+   ],
+   "id": "scene:Dawn_TrialsWater",
+   "map_id": 3884142720,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dawn_TrialsWater"
+  },
+  {
+   "aliases": [
+    "DayEnd",
+    "云野神殿",
+    "云野神殿（DayEnd）",
+    "scene:DayEnd"
+   ],
+   "id": "scene:DayEnd",
+   "map_id": 1190972738,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DayEnd"
+  },
+  {
+   "aliases": [
+    "DayHubCave",
+    "云野：中央神坛",
+    "云野：中央神坛（DayHubCave）",
+    "scene:DayHubCave",
+    "中央神坛",
+    "云野:中央神坛"
+   ],
+   "id": "scene:DayHubCave",
+   "map_id": 2394719185,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DayHubCave"
+  },
+  {
+   "aliases": [
+    "Dusk",
+    "暮土（Dusk）",
+    "scene:Dusk",
+    "边陲荒漠",
+    "荒漠"
+   ],
+   "id": "scene:Dusk",
+   "map_id": 1147491976,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk"
+  },
+  {
+   "aliases": [
+    "DuskEnd",
+    "暮土神殿",
+    "暮土神殿（DuskEnd）",
+    "scene:DuskEnd",
+    "暮土神殿（主场景）",
+    "暮土神殿主场景"
+   ],
+   "id": "scene:DuskEnd",
+   "map_id": 4158956653,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskEnd"
+  },
+  {
+   "aliases": [
+    "DuskEnd_Past",
+    "暮土神殿（DuskEnd_Past）",
+    "scene:DuskEnd_Past",
+    "暮土神殿（过去场景）",
+    "暮土神殿过去场景",
+    "暮土神殿过去",
+    "过去的暮土神殿",
+    "神殿过去"
+   ],
+   "id": "scene:DuskEnd_Past",
+   "map_id": 371156238,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskEnd_Past"
+  },
+  {
+   "aliases": [
+    "DuskGraveyard",
+    "暮土：巨兽荒原",
+    "暮土：巨兽荒原（DuskGraveyard）",
+    "scene:DuskGraveyard",
+    "巨兽荒原",
+    "暮土:巨兽荒原"
+   ],
+   "id": "scene:DuskGraveyard",
+   "map_id": 864432821,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskGraveyard"
+  },
+  {
+   "aliases": [
+    "DuskMid",
+    "暮土：远古战场",
+    "暮土：远古战场（DuskMid）",
+    "scene:DuskMid",
+    "远古战场",
+    "暮土:远古战场"
+   ],
+   "id": "scene:DuskMid",
+   "map_id": 1597085778,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskMid"
+  },
+  {
+   "aliases": [
+    "DuskMid_Past",
+    "市集（DuskMid_Past）",
+    "scene:DuskMid_Past",
+    "繁华王都",
+    "王都"
+   ],
+   "id": "scene:DuskMid_Past",
+   "map_id": 1561318939,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskMid_Past"
+  },
+  {
+   "aliases": [
+    "DuskMid_PastMarket",
+    "市集",
+    "市集（DuskMid_PastMarket）",
+    "scene:DuskMid_PastMarket",
+    "市集（独立场景）",
+    "市集独立场景"
+   ],
+   "id": "scene:DuskMid_PastMarket",
+   "map_id": 961583455,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskMid_PastMarket"
+  },
+  {
+   "aliases": [
+    "DuskOasis",
+    "暮土：失落方舟",
+    "暮土：失落方舟（DuskOasis）",
+    "scene:DuskOasis",
+    "失落方舟",
+    "暮土:失落方舟"
+   ],
+   "id": "scene:DuskOasis",
+   "map_id": 170656205,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskOasis"
+  },
+  {
+   "aliases": [
+    "DuskStart",
+    "墓土大厅",
+    "暮土",
+    "暮土（DuskStart）",
+    "scene:DuskStart",
+    "暮土大厅",
+    "暮土入口",
+    "墓土入口",
+    "墓土"
+   ],
+   "id": "scene:DuskStart",
+   "map_id": 817373972,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "DuskStart"
+  },
+  {
+   "aliases": [
+    "Dusk_CrabField",
+    "暮土：黑水港湾",
+    "暮土：黑水港湾（Dusk_CrabField）",
+    "scene:Dusk_CrabField",
+    "黑水港湾",
+    "暮土:黑水港湾"
+   ],
+   "id": "scene:Dusk_CrabField",
+   "map_id": 2650921869,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_CrabField"
+  },
+  {
+   "aliases": [
+    "Dusk_HiddenTemple",
+    "荒废神殿",
+    "荒废神殿（Dusk_HiddenTemple）",
+    "scene:Dusk_HiddenTemple"
+   ],
+   "id": "scene:Dusk_HiddenTemple",
+   "map_id": 1152668600,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_HiddenTemple"
+  },
+  {
+   "aliases": [
+    "Dusk_PearlIsland",
+    "珍珠村",
+    "珍珠村（Dusk_PearlIsland）",
+    "scene:Dusk_PearlIsland"
+   ],
+   "id": "scene:Dusk_PearlIsland",
+   "map_id": 607516458,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_PearlIsland"
+  },
+  {
+   "aliases": [
+    "Dusk_PearlSea",
+    "scene:Dusk_PearlSea",
+    "珍珠海域"
+   ],
+   "id": "scene:Dusk_PearlSea",
+   "map_id": 1058995818,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_PearlSea"
+  },
+  {
+   "aliases": [
+    "Dusk_Triangle",
+    "暮土：藏宝岛礁",
+    "暮土：藏宝岛礁（Dusk_Triangle）",
+    "scene:Dusk_Triangle",
+    "藏宝岛礁（主场景）",
+    "藏宝岛礁",
+    "暮土:藏宝岛礁",
+    "藏宝岛礁主场景",
+    "岛礁"
+   ],
+   "id": "scene:Dusk_Triangle",
+   "map_id": 4070111637,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_Triangle"
+  },
+  {
+   "aliases": [
+    "Dusk_TriangleEnd",
+    "暮土：藏宝岛礁（Dusk_TriangleEnd）",
+    "scene:Dusk_TriangleEnd",
+    "藏宝岛礁（终段场景）",
+    "藏宝岛礁终段场景",
+    "藏宝岛礁终段",
+    "岛礁终段",
+    "藏宝岛礁终点",
+    "藏宝岛礁尽头"
+   ],
+   "id": "scene:Dusk_TriangleEnd",
+   "map_id": 3516048122,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Dusk_TriangleEnd"
+  },
+  {
+   "aliases": [
+    "Event_Arr_ExhaleInhale",
+    "scene:Event_Arr_ExhaleInhale",
+    "欧若拉·ExhaleInhale歌曲场景",
+    "欧若拉·呼吸",
+    "欧若拉呼吸",
+    "ExhaleInhale"
+   ],
+   "id": "scene:Event_Arr_ExhaleInhale",
+   "map_id": 2779731386,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_ExhaleInhale"
+  },
+  {
+   "aliases": [
+    "Event_Arr_EyesOfAChild",
+    "scene:Event_Arr_EyesOfAChild",
+    "欧若拉·EyesOfAChild歌曲场景",
+    "欧若拉·孩童之眼",
+    "欧若拉孩童之眼",
+    "孩童之眼",
+    "EyesOfAChild"
+   ],
+   "id": "scene:Event_Arr_EyesOfAChild",
+   "map_id": 47024056,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_EyesOfAChild"
+  },
+  {
+   "aliases": [
+    "Event_Arr_Runaway",
+    "scene:Event_Arr_Runaway",
+    "欧若拉·Runaway歌曲场景",
+    "欧若拉·逃离",
+    "欧若拉逃离",
+    "Runaway"
+   ],
+   "id": "scene:Event_Arr_Runaway",
+   "map_id": 4011385311,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_Runaway"
+  },
+  {
+   "aliases": [
+    "Event_Arr_SoftInside",
+    "scene:Event_Arr_SoftInside",
+    "欧若拉·SoftInside歌曲场景",
+    "欧若拉·柔软",
+    "欧若拉柔软",
+    "SoftInside"
+   ],
+   "id": "scene:Event_Arr_SoftInside",
+   "map_id": 1661095040,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_SoftInside"
+  },
+  {
+   "aliases": [
+    "Event_Arr_TheSeed",
+    "scene:Event_Arr_TheSeed",
+    "欧若拉·TheSeed歌曲场景",
+    "欧若拉·种子",
+    "欧若拉种子",
+    "TheSeed"
+   ],
+   "id": "scene:Event_Arr_TheSeed",
+   "map_id": 2093785354,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_TheSeed"
+  },
+  {
+   "aliases": [
+    "Event_Arr_Warrior",
+    "scene:Event_Arr_Warrior",
+    "欧若拉·Warrior歌曲场景",
+    "欧若拉·战士",
+    "欧若拉战士",
+    "Warrior"
+   ],
+   "id": "scene:Event_Arr_Warrior",
+   "map_id": 3530028462,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Arr_Warrior"
+  },
+  {
+   "aliases": [
+    "Event_Cinema",
+    "群星影院",
+    "群星影院（Event_Cinema）",
+    "scene:Event_Cinema",
+    "电影院"
+   ],
+   "id": "scene:Event_Cinema",
+   "map_id": 417578099,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Cinema"
+  },
+  {
+   "aliases": [
+    "Event_DaysOfMischief",
+    "螃蟹的恶搞派对",
+    "螃蟹的恶搞派对（Event_DaysOfMischief）",
+    "scene:Event_DaysOfMischief",
+    "恶搞派对",
+    "螃蟹派对"
+   ],
+   "id": "scene:Event_DaysOfMischief",
+   "map_id": 3082753918,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_DaysOfMischief"
+  },
+  {
+   "aliases": [
+    "Event_DaysOfMischief_Escape",
+    "恶作剧密室",
+    "恶作剧密室（Event_DaysOfMischief_Escape）",
+    "scene:Event_DaysOfMischief_Escape"
+   ],
+   "id": "scene:Event_DaysOfMischief_Escape",
+   "map_id": 2418094228,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_DaysOfMischief_Escape"
+  },
+  {
+   "aliases": [
+    "Event_DaysOfMoonlight_HugeMoon",
+    "月圆之地",
+    "月圆之地（Event_DaysOfMoonlight_HugeMoon）",
+    "scene:Event_DaysOfMoonlight_HugeMoon"
+   ],
+   "id": "scene:Event_DaysOfMoonlight_HugeMoon",
+   "map_id": 3452301396,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_DaysOfMoonlight_HugeMoon"
+  },
+  {
+   "aliases": [
+    "Event_HidenSeek_SnowVillage",
+    "躲猫猫水晶球",
+    "躲猫猫水晶球（Event_HidenSeek_SnowVillage）",
+    "scene:Event_HidenSeek_SnowVillage",
+    "躲猫猫"
+   ],
+   "id": "scene:Event_HidenSeek_SnowVillage",
+   "map_id": 3530471012,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_HidenSeek_SnowVillage"
+  },
+  {
+   "aliases": [
+    "Event_Personality",
+    "寻真之地",
+    "寻真之地（Event_Personality）",
+    "scene:Event_Personality"
+   ],
+   "id": "scene:Event_Personality",
+   "map_id": 2920756220,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_Personality"
+  },
+  {
+   "aliases": [
+    "Event_WerewolfGame",
+    "永夜之地",
+    "永夜之地（Event_WerewolfGame）",
+    "scene:Event_WerewolfGame",
+    "狼人杀",
+    "狼人杀地图",
+    "狼人"
+   ],
+   "id": "scene:Event_WerewolfGame",
+   "map_id": 1737684623,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Event_WerewolfGame"
+  },
+  {
+   "aliases": [
+    "MainStreet",
+    "小镇",
+    "小镇（MainStreet）",
+    "scene:MainStreet",
+    "云巢"
+   ],
+   "id": "scene:MainStreet",
+   "map_id": 1509719447,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet"
+  },
+  {
+   "aliases": [
+    "MainStreetFlyingIntro",
+    "飞行指引",
+    "飞行指引（MainStreetFlyingIntro）",
+    "scene:MainStreetFlyingIntro"
+   ],
+   "id": "scene:MainStreetFlyingIntro",
+   "map_id": 1761965310,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreetFlyingIntro"
+  },
+  {
+   "aliases": [
+    "MainStreet_Apartment",
+    "scene:MainStreet_Apartment",
+    "小镇公寓"
+   ],
+   "id": "scene:MainStreet_Apartment",
+   "map_id": 3905084854,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_Apartment"
+  },
+  {
+   "aliases": [
+    "MainStreet_Cafe",
+    "甜点工坊",
+    "甜点工坊（MainStreet_Cafe）",
+    "scene:MainStreet_Cafe"
+   ],
+   "id": "scene:MainStreet_Cafe",
+   "map_id": 1444818677,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_Cafe"
+  },
+  {
+   "aliases": [
+    "MainStreet_Cafe_Wonderland",
+    "仙境茶会",
+    "仙境茶会（MainStreet_Cafe_Wonderland）",
+    "scene:MainStreet_Cafe_Wonderland"
+   ],
+   "id": "scene:MainStreet_Cafe_Wonderland",
+   "map_id": 1104763408,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_Cafe_Wonderland"
+  },
+  {
+   "aliases": [
+    "MainStreet_ConcertHall",
+    "音乐餐厅",
+    "音乐餐厅（MainStreet_ConcertHall）",
+    "scene:MainStreet_ConcertHall"
+   ],
+   "id": "scene:MainStreet_ConcertHall",
+   "map_id": 1559613961,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_ConcertHall"
+  },
+  {
+   "aliases": [
+    "MainStreet_FunArmada",
+    "狂欢船队",
+    "狂欢船队（MainStreet_FunArmada）",
+    "scene:MainStreet_FunArmada"
+   ],
+   "id": "scene:MainStreet_FunArmada",
+   "map_id": 3743646255,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_FunArmada"
+  },
+  {
+   "aliases": [
+    "MainStreet_ShopOutfits",
+    "服装店",
+    "服装店（MainStreet_ShopOutfits）",
+    "scene:MainStreet_ShopOutfits"
+   ],
+   "id": "scene:MainStreet_ShopOutfits",
+   "map_id": 1563891948,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_ShopOutfits"
+  },
+  {
+   "aliases": [
+    "MainStreet_ShopProps",
+    "筑巢工坊",
+    "筑巢工坊（MainStreet_ShopProps）",
+    "scene:MainStreet_ShopProps"
+   ],
+   "id": "scene:MainStreet_ShopProps",
+   "map_id": 372393162,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_ShopProps"
+  },
+  {
+   "aliases": [
+    "MainStreet_ShopSpells",
+    "魔法商店",
+    "魔法商店（MainStreet_ShopSpells）",
+    "scene:MainStreet_ShopSpells"
+   ],
+   "id": "scene:MainStreet_ShopSpells",
+   "map_id": 4044469303,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_ShopSpells"
+  },
+  {
+   "aliases": [
+    "MainStreet_Soundbath",
+    "冥想之地",
+    "冥想之地（MainStreet_Soundbath）",
+    "scene:MainStreet_Soundbath"
+   ],
+   "id": "scene:MainStreet_Soundbath",
+   "map_id": 3368878998,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_Soundbath"
+  },
+  {
+   "aliases": [
+    "MainStreet_StorySpace",
+    "故事空间",
+    "故事空间（MainStreet_StorySpace）",
+    "scene:MainStreet_StorySpace"
+   ],
+   "id": "scene:MainStreet_StorySpace",
+   "map_id": 1936276829,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "MainStreet_StorySpace"
+  },
+  {
+   "aliases": [
+    "Nest_Night_GO_Town",
+    "致梵高季主题小屋",
+    "致梵高季主题小屋（Nest_Night_GO_Town）",
+    "scene:Nest_Night_GO_Town",
+    "梵高小屋",
+    "致梵高季小屋",
+    "梵高季小屋"
+   ],
+   "id": "scene:Nest_Night_GO_Town",
+   "map_id": 1274288158,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Nest_Night_GO_Town"
+  },
+  {
+   "aliases": [
+    "Night",
+    "禁阁",
+    "禁阁（Night）",
+    "scene:Night",
+    "禁阁底层",
+    "禁阁入口",
+    "禁阁一楼",
+    "禁阁下层"
+   ],
+   "id": "scene:Night",
+   "map_id": 2358907137,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night"
+  },
+  {
+   "aliases": [
+    "Night2",
+    "禁阁（Night2）",
+    "scene:Night2",
+    "禁阁上层",
+    "禁阁二楼",
+    "禁阁楼上"
+   ],
+   "id": "scene:Night2",
+   "map_id": 2307461961,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night2"
+  },
+  {
+   "aliases": [
+    "NightArchive",
+    "禁阁：档案阁",
+    "禁阁：档案阁（NightArchive）",
+    "scene:NightArchive",
+    "档案阁",
+    "禁阁:档案阁"
+   ],
+   "id": "scene:NightArchive",
+   "map_id": 2518601,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "NightArchive"
+  },
+  {
+   "aliases": [
+    "NightDesert",
+    "星光沙漠",
+    "星光沙漠（NightDesert）",
+    "scene:NightDesert",
+    "星光沙漠（主场景）",
+    "星光沙漠主场景",
+    "沙漠"
+   ],
+   "id": "scene:NightDesert",
+   "map_id": 2060214456,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "NightDesert"
+  },
+  {
+   "aliases": [
+    "NightDesert_Beach",
+    "星光沙漠（NightDesert_Beach）",
+    "scene:NightDesert_Beach",
+    "星光沙漠（海滩场景）",
+    "星光沙漠海滩场景",
+    "星光沙漠海滩",
+    "沙漠海滩",
+    "海滩"
+   ],
+   "id": "scene:NightDesert_Beach",
+   "map_id": 3051518728,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "NightDesert_Beach"
+  },
+  {
+   "aliases": [
+    "NightDesert_Planets",
+    "小王子的梦",
+    "小王子的梦（NightDesert_Planets）",
+    "scene:NightDesert_Planets"
+   ],
+   "id": "scene:NightDesert_Planets",
+   "map_id": 2824771136,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "NightDesert_Planets"
+  },
+  {
+   "aliases": [
+    "NightEnd",
+    "禁阁（NightEnd）",
+    "scene:NightEnd",
+    "禁阁（终段场景）",
+    "禁阁终段场景",
+    "禁阁终段",
+    "禁阁顶楼",
+    "禁阁顶层",
+    "禁阁尽头"
+   ],
+   "id": "scene:NightEnd",
+   "map_id": 2267185542,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "NightEnd"
+  },
+  {
+   "aliases": [
+    "Night_GO_City",
+    "致梵高季",
+    "致梵高季（Night_GO_City）",
+    "scene:Night_GO_City",
+    "致梵高季（城市场景）",
+    "致梵高季城市场景",
+    "梵高城市",
+    "致梵高季城市",
+    "梵高季城市"
+   ],
+   "id": "scene:Night_GO_City",
+   "map_id": 2458626594,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_City"
+  },
+  {
+   "aliases": [
+    "Night_GO_Farm",
+    "致梵高季",
+    "致梵高季（Night_GO_Farm）",
+    "scene:Night_GO_Farm",
+    "致梵高季（农场场景）",
+    "致梵高季农场场景",
+    "梵高农场",
+    "致梵高季农场",
+    "梵高季农场"
+   ],
+   "id": "scene:Night_GO_Farm",
+   "map_id": 2611321369,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Farm"
+  },
+  {
+   "aliases": [
+    "Night_GO_Field",
+    "致梵高季",
+    "致梵高季（Night_GO_Field）",
+    "scene:Night_GO_Field",
+    "致梵高季（田野场景）",
+    "致梵高季田野场景",
+    "梵高田野",
+    "致梵高季田野",
+    "梵高季田野"
+   ],
+   "id": "scene:Night_GO_Field",
+   "map_id": 1665365959,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Field"
+  },
+  {
+   "aliases": [
+    "Night_GO_Gallery",
+    "致梵高季",
+    "致梵高季（Night_GO_Gallery）",
+    "scene:Night_GO_Gallery",
+    "星夜画廊",
+    "梵高画廊"
+   ],
+   "id": "scene:Night_GO_Gallery",
+   "map_id": 98108829,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Gallery"
+  },
+  {
+   "aliases": [
+    "Night_GO_Island",
+    "致梵高季",
+    "致梵高季（Night_GO_Island）",
+    "scene:Night_GO_Island",
+    "致梵高季（岛屿场景）",
+    "致梵高季岛屿场景",
+    "梵高岛屿",
+    "致梵高季岛屿",
+    "梵高季岛屿"
+   ],
+   "id": "scene:Night_GO_Island",
+   "map_id": 996052172,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Island"
+  },
+  {
+   "aliases": [
+    "Night_GO_Town",
+    "致梵高季",
+    "致梵高季（Night_GO_Town）",
+    "scene:Night_GO_Town",
+    "致梵高季（小镇场景）",
+    "致梵高季小镇场景",
+    "梵高小镇",
+    "致梵高季小镇",
+    "梵高季小镇"
+   ],
+   "id": "scene:Night_GO_Town",
+   "map_id": 3092325157,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Town"
+  },
+  {
+   "aliases": [
+    "Night_GO_Tree",
+    "致梵高季",
+    "致梵高季（Night_GO_Tree）",
+    "scene:Night_GO_Tree",
+    "致梵高季（树场景）",
+    "致梵高季树场景",
+    "梵高树",
+    "致梵高季树",
+    "梵高季树",
+    "梵高大树"
+   ],
+   "id": "scene:Night_GO_Tree",
+   "map_id": 4023907509,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_GO_Tree"
+  },
+  {
+   "aliases": [
+    "Night_IPHallway",
+    "藏星阁",
+    "藏星阁（Night_IPHallway）",
+    "scene:Night_IPHallway"
+   ],
+   "id": "scene:Night_IPHallway",
+   "map_id": 530831471,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_IPHallway"
+  },
+  {
+   "aliases": [
+    "Night_InfiniteDesert",
+    "星光沙漠（Night_InfiniteDesert）",
+    "scene:Night_InfiniteDesert",
+    "泪水的世界",
+    "泪水世界"
+   ],
+   "id": "scene:Night_InfiniteDesert",
+   "map_id": 214074919,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_InfiniteDesert"
+  },
+  {
+   "aliases": [
+    "Night_JarCave",
+    "星光沙漠（Night_JarCave）",
+    "scene:Night_JarCave",
+    "星光沙漠（罐子洞场景）",
+    "星光沙漠罐子洞场景",
+    "罐子洞",
+    "星光沙漠罐子洞",
+    "沙漠罐子洞"
+   ],
+   "id": "scene:Night_JarCave",
+   "map_id": 3258961934,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_JarCave"
+  },
+  {
+   "aliases": [
+    "Night_Jumble",
+    "残灯墟",
+    "残灯墟（Night_Jumble）",
+    "scene:Night_Jumble"
+   ],
+   "id": "scene:Night_Jumble",
+   "map_id": 4182564783,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_Jumble"
+  },
+  {
+   "aliases": [
+    "Night_PaintedWorld",
+    "月牙绿洲",
+    "月牙绿洲（Night_PaintedWorld）",
+    "scene:Night_PaintedWorld"
+   ],
+   "id": "scene:Night_PaintedWorld",
+   "map_id": 1694829989,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_PaintedWorld"
+  },
+  {
+   "aliases": [
+    "Night_Shelter",
+    "庇护所",
+    "庇护所（Night_Shelter）",
+    "scene:Night_Shelter"
+   ],
+   "id": "scene:Night_Shelter",
+   "map_id": 2899790755,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_Shelter"
+  },
+  {
+   "aliases": [
+    "Night_StoryBook",
+    "姆明故事书",
+    "姆明故事书（Night_StoryBook）",
+    "scene:Night_StoryBook",
+    "姆明谷"
+   ],
+   "id": "scene:Night_StoryBook",
+   "map_id": 3803142938,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_StoryBook"
+  },
+  {
+   "aliases": [
+    "Night_ValleyForest",
+    "姆明谷的森林",
+    "姆明谷的森林（Night_ValleyForest）",
+    "scene:Night_ValleyForest"
+   ],
+   "id": "scene:Night_ValleyForest",
+   "map_id": 1801452336,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_ValleyForest"
+  },
+  {
+   "aliases": [
+    "Night_ValleyHouse",
+    "姆明屋",
+    "姆明屋（Night_ValleyHouse）",
+    "scene:Night_ValleyHouse",
+    "姆明屋（地面场景）",
+    "姆明屋地面场景"
+   ],
+   "id": "scene:Night_ValleyHouse",
+   "map_id": 217257707,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_ValleyHouse"
+  },
+  {
+   "aliases": [
+    "Night_ValleyHouseSky",
+    "姆明屋（Night_ValleyHouseSky）",
+    "scene:Night_ValleyHouseSky",
+    "姆明屋（天空场景）",
+    "姆明屋天空场景",
+    "姆明屋天空",
+    "天空姆明屋",
+    "天上的姆明屋"
+   ],
+   "id": "scene:Night_ValleyHouseSky",
+   "map_id": 1185708672,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_ValleyHouseSky"
+  },
+  {
+   "aliases": [
+    "Night_Workshop",
+    "织光阁",
+    "织光阁（Night_Workshop）",
+    "scene:Night_Workshop"
+   ],
+   "id": "scene:Night_Workshop",
+   "map_id": 3203226771,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Night_Workshop"
+  },
+  {
+   "aliases": [
+    "Nintendo_CandleSpace",
+    "隐藏关卡",
+    "隐藏关卡（Nintendo_CandleSpace）",
+    "scene:Nintendo_CandleSpace"
+   ],
+   "id": "scene:Nintendo_CandleSpace",
+   "map_id": 2199862534,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Nintendo_CandleSpace"
+  },
+  {
+   "aliases": [
+    "OrbitEnd",
+    "重生之路",
+    "重生之路（OrbitEnd）",
+    "scene:OrbitEnd",
+    "重生之路（终段场景）",
+    "重生之路终段场景",
+    "重生之路终段"
+   ],
+   "id": "scene:OrbitEnd",
+   "map_id": 567986524,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "OrbitEnd"
+  },
+  {
+   "aliases": [
+    "OrbitMid",
+    "重生之路（OrbitMid）",
+    "scene:OrbitMid",
+    "重生之路（中段场景）",
+    "重生之路中段场景",
+    "重生之路中段"
+   ],
+   "id": "scene:OrbitMid",
+   "map_id": 3437135515,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "OrbitMid"
+  },
+  {
+   "aliases": [
+    "Prairie_ButterflyFields",
+    "云野大厅",
+    "云野：蝴蝶平原",
+    "云野：蝴蝶平原（Prairie_ButterflyFields）",
+    "scene:Prairie_ButterflyFields",
+    "蝴蝶平原",
+    "云野",
+    "云野入口",
+    "云野:蝴蝶平原"
+   ],
+   "id": "scene:Prairie_ButterflyFields",
+   "map_id": 2477345666,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_ButterflyFields"
+  },
+  {
+   "aliases": [
+    "Prairie_Cave",
+    "云野：幽光山洞",
+    "云野：幽光山洞（Prairie_Cave）",
+    "scene:Prairie_Cave",
+    "幽光山洞",
+    "云野:幽光山洞"
+   ],
+   "id": "scene:Prairie_Cave",
+   "map_id": 3244931597,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_Cave"
+  },
+  {
+   "aliases": [
+    "Prairie_Island",
+    "云野：圣岛",
+    "云野：圣岛（Prairie_Island）",
+    "scene:Prairie_Island",
+    "圣岛",
+    "云野:圣岛"
+   ],
+   "id": "scene:Prairie_Island",
+   "map_id": 3057325709,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_Island"
+  },
+  {
+   "aliases": [
+    "Prairie_NestAndKeeper",
+    "云野：云顶浮石",
+    "云野：云顶浮石（Prairie_NestAndKeeper）",
+    "scene:Prairie_NestAndKeeper",
+    "云顶浮石",
+    "云野:云顶浮石"
+   ],
+   "id": "scene:Prairie_NestAndKeeper",
+   "map_id": 312004957,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_NestAndKeeper"
+  },
+  {
+   "aliases": [
+    "Prairie_Village",
+    "云野：仙乡",
+    "云野：仙乡（Prairie_Village）",
+    "scene:Prairie_Village",
+    "仙乡",
+    "云野:仙乡"
+   ],
+   "id": "scene:Prairie_Village",
+   "map_id": 2350532176,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_Village"
+  },
+  {
+   "aliases": [
+    "Prairie_WildLifePark",
+    "云峰",
+    "云峰（Prairie_WildLifePark）",
+    "scene:Prairie_WildLifePark"
+   ],
+   "id": "scene:Prairie_WildLifePark",
+   "map_id": 3429122502,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Prairie_WildLifePark"
+  },
+  {
+   "aliases": [
+    "Rain",
+    "雨林",
+    "雨林（Rain）",
+    "scene:Rain",
+    "雨林入口",
+    "雨林大厅",
+    "静谧庭院"
+   ],
+   "id": "scene:Rain",
+   "map_id": 164626931,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Rain"
+  },
+  {
+   "aliases": [
+    "RainEnd",
+    "雨林神殿",
+    "雨林神殿（RainEnd）",
+    "scene:RainEnd"
+   ],
+   "id": "scene:RainEnd",
+   "map_id": 128844448,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "RainEnd"
+  },
+  {
+   "aliases": [
+    "RainForest",
+    "雨林：荧光森林",
+    "雨林：荧光森林（RainForest）",
+    "scene:RainForest",
+    "荧光森林",
+    "雨林:荧光森林"
+   ],
+   "id": "scene:RainForest",
+   "map_id": 2839585646,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "RainForest"
+  },
+  {
+   "aliases": [
+    "RainMid",
+    "雨林：密林遗迹",
+    "雨林：密林遗迹（RainMid）",
+    "scene:RainMid",
+    "密林遗迹",
+    "雨林:密林遗迹"
+   ],
+   "id": "scene:RainMid",
+   "map_id": 2159642775,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "RainMid"
+  },
+  {
+   "aliases": [
+    "RainShelter",
+    "雨林：秘密花园",
+    "雨林：秘密花园（RainShelter）",
+    "scene:RainShelter",
+    "秘密花园",
+    "雨林:秘密花园"
+   ],
+   "id": "scene:RainShelter",
+   "map_id": 2720691892,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "RainShelter"
+  },
+  {
+   "aliases": [
+    "Rain_BaseCamp",
+    "雨林：大树屋",
+    "雨林：大树屋（Rain_BaseCamp）",
+    "scene:Rain_BaseCamp",
+    "大树屋",
+    "雨林:大树屋"
+   ],
+   "id": "scene:Rain_BaseCamp",
+   "map_id": 3317260872,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Rain_BaseCamp"
+  },
+  {
+   "aliases": [
+    "Rain_BlueBirdTheater",
+    "青鸟剧场",
+    "青鸟剧场（Rain_BlueBirdTheater）",
+    "scene:Rain_BlueBirdTheater"
+   ],
+   "id": "scene:Rain_BlueBirdTheater",
+   "map_id": 3730271824,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Rain_BlueBirdTheater"
+  },
+  {
+   "aliases": [
+    "Rain_Cave",
+    "雨林：地下溶洞",
+    "雨林：地下溶洞（Rain_Cave）",
+    "scene:Rain_Cave",
+    "地下溶洞",
+    "雨林:地下溶洞"
+   ],
+   "id": "scene:Rain_Cave",
+   "map_id": 4133595729,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Rain_Cave"
+  },
+  {
+   "aliases": [
+    "Season24Void1",
+    "虚空",
+    "虚空（Season24Void1）",
+    "scene:Season24Void1"
+   ],
+   "id": "scene:Season24Void1",
+   "map_id": 3667302771,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Season24Void1"
+  },
+  {
+   "aliases": [
+    "Skyway",
+    "风行网道",
+    "风行网道（Skyway）",
+    "scene:Skyway"
+   ],
+   "id": "scene:Skyway",
+   "map_id": 2081768701,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Skyway"
+  },
+  {
+   "aliases": [
+    "Storm",
+    "伊甸（Storm）",
+    "scene:Storm",
+    "暴风眼"
+   ],
+   "id": "scene:Storm",
+   "map_id": 1705189686,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Storm"
+  },
+  {
+   "aliases": [
+    "StormEnd",
+    "伊甸之眼",
+    "伊甸之眼（StormEnd）",
+    "scene:StormEnd"
+   ],
+   "id": "scene:StormEnd",
+   "map_id": 3479786579,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "StormEnd"
+  },
+  {
+   "aliases": [
+    "StormEvent_VoidSpace",
+    "远古回忆",
+    "远古回忆（StormEvent_VoidSpace）",
+    "scene:StormEvent_VoidSpace"
+   ],
+   "id": "scene:StormEvent_VoidSpace",
+   "map_id": 3928396665,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "StormEvent_VoidSpace"
+  },
+  {
+   "aliases": [
+    "StormStart",
+    "伊甸",
+    "伊甸（StormStart）",
+    "scene:StormStart",
+    "伊甸大门"
+   ],
+   "id": "scene:StormStart",
+   "map_id": 3110721718,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "StormStart"
+  },
+  {
+   "aliases": [
+    "Sunset",
+    "霞谷",
+    "霞谷（Sunset）",
+    "scene:Sunset",
+    "霞谷入口",
+    "霞谷大厅",
+    "滑冰场"
+   ],
+   "id": "scene:Sunset",
+   "map_id": 1638008359,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Sunset"
+  },
+  {
+   "aliases": [
+    "SunsetColosseum",
+    "霞谷：落日竞技场",
+    "霞谷：落日竞技场（SunsetColosseum）",
+    "scene:SunsetColosseum",
+    "落日竞技场（Colosseum场景）",
+    "霞谷竞技场（Colosseum场景）",
+    "落日竞技场",
+    "霞谷:落日竞技场",
+    "落日竞技场Colosseum场景",
+    "竞技场"
+   ],
+   "id": "scene:SunsetColosseum",
+   "map_id": 263580627,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetColosseum"
+  },
+  {
+   "aliases": [
+    "SunsetEnd",
+    "霞谷：落日竞技场（SunsetEnd）",
+    "scene:SunsetEnd",
+    "落日竞技场（End场景）",
+    "霞谷竞技场（End场景）",
+    "落日竞技场End场景",
+    "竞技场终点",
+    "落日竞技场终点",
+    "落日竞技场终段",
+    "竞技场终段"
+   ],
+   "id": "scene:SunsetEnd",
+   "map_id": 2360310676,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetEnd"
+  },
+  {
+   "aliases": [
+    "SunsetEnd2",
+    "霞谷：霞谷神殿",
+    "霞谷：霞谷神殿（SunsetEnd2）",
+    "scene:SunsetEnd2",
+    "霞谷神殿",
+    "霞谷:霞谷神殿"
+   ],
+   "id": "scene:SunsetEnd2",
+   "map_id": 507487826,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetEnd2"
+  },
+  {
+   "aliases": [
+    "SunsetRace",
+    "霞谷：滑雪赛道",
+    "霞谷：滑雪赛道（SunsetRace）",
+    "scene:SunsetRace",
+    "滑雪赛道",
+    "霞谷:滑雪赛道"
+   ],
+   "id": "scene:SunsetRace",
+   "map_id": 571720490,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetRace"
+  },
+  {
+   "aliases": [
+    "SunsetVillage",
+    "霞谷：圆梦村",
+    "霞谷：圆梦村（SunsetVillage）",
+    "scene:SunsetVillage",
+    "圆梦村",
+    "霞谷:圆梦村"
+   ],
+   "id": "scene:SunsetVillage",
+   "map_id": 1759178769,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetVillage"
+  },
+  {
+   "aliases": [
+    "SunsetVillage_MusicShop",
+    "霞谷：音乐大厅",
+    "霞谷：音乐大厅（SunsetVillage_MusicShop）",
+    "scene:SunsetVillage_MusicShop",
+    "音乐大厅",
+    "霞谷:音乐大厅"
+   ],
+   "id": "scene:SunsetVillage_MusicShop",
+   "map_id": 1323747701,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "SunsetVillage_MusicShop"
+  },
+  {
+   "aliases": [
+    "Sunset_Citadel",
+    "霞谷：霞光城",
+    "霞谷：霞光城（Sunset_Citadel）",
+    "scene:Sunset_Citadel",
+    "霞光城",
+    "霞谷:霞光城"
+   ],
+   "id": "scene:Sunset_Citadel",
+   "map_id": 2179549040,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Sunset_Citadel"
+  },
+  {
+   "aliases": [
+    "Sunset_FlyRace",
+    "霞谷：飞行赛道",
+    "霞谷：飞行赛道（Sunset_FlyRace）",
+    "scene:Sunset_FlyRace",
+    "飞行赛道",
+    "霞谷:飞行赛道"
+   ],
+   "id": "scene:Sunset_FlyRace",
+   "map_id": 1844499196,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Sunset_FlyRace"
+  },
+  {
+   "aliases": [
+    "Sunset_Theater",
+    "霞谷：圆梦村剧场",
+    "霞谷：圆梦村剧场（Sunset_Theater）",
+    "scene:Sunset_Theater",
+    "圆梦村剧场",
+    "霞谷:圆梦村剧场"
+   ],
+   "id": "scene:Sunset_Theater",
+   "map_id": 1612139937,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Sunset_Theater"
+  },
+  {
+   "aliases": [
+    "Sunset_YetiPark",
+    "霞谷：雪隐峰",
+    "霞谷：雪隐峰（Sunset_YetiPark）",
+    "scene:Sunset_YetiPark",
+    "雪隐峰",
+    "霞谷:雪隐峰"
+   ],
+   "id": "scene:Sunset_YetiPark",
+   "map_id": 649101397,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "Sunset_YetiPark"
+  },
+  {
+   "aliases": [
+    "TGCOffice",
+    "秘密基地",
+    "秘密基地（TGCOffice）",
+    "scene:TGCOffice",
+    "办公室"
+   ],
+   "id": "scene:TGCOffice",
+   "map_id": 295816905,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "TGCOffice"
+  },
+  {
+   "aliases": [
+    "UndergroundOffice",
+    "基地迷宫",
+    "基地迷宫（UndergroundOffice）",
+    "scene:UndergroundOffice"
+   ],
+   "id": "scene:UndergroundOffice",
+   "map_id": 3493360294,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "UndergroundOffice"
+  },
+  {
+   "aliases": [
+    "VoidSharedSpace",
+    "共玩空间",
+    "共玩空间（VoidSharedSpace）",
+    "scene:VoidSharedSpace"
+   ],
+   "id": "scene:VoidSharedSpace",
+   "map_id": 1482972144,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "VoidSharedSpace"
+  },
+  {
+   "aliases": [
+    "WorldEmpty",
+    "scene:WorldEmpty",
+    "空白场景"
+   ],
+   "id": "scene:WorldEmpty",
+   "map_id": 72617792,
+   "position": null,
+   "resource_cost": 0,
+   "scene": "WorldEmpty"
+  }
+ ],
+ "version": 1
+}

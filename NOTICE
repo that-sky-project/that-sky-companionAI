@@ -1,0 +1,12 @@
+﻿that-sky-companionAI
+Copyright (C) 2026 that-sky-project contributors
+
+本仓库采用 GNU Affero General Public License v3.0（AGPL-3.0），完整文本见 LICENSE。
+
+授权范围说明：
+- 本仓库中由 that-sky-project 成员自研的部分，按 AGPL-3.0 授权。
+- 仓库内可能包含来自第三方或逆向分析的代码/数据（例如 qfsky 协议实现、动作模板等），
+  其授权以各自来源为准，不在本项目的 AGPL 授权范围内。
+- 游戏资源（地景、名称表等）版权归原权利人所有，本仓库不主张任何权利。
+
+使用本仓库即表示你已知悉：本项目仅供学习与研究，使用自有账号、自担风险。

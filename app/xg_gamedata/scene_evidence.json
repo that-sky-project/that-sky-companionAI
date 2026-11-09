@@ -1,0 +1,3769 @@
+{
+ "apk_archive_directory_sha256": "b26db74613f606fd60b942ff58f00d0c41b12a6d83303228a1143d683adefb14",
+ "apk_build": 421589,
+ "baseline_semantics": "real native constructor, NOT loaded map state",
+ "baseline_sha256": "9050b49846b8a99e9a6498a17a0ebffb010fbfc7072bb3c00e13410a48e09642",
+ "cache_size": 8208,
+ "group_derived_classes": {},
+ "group_specs": {
+  "floaty": {
+   "capacity": 16,
+   "class_name": "MakeFloaty",
+   "count": 560,
+   "slots": 432,
+   "stride": 8
+  },
+  "move_rails": {
+   "capacity": 24,
+   "class_name": "MoveObjectAlongRail",
+   "count": 424,
+   "slots": 40,
+   "stride": 16
+  },
+  "rotations": {
+   "capacity": 32,
+   "class_name": "RotateObject",
+   "count": 692,
+   "slots": 564,
+   "stride": 4
+  }
+ },
+ "known_classes": [
+  "AR_AnchorReference",
+  "AR_OverrideParameters",
+  "AbandonQuestPrefabOnEnable",
+  "AccountChristmas2022RequestEvent",
+  "AccountDataStatisticsRequestDetailEvent",
+  "AccountJinglingQuestDataStatisticsRequestEvent",
+  "AccountJinglingQuestDeliverInfoEvent",
+  "AccountJinglingQuestRequestEvent",
+  "AccountJinglingQuestRequestWithParamEvent",
+  "AccountSpriteHalloweenRequestEvent",
+  "ActivateOnTapPlayAnim",
+  "ActivateQuestPrefabOnEnable",
+  "ActiviteMidAutumnPhotoEvent",
+  "AddFloatToStatUsingName",
+  "AddNodeToQueue",
+  "AddPlaceablesToEditingSharedSpace",
+  "AddRadarPoint",
+  "AncestorEngine",
+  "AncientSpirit",
+  "Ap06UnlockQuest",
+  "Ap06UnlockQuestOnClaim",
+  "Arpeggiator",
+  "AttachBeacon",
+  "AttachGuideRail",
+  "AttachTrail",
+  "AttractMotes",
+  "AudienceEmberRegion",
+  "AudienceReservationService",
+  "AudienceSettings",
+  "AudienceSpotlightManager",
+  "AudienceTotalPlayersFloat",
+  "AudioMixToHaptics",
+  "AudioSettingReminder",
+  "AutoAcceptSmartQuest",
+  "AutoCollectCompletedQuest",
+  "AutoForest",
+  "AutoForestElement",
+  "AutoForestSubElement",
+  "AvatarAirtimeEffectFloat",
+  "AvatarBreakHandHold",
+  "AvatarChargeEnergy",
+  "AvatarCrawl",
+  "AvatarDisableCliffDetect",
+  "AvatarDisableGuidance",
+  "AvatarDisableShadow",
+  "AvatarDisableZone",
+  "AvatarDiveDown",
+  "AvatarDiveUp",
+  "AvatarDoShout",
+  "AvatarEatAnimWithModel",
+  "AvatarExitFlight",
+  "AvatarForceEnableFlightMode",
+  "AvatarGrindToMarker",
+  "AvatarGrindToPos",
+  "AvatarHijack",
+  "AvatarLookAt",
+  "AvatarMoveAlongRail",
+  "AvatarNavigateTo",
+  "AvatarOutfitRegion",
+  "AvatarOverrideCapeLevel",
+  "AvatarPauseAnim",
+  "AvatarPlayCollectable",
+  "AvatarPlayEmote",
+  "AvatarPlayEmoteLoop",
+  "AvatarPoseForceWalkCycle",
+  "AvatarPourWater",
+  "AvatarProgressionAloneRail",
+  "AvatarPropBucketHasWater",
+  "AvatarRainbowParty",
+  "AvatarReach",
+  "AvatarRestoreElderItems",
+  "AvatarRestoreStance",
+  "AvatarScaleReference",
+  "AvatarScoopWater",
+  "AvatarSetArmorImm",
+  "AvatarSetBoundaryPlane",
+  "AvatarSetCandleState",
+  "AvatarSetEnergy",
+  "AvatarSetHusk",
+  "AvatarSetInnerGlow",
+  "AvatarSetMamaGooseMode",
+  "AvatarSetOutfit",
+  "AvatarSetOutfitDye",
+  "AvatarSetPos",
+  "AvatarSetPosMP",
+  "AvatarSetRandomPos",
+  "AvatarSetStance",
+  "AvatarSetVoice",
+  "AvatarSetZeroG",
+  "AvatarShrinkGrow",
+  "AvatarSitAtReservationSeat",
+  "AvatarSpeak",
+  "AvatarTransformIntoAudienceBarnAnimal",
+  "AvatarTurn",
+  "Avatar_SetProp",
+  "AwakenDarkCreatures",
+  "BSTGuid",
+  "BT_Activity",
+  "BT_Schedule",
+  "BT_Waypoint",
+  "BT_WaypointAnimation",
+  "BallGoal",
+  "BallPit",
+  "BeaconEvent",
+  "Beamo",
+  "BeamoDecal",
+  "BehaviorEvent",
+  "BehaviorTreeEvent",
+  "BehaviorTreeEventPersonality",
+  "BenchChat",
+  "BirdFlock",
+  "BirdFlockOverrides",
+  "BirdV2",
+  "BirdV2AiParams",
+  "BirdV2AiSwap",
+  "BirdV2ParamSwap",
+  "BirdV2Params",
+  "BirdV2Reset",
+  "BirdV2Teleport",
+  "BirthBuffGiftingScene",
+  "Blaze",
+  "BlockPhotographyTarget",
+  "BoomCone",
+  "BoomSphere",
+  "BouncePadFakeBounceFx",
+  "BouncyBalloon",
+  "BouncyMesh",
+  "Boundary",
+  "Branch",
+  "BrushstrokeAssignPlayer",
+  "BrushstrokeCurve",
+  "BrushstrokeRegion",
+  "BrushstrokeSubElement",
+  "BrushstrokeTrigger",
+  "BrushstrokeWrap",
+  "Brushstrokes",
+  "Buddy",
+  "BuddyParams",
+  "BuddyRequestNode",
+  "BuoyancyPointParam",
+  "BuyItem",
+  "CameraArtBookEffects",
+  "CameraCausticsEffect",
+  "CameraDesaturationEffect",
+  "CameraFlashShout",
+  "CameraGuide",
+  "CameraKeyFrame",
+  "CameraPhotoFlash",
+  "CameraSunglassFade",
+  "CameraTakeOutTripodMode",
+  "CancelSocialRecording",
+  "CandleGate",
+  "CandleObject",
+  "CarryAncestorQuestPrefab",
+  "CarryObjectDailyQuestActivity",
+  "ChangeLevel",
+  "ChangeLevelToHome",
+  "ChangeLevelWithFade",
+  "CheckGrindingToMarkerNumber",
+  "Checkpoint",
+  "CheckpointRestore",
+  "CheckpointState",
+  "ChildOfLightGiftingScene",
+  "ClearChatBubbles",
+  "ClearCheckpointState",
+  "ClearEditingSharedSpace",
+  "ClearSharedSpaceShrineLocalNote",
+  "ClockBell",
+  "ClockTower",
+  "CloseDyeMenu",
+  "CloseMenu",
+  "CloseOutfitShop",
+  "ClosePhotoMode",
+  "CloudBob",
+  "CloudCard",
+  "CloudNoiseVelocity",
+  "Clump",
+  "CollectCollectible",
+  "CollectPersonalityQuest",
+  "Collectible",
+  "ColorValue",
+  "CompetitionChooseTeam",
+  "CompetitionGetTodayRunningResults",
+  "CompetitionRefreshData",
+  "CompetitionSubmitScore",
+  "CompletePersonalityQuest",
+  "ConcentrationGame",
+  "ConcentrationGameCard",
+  "ConstellationArea",
+  "ConstellationCompletion",
+  "ConstellationGate",
+  "ConstellationGateLevelRequirement",
+  "ConstellationGateOutfitRequirement",
+  "ConstellationMarker",
+  "ConstellationMenuLevelVars",
+  "ConstrainPlayerToLocation",
+  "ConsumablesTrialPoint",
+  "ContainNewPlayer",
+  "CountDown",
+  "Crab",
+  "CrabParams",
+  "Crab_Straighten",
+  "CreatureCompanionSetup",
+  "CreatureNickname",
+  "Critter_OnRegion",
+  "Critter_Shout",
+  "CurrencyPool",
+  "DailyQuestShop",
+  "DailyQuestsGiver",
+  "DanceFloorParam",
+  "DarkCreature",
+  "DarkCreatureLookAt",
+  "DarkCreatureMoveToPatrol",
+  "DarkCreatureParams",
+  "DarkCreatureTag",
+  "DarkCreatureTagEnd",
+  "DarkCreaturesAttack",
+  "DarkCreaturesLeave",
+  "DarkstoneRainRegion",
+  "DeathMarch",
+  "DebugLogline",
+  "DebugObserveNodes",
+  "DebugWarpPos",
+  "Delay",
+  "DestroyMotes",
+  "DetachFromBirdGuides",
+  "DetachFromJellyfish",
+  "DialogHint",
+  "DialogHintTimed",
+  "DiggableArea",
+  "DisableCinematicBar",
+  "DisableCliffJump",
+  "DisableCloudPhysics",
+  "DisableDive",
+  "DisableFootDirts",
+  "DisableJump",
+  "DisablePlaceableInteractivity",
+  "DisableRise",
+  "DisableVisibilityEvent",
+  "DisplayMusicSubtitles",
+  "DisplayReservationAudienceTotalPlayersText",
+  "DisplayText",
+  "DisplayTextPanel",
+  "DisplayTextStandard",
+  "DisplayTitleCard",
+  "DissolveEvent",
+  "DoAvatarShout",
+  "DoShout",
+  "DragonBoatPlayerRaceController",
+  "DragonBoatPlayerRaceGate",
+  "DragonBoatRaceNpcController2026",
+  "DragonBoatRaceScoreboard",
+  "DropOcclusion",
+  "DropUnlock",
+  "Emitter",
+  "EmoteShoutPrompt",
+  "Enable",
+  "EnableByPlayerCount",
+  "EnableByPlayerId",
+  "EnableCollision",
+  "EnablePlayerProp",
+  "EnableSequence",
+  "EnableSnakeGameEvent",
+  "EnterGameForTheFirstTimeEveryDay",
+  "EnvNode",
+  "EnvironmentModifier",
+  "EventSeries",
+  "EventTeleportManager",
+  "EventTeleportParam",
+  "ExclusiveEnabledGroup",
+  "FadeSound",
+  "FakeAudienceMembers",
+  "FakeSharedSpaceLevelChallenge",
+  "FakeWingBuffDropEvent",
+  "FarmersMarket",
+  "FeatureFlag",
+  "FetchLight",
+  "FetchLightPresent",
+  "FetchMemoryMesh",
+  "FindNPCMinigame",
+  "FinishTrustGameroomActivity",
+  "FireLimit",
+  "FireTriggerAtRandom",
+  "FireWorkShow",
+  "FireworkBurst",
+  "FireworkRocket",
+  "FixedPit",
+  "Flame",
+  "Float",
+  "FloatAbsoluteValue",
+  "FloatAdd",
+  "FloatDebugLogline",
+  "FloatDistanceFade",
+  "FloatDivide",
+  "FloatEnable",
+  "FloatMod",
+  "FloatMult",
+  "FloatRound",
+  "FloatSort",
+  "FloatSplit",
+  "FloatSum",
+  "FlowerPatch",
+  "FogVolumeSphere",
+  "ForceMinimalHUD",
+  "ForceRemoteNetStateLook",
+  "ForceTakeScreenshot",
+  "FormationController",
+  "FormationParams",
+  "ForwardAcceleration",
+  "FragmentCollectActivity",
+  "FragmentSpawner",
+  "FriendCandleLightLogic",
+  "FriendDisplayLord",
+  "FriendNameDisplay",
+  "FriendshipHarmonyGame",
+  "GameController",
+  "GatherAncestorQuestPrefab",
+  "GatherCreatureQuestPrefab",
+  "GenericShopDisplay",
+  "GenericShopNpcHint",
+  "GerstnerWave",
+  "GetAngleBetweenObjects",
+  "GetAvatarFloat",
+  "GetCameraTransform",
+  "GetFloatAtIndex",
+  "GetLocalOutfitDye",
+  "GetPlayerSpeed",
+  "GetServerVar",
+  "GetStatValue",
+  "GiftMessageBox",
+  "GlideRegion",
+  "GrantSpell",
+  "GrantTrust",
+  "Hack_DepositSpirits",
+  "Hack_OpenSpiritMenuPostLevelLoad",
+  "HandholdNpcActivity",
+  "HapticsFileFade",
+  "HasMaxBuffs",
+  "HasOwnedOutfit",
+  "HasReachedLevel",
+  "HeadMesh",
+  "HideAndSeekActivity",
+  "HideAudienceMembers",
+  "HideBubbleButtons",
+  "HidePlaceable",
+  "HideRemotePlayers",
+  "HintBarnStateSetting",
+  "HintOnEventCurrencyWaxCap",
+  "HomeDirectoryButton",
+  "HubbaBubbaZone",
+  "HuskEffect",
+  "IKGrabObject",
+  "IKHandToPos",
+  "IfAvatarGrindingToMarker",
+  "IfBstPickupCollected",
+  "IfEnabled",
+  "IfEnabledNetease",
+  "IfEventCurrencyWaxCap",
+  "IfGuidPickupAvailable",
+  "IfHasDroppedAllWingBuffs",
+  "IfInABTestingGroup",
+  "IfInHomeLevel",
+  "IfInRegion",
+  "IfLevelBundleAvailable",
+  "IfMidStormRunNetease",
+  "IfNpcInRegion",
+  "IfRacePlaceableHasPlayersNetease",
+  "IfTweakVar",
+  "IfVideoSupported",
+  "IncrementFloat",
+  "InfiniteScrollClouds",
+  "InsertSheetMusicNote",
+  "InstancedModelsOnScaffold",
+  "Int",
+  "IsAp06QuestOnGoing",
+  "IsBuffActive",
+  "IsInActiveSeason",
+  "IsOutfitInRegion",
+  "IsPickupCollected",
+  "IsPlaceableInRegion",
+  "IsSpellActive",
+  "Jellyfish",
+  "JellyfishParams",
+  "JinglingPersonalityButton",
+  "KelpForest",
+  "KillBox",
+  "KizunaAIPanoramicPhoto",
+  "KizunaAIPanoramicPhotoButton",
+  "LaunchURLNetease",
+  "LeadDragonLineUp",
+  "LensFlair",
+  "LensFlare",
+  "LerpFloatTo",
+  "LetterBoxFrame",
+  "LevelCameraDefaults",
+  "LevelCharAnimResources",
+  "LevelEmitterParam",
+  "LevelInstanceModel",
+  "LevelInstanceModelGroup",
+  "LevelLink",
+  "LevelMaterial",
+  "LevelMesh",
+  "LevelParameters",
+  "LightFlowerPatch",
+  "LightFlowerPatchSetCanOpen",
+  "LightShroom",
+  "LightseekerLight",
+  "LimitMaxAudienceMembers",
+  "LocalCollectFragments",
+  "LocalDoAudienceReact",
+  "LocalIsHomeOwner",
+  "LockAllCollectible",
+  "LoginLogicSuperNode",
+  "LookAt",
+  "LoopEnable",
+  "Lurker",
+  "LurkerParams",
+  "MakeFlameMagnetize",
+  "MakeFloaty",
+  "MakeMagnetize",
+  "MakeMeshMagnetize",
+  "ManuallySpawnFragments",
+  "MapObjectToRail",
+  "MapShrine",
+  "Marker",
+  "MatchHint",
+  "MatchmakingLobby",
+  "MaterialOverrideZone",
+  "MeditationArea",
+  "MessageStoneGarden",
+  "MicrodarknessController",
+  "MinMaxFloat",
+  "Mote",
+  "MoteAddAttractPoint",
+  "MoteParams",
+  "MoveObjectAlongRail",
+  "MuralShrine",
+  "MusicRecordingShrine",
+  "MusicSheetActivity",
+  "MusicTracker",
+  "MusicVolumeReminder",
+  "MusicalAnimationTarget",
+  "MusicalRockTarget",
+  "MusicalShoutTarget",
+  "MysticalSphere",
+  "NEUpdateLocalVoteGroupDataByFormats",
+  "NEUpdateVoteGroupData",
+  "NestPortalCarousel",
+  "NetDisconnect",
+  "NetFlag",
+  "NetSetJoinableDisabled",
+  "NetSetMatchmakingDisabled",
+  "NetSetMatchmakingLockedUponLevelChange",
+  "NeteaseDRPFBehaviorEvent",
+  "NeteaseDaysOfCompetitionDRPF",
+  "NeteaseNoviceEvent",
+  "NetworkedAudienceFloat",
+  "NetworkedLinearEnable",
+  "NetworkedRandomEnable",
+  "NodeQueue",
+  "NotInScheduledEventTime",
+  "NotOnRegion",
+  "Npc",
+  "NpcBehaviorController",
+  "NpcJamBand",
+  "NpcPlayCharacteristicEmote",
+  "NpcSetAntlerHelmOrb",
+  "NpcSetPhotoMode",
+  "NpcTakePhoto",
+  "Npc_Appear",
+  "Npc_Blink",
+  "Npc_BreakHandHold",
+  "Npc_CancelSocialOffer",
+  "Npc_Chat",
+  "Npc_ComeFromSkyAsStar",
+  "Npc_DioramaEffects",
+  "Npc_DisableAdditiveAnim",
+  "Npc_DisableRelationshipMenu",
+  "Npc_Freeze",
+  "Npc_GetAttention",
+  "Npc_GiveCandle",
+  "Npc_GoToSkyAsStar",
+  "Npc_HandHold",
+  "Npc_Hide",
+  "Npc_HighFive",
+  "Npc_Hug",
+  "Npc_LocalOfferedHug",
+  "Npc_LookAt",
+  "Npc_LookAtObject",
+  "Npc_MemoryPose",
+  "Npc_MemorySequence",
+  "Npc_OnBreakHandHold",
+  "Npc_OnHandHold",
+  "Npc_OnHighFive",
+  "Npc_OnHug",
+  "Npc_OnRelationshipAbility",
+  "Npc_PianoKey",
+  "Npc_PickUpObject",
+  "Npc_PlayAnim",
+  "Npc_PointAt",
+  "Npc_PreventBlink",
+  "Npc_Prompt",
+  "Npc_Reflect",
+  "Npc_RelationshipAbility",
+  "Npc_SetDef",
+  "Npc_SetDefFromPool",
+  "Npc_SetEnergy",
+  "Npc_SetFlags",
+  "Npc_SetGhost",
+  "Npc_SetHusk",
+  "Npc_SetProp",
+  "Npc_SetScale",
+  "Npc_ShieldBash",
+  "Npc_SkyAsStarZones",
+  "Npc_TakeOutFlame",
+  "Npc_Teleport",
+  "Npc_ThrowObject",
+  "Npc_Turn",
+  "Npc_WalkTo",
+  "ObjectSeekTarget",
+  "ObjectValue",
+  "OceanFoamLine",
+  "OceanFoamSetParams",
+  "OnAccountCurrency",
+  "OnAccountReady",
+  "OnAudienceCount",
+  "OnAudienceEnabled",
+  "OnAudienceInRegion",
+  "OnAudienceInRegionColorParams",
+  "OnAudienceReactionTriggered",
+  "OnAvatarAnim",
+  "OnAvatarCapeLevel",
+  "OnAvatarDeath",
+  "OnAvatarEmote",
+  "OnAvatarEnergy",
+  "OnAvatarHighFive",
+  "OnAvatarInWater",
+  "OnAvatarMeshCollision",
+  "OnAvatarOnGround",
+  "OnAvatarPourBucket",
+  "OnAvatarSocialBehavior",
+  "OnAvatarStance",
+  "OnAvatarState",
+  "OnAvatarViewedSharedMemory",
+  "OnAvatarVisible",
+  "OnBetaMode",
+  "OnBlaze",
+  "OnBroadcast",
+  "OnBubbleButton",
+  "OnButtonClick",
+  "OnChangeAnd",
+  "OnCollected",
+  "OnConfirmMenu",
+  "OnConsoleMode",
+  "OnDailyQuest",
+  "OnDataChange",
+  "OnDemoMode",
+  "OnDistanceToggle",
+  "OnEnterPhotoMode",
+  "OnEventSeries",
+  "OnFlame",
+  "OnFloat",
+  "OnForgeGift",
+  "OnGameReady",
+  "OnHaveAnyLevelSpirit",
+  "OnIAPGifted",
+  "OnLatestCheckpointBelongsToLevel",
+  "OnLevelStart",
+  "OnLevelUp",
+  "OnLift",
+  "OnLocalTime",
+  "OnLookAtRegion",
+  "OnMashBubbleButton",
+  "OnMoteCarry",
+  "OnMusicOutro",
+  "OnOpenSocialFeed",
+  "OnOutfitPropActivate",
+  "OnPCMode",
+  "OnPersonalityType",
+  "OnPlacedMessageBoat",
+  "OnPlacedMessageStone",
+  "OnPlacedPlaceables",
+  "OnPlacedRecordingCandle",
+  "OnPlatform",
+  "OnPlayerInput",
+  "OnQuestState",
+  "OnRail",
+  "OnRegion",
+  "OnRegionFlame",
+  "OnResumeAvailable",
+  "OnS31Fq3PhotoSkipGpu",
+  "OnScreenBackButton",
+  "OnScreenBubbleButton",
+  "OnScreenCameraButton",
+  "OnScreenNavigationButtons",
+  "OnSeasonPassPurchase",
+  "OnShout",
+  "OnSpecialConfirmMenu",
+  "OnTap",
+  "OnTapCount",
+  "OnTapPlayAnim",
+  "OnToysMenuClosed",
+  "OnUnderwater",
+  "OnUnlockOutfit",
+  "OnUnlocked",
+  "OnUnmetSpiritDailyQuest",
+  "OnVideoPlaying",
+  "OnWaxPickup",
+  "OnWorldObjectObbRegion",
+  "OpenAppleMusicMenu",
+  "OpenConstellationShop",
+  "OpenDailyScoreboard",
+  "OpenDanceMenu",
+  "OpenDyeMenu",
+  "OpenDyeingClothMenu",
+  "OpenDynamicMenu",
+  "OpenInstrumentMenu",
+  "OpenMenu",
+  "OpenSeasonPassCommerceMenu",
+  "OpenThatSkyShopBST",
+  "OpenURLBST",
+  "OrbitHandholdingScene",
+  "OrbitHijackRemoteAvatars",
+  "OrbitNpc",
+  "OrbitNpcSetRewardCandles",
+  "OtherIndentSetParams",
+  "OutfitSelect",
+  "ParabolicMoveTo",
+  "Parent",
+  "ParentToAvatarPosXZ",
+  "ParentToAvatars",
+  "ParentToRope",
+  "PathfindThroughObjects",
+  "PauseCameraConfig",
+  "PeakDetector",
+  "Pendulum",
+  "PersonalityGamePlayListManager",
+  "PersonalityResultDisplayActor",
+  "PersonalityResultDisplayEvent",
+  "PersonalityShrine",
+  "PhotographyActivity",
+  "PhotographySubject",
+  "PhysicsBoat",
+  "PhysicsBoatForceParam",
+  "Pickup",
+  "PickupEmitter",
+  "PizzahutCheeseBuffGiver",
+  "PizzahutCheeseHug",
+  "PizzahutCheeseRegion",
+  "PizzahutCheeseSwitcher",
+  "PlaceBarCounterCupWithNpc",
+  "PlaceEscapeRoomPuzzlePlaceable",
+  "PlaceLevelPlaceable",
+  "PlaceObjectOnWater",
+  "PlacePlaceableLocation",
+  "PlacePlaceableMessage",
+  "PlacePlaceablePickup",
+  "PlacePlushieTossPlaceable",
+  "PlacePuzzleKey",
+  "PlaceRacePlaceable",
+  "PlaceSkyBallGoalsPlaceable",
+  "PlaceableOption",
+  "PlaceableSetDye",
+  "PlatformingRegion",
+  "PlayAnimation",
+  "PlayAvatarAnimSeq",
+  "PlayHaptics",
+  "PlayMusic",
+  "PlayPurchaseFX",
+  "PlaySound2D",
+  "PlaySound3D",
+  "PlaySoundOnBeat",
+  "PlushieTossGame",
+  "PlushieTossedInRegion",
+  "PointLight",
+  "Portal",
+  "ProjectBeam",
+  "QPNpcSmartQuestButton",
+  "Quest",
+  "RacePlaceableAddPlayer",
+  "RadianceController",
+  "RadianceDyeReward",
+  "Rail",
+  "RailRibbonFader",
+  "RainCurtainParams",
+  "RecordingShrine",
+  "RedeemReward",
+  "ReflectionSettings",
+  "ReleaseBirds",
+  "RemapFloat",
+  "RemoveSpell",
+  "Replay",
+  "Replay_HandHold",
+  "Replay_PlayAnim",
+  "RequestNextLevelBundle",
+  "RequestUserAppRateing",
+  "ResetAndEnableCrabs",
+  "ResetPersonalityButton",
+  "ResetSheetPoints",
+  "RestoreEnabled",
+  "ResumeEnable",
+  "ResumeGate",
+  "ReturnPlayerConstellation2025",
+  "ReverbRegion",
+  "RiddleShrine",
+  "RopeJointEvent",
+  "RotateNextNestPortalCarousel",
+  "RotateObject",
+  "RoundDataBST",
+  "ScavengerHuntQuestPrefab",
+  "ScheduledEvent",
+  "ScheduledEventTrigger",
+  "ScheduledQuestHandler",
+  "SeasonEndCompleted",
+  "SeasonMeditationShrine",
+  "SeasonQuestGiver",
+  "SeeAvatarOff",
+  "SendAnalyticsEvent",
+  "SetAvatarCapeTattered",
+  "SetAvatarGhost",
+  "SetAvatarGravityMult",
+  "SetAvatarMicroMode",
+  "SetAvatarMinYSpeed",
+  "SetAvatarRender",
+  "SetAvatarRunSpeedMult",
+  "SetAvatarSpiritShader",
+  "SetBirdGuidesEnabled",
+  "SetBlockUpdraftWind",
+  "SetBrushstrokesParam",
+  "SetBubbleButtonIcon",
+  "SetBulletTime",
+  "SetCameraKeyFrameShake",
+  "SetCameraShake",
+  "SetCloudsEnabled",
+  "SetColor",
+  "SetDefangedDarkCreature",
+  "SetDroppableCountFloat",
+  "SetEmitterFlowRail",
+  "SetEmitterMult",
+  "SetEmitterMultOverTime",
+  "SetEnvDefault",
+  "SetEnvHull",
+  "SetFlame",
+  "SetFlightParams",
+  "SetFloat",
+  "SetForce",
+  "SetGerstnerWaveParam",
+  "SetGerstnerWaveTime",
+  "SetGlide",
+  "SetGlobalEventParameter",
+  "SetGlobalSoundParameter",
+  "SetHeadMesh",
+  "SetInputState",
+  "SetLensFlare",
+  "SetLevelAsHomeLevel",
+  "SetLocalAudienceJelly",
+  "SetMeshModel",
+  "SetMeshShaderParam",
+  "SetMixChannelLowpassFreq",
+  "SetMixChannelVolume",
+  "SetMixChannelVolumeFloat",
+  "SetMusicKey",
+  "SetMusicVolume",
+  "SetOceanRender",
+  "SetParent",
+  "SetPersonalityType",
+  "SetPortal",
+  "SetPresenceForLocalPlayer",
+  "SetRainParams",
+  "SetRandomFloat",
+  "SetRender",
+  "SetReservationJoinPlayersEnabled",
+  "SetReservationSeatSelectionEnabled",
+  "SetSoulTrap",
+  "SetSoundParameter",
+  "SetStatFloat",
+  "SetStateSwitch",
+  "SetString",
+  "SetTutorialMode",
+  "SetVignette",
+  "SetWind",
+  "SetWindAlongRail",
+  "SetWindIntensity",
+  "SetWorldQuestTable",
+  "SharedChatRegion",
+  "SharedSpaceCreateChallenge",
+  "SharedSpaceDisableCreateChallenge",
+  "SharedSpaceDisableEditConstantRecharge",
+  "SharedSpaceDisableExitEditMode",
+  "SharedSpaceDisableRemoveChallenge",
+  "SharedSpaceEnterEditMode",
+  "SharedSpaceExit",
+  "SharedSpaceFakePublishMode",
+  "SharedSpaceOnLoad",
+  "SharedSpaceOnPublish",
+  "SharedSpaceShrine",
+  "SheetMusicTracker",
+  "ShellGame",
+  "ShellGameMove",
+  "ShellGameSwitch",
+  "ShowBoostHeight",
+  "ShowConstellationRegion",
+  "ShowCounter",
+  "ShowCounter_Netease",
+  "ShowHUDInWorld",
+  "ShowHUDTimed",
+  "ShowMinGPURatingConfirm",
+  "ShowPhotoOpUI",
+  "ShowProgressUI",
+  "ShowQuestBanner",
+  "ShowQueueDialog",
+  "ShowScheduledEventTimeLeftHint",
+  "ShowSeason05AlreadyGivenConfirmMenu",
+  "ShowSeasonEnd",
+  "ShowStarboardEvent",
+  "ShowTimeLeft",
+  "SimpleDailyQuest",
+  "SkyArtBookSetup",
+  "SlowMotionCutscene",
+  "SlowMotionParam",
+  "SmoothDampTo",
+  "SmoothFloat",
+  "SnakeGameCameraEvent",
+  "SnakeGameFollowerEvent",
+  "SnakeGameTarget",
+  "SnapNodeToNearest",
+  "SnapToCam",
+  "SnowballTarget",
+  "SoaringOverCalifornia",
+  "SocialArmWrestleGameEvent",
+  "SocialCoupleWishPlace",
+  "SocialDivinationPlace",
+  "SocialNoteBlocker",
+  "SoulTrap",
+  "SoundEmitter",
+  "SoundEmitterQuad",
+  "SoundHijack",
+  "SpawnAvatarsInVolume",
+  "SpawnAvatarsOnRail",
+  "SpawnLiftMotes",
+  "SpawnMotes",
+  "SpecialCamera",
+  "SpinMotes",
+  "SpiritShopMenu",
+  "SpiritShopPrefab",
+  "SpiritSoulsDisplayLord",
+  "Splasher",
+  "SportScoreboard",
+  "SportScoreboardAddPoints",
+  "SportScoreboardJoin",
+  "SportScoreboardStart",
+  "SquishySphere",
+  "StarFallShower",
+  "StarFragment",
+  "StarFragmentParams",
+  "StarFragmentsConverge",
+  "StartPersonalityResultDisplay",
+  "StartTrustGameroomActivity",
+  "StateSwitch",
+  "StayInRegion",
+  "StopAvatarAnimSeq",
+  "StopGrinding",
+  "StopSocialRecording",
+  "StormEventSpawner",
+  "StormKeyUnlock",
+  "StreamingCrystal",
+  "String",
+  "StringAppend",
+  "StrobeObject",
+  "Survey",
+  "SwapMoteParams",
+  "SwapScaffoldMesh",
+  "SyncEnable",
+  "SyncTempProp",
+  "TeleportPlayerToSeat",
+  "TempleEvent",
+  "TempleSpiritsSequence",
+  "TerrainBlob",
+  "TerrainBlobGroup",
+  "TerrainBlobPrefab",
+  "ThorNodeTrigger",
+  "ThorTheMasterOfStorm",
+  "ThriftHaulOutfitSelect",
+  "Timeline",
+  "TimingMinigameActivity",
+  "ToTBracketNPCManager",
+  "ToTContestantParam",
+  "ToTPlayReturnCutscene",
+  "ToTSetTeam",
+  "ToTShowBracket",
+  "ToolComment",
+  "TrackAvatarOnRail",
+  "TransformNpc",
+  "TransformObject",
+  "TransformObjectToFloor",
+  "TreasureMap",
+  "TriggerLevelLink",
+  "TriggerTeleportBeacon",
+  "TriggerTinyBuff",
+  "TriggerToyEvent",
+  "TrustCompanionFavoriteLocation",
+  "TrustMoment",
+  "TryCollectFetchQuest",
+  "TryCollectQuest",
+  "TryCompleteQuest",
+  "TryCompleteQuestOrIncrementStat",
+  "TryStartAndCollectQuest",
+  "TryStartQuest",
+  "Turret",
+  "TutorialHintPods",
+  "TutorialNode",
+  "Tweener",
+  "UiHighlightPlaceables",
+  "Unlock",
+  "UpdateDyeingClothDecal",
+  "UpdateFlowerGrowth",
+  "UpdateFlowerScaleMultiplier",
+  "UpdateLocalVoteGroupData",
+  "UpdateOtherDyeingClothDecal",
+  "UpgradeDivingAbility",
+  "Video",
+  "VideoControl",
+  "VideoScheduler",
+  "VisitingVendor",
+  "VotableBush",
+  "VotableBushThresholdData",
+  "VotableFlower",
+  "VotableFlowerConfig",
+  "VotableFlowerThresholdData",
+  "VotableObject",
+  "VotableObjectConfig",
+  "VotableObjectTargetProgress",
+  "VotableObjectsAtSameThreshold",
+  "VoteForObject",
+  "VoteForTeam",
+  "VotingGetVotes",
+  "VotingSetTeam",
+  "WakeTrail",
+  "Water",
+  "WaxChunkForce",
+  "WaxPickupSpawnerZone",
+  "WayfinderRegion",
+  "Waypoint",
+  "WearTwinRibbonOrnament",
+  "WerewolfProfessionLatterPart",
+  "Wind",
+  "WingBuff",
+  "WingBuffDeposit",
+  "WingBuffDepositShrineResetHint",
+  "WingBuffSendUp",
+  "WorldQuest",
+  "WorldQuestTable",
+  "YunMusicBubbleButton"
+ ],
+ "level_hash_source": "ordered TGCL types with pinned native alias mapping; no external PatchLevels asserted",
+ "native_record_size": 25536,
+ "native_sha256": "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321",
+ "note": "版本钉住证据：只有哈希/计数/名称，没有 scene/cache/native 载荷。运行时用于核对 APK 派生值；scene/cache 仍由用户 APK 现场模拟生成。",
+ "provenance_resource_revision_note": "APK V75506; not asserted equal to all runtime V75885 resources",
+ "registry_absent_but_t17_known": [
+  "AvatarTransformIntoAudienceBarnAnimal"
+ ],
+ "registry_sha256_of_source": "f093cb2a46efe5006cc7ec4146e77beea011cdeca11cb844fcdc34de2a5d16f1",
+ "resource_revision": "apk-v75506-421589",
+ "rpc_hash16": 49307,
+ "rpc_hash32": 1725474371,
+ "rpc_hash_source": "3216 native descriptors,212 inherited RPC types sorted strcmp",
+ "scenes": {
+  "AR_Bedroom": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "AR卧室（内部场景）",
+   "map_id": 3463762797,
+   "member": "assets/Data/Levels/AR_Bedroom/Objects.level.bin",
+   "member_bytes": 51972,
+   "member_sha256": "cfab0ec9c266428ce693ad515c8149949e8f8e89f7cdeef26955f7c0d87a3a3a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    35344,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 261,
+   "type_alias_applications": {}
+  },
+  "AR_WheatField": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "AR麦田（内部场景）",
+   "map_id": 112616686,
+   "member": "assets/Data/Levels/AR_WheatField/Objects.level.bin",
+   "member_bytes": 39908,
+   "member_sha256": "7984836761756617b45b1a593ce4c1eabee1b9157a7a03e2a124598c036b9f89",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    46117,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 151,
+   "type_alias_applications": {}
+  },
+  "CandleSpace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 16,
+    "rotations": 1
+   },
+   "label": "遇境",
+   "map_id": 3526133726,
+   "member": "assets/Data/Levels/CandleSpace/Objects.level.bin",
+   "member_bytes": 1583890,
+   "member_sha256": "c7e03d8eea90617bc1bdf23774253bea07c6002aabbc091790fa17b42af63c8c",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    36851,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 12545,
+   "type_alias_applications": {}
+  },
+  "CandleSpaceEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "星轨",
+   "map_id": 2251284635,
+   "member": "assets/Data/Levels/CandleSpaceEnd/Objects.level.bin",
+   "member_bytes": 304918,
+   "member_sha256": "c4a6f55e00a22208c0fa6d3aa24e4a7abe34cfe90fa142dc9195a2e357f22cf6",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    51912,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2301,
+   "type_alias_applications": {
+    "LensFlair": 8
+   }
+  },
+  "Dawn": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 2,
+    "rotations": 0
+   },
+   "label": "晨岛",
+   "map_id": 1649439303,
+   "member": "assets/Data/Levels/Dawn/Objects.level.bin",
+   "member_bytes": 2134009,
+   "member_sha256": "4758cd66ae3f0e09fc2fddb008175a39e9bdc1d5c8cc36848cc6fbb272e5eec9",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    45075,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 14651,
+   "type_alias_applications": {
+    "LensFlair": 3
+   }
+  },
+  "DawnCave": {
+   "finite_group_counts": {
+    "floaty": 2,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "预言山谷",
+   "map_id": 748712866,
+   "member": "assets/Data/Levels/DawnCave/Objects.level.bin",
+   "member_bytes": 688176,
+   "member_sha256": "fcc38b5daa61eb1dcdddea0cd94d14f022396f74e8f932f06f124b3dd41da477",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    38306,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3921,
+   "type_alias_applications": {}
+  },
+  "Dawn_TrialsAir": {
+   "finite_group_counts": {
+    "floaty": 5,
+    "move_rails": 3,
+    "rotations": 0
+   },
+   "label": "风之试炼",
+   "map_id": 2050064391,
+   "member": "assets/Data/Levels/Dawn_TrialsAir/Objects.level.bin",
+   "member_bytes": 252713,
+   "member_sha256": "7ed01ae022d14e602db4728400097c16ea1f15035abf6bac729f9d18a0d88c8a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    8243,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1614,
+   "type_alias_applications": {}
+  },
+  "Dawn_TrialsEarth": {
+   "finite_group_counts": {
+    "floaty": 8,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "土之试炼",
+   "map_id": 1887730855,
+   "member": "assets/Data/Levels/Dawn_TrialsEarth/Objects.level.bin",
+   "member_bytes": 728012,
+   "member_sha256": "6ae66edb1daec7b8eed27acfefeb68d10742ef662a7672c9646a719d2f5c1184",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    47323,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3567,
+   "type_alias_applications": {}
+  },
+  "Dawn_TrialsFire": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 14,
+    "rotations": 0
+   },
+   "label": "火之试炼",
+   "map_id": 1241316521,
+   "member": "assets/Data/Levels/Dawn_TrialsFire/Objects.level.bin",
+   "member_bytes": 240210,
+   "member_sha256": "47f152cbed3a62702703483bd31cefd0bbf6db1605690c18ca5cd41143061af4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    41480,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1596,
+   "type_alias_applications": {}
+  },
+  "Dawn_TrialsWater": {
+   "finite_group_counts": {
+    "floaty": 6,
+    "move_rails": 7,
+    "rotations": 0
+   },
+   "label": "水之试炼",
+   "map_id": 3884142720,
+   "member": "assets/Data/Levels/Dawn_TrialsWater/Objects.level.bin",
+   "member_bytes": 256357,
+   "member_sha256": "56dc5a104868972f133180559a0f04436f145706545d3636a83bb9b6efe3977a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    50622,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1361,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "DayEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "云野神殿",
+   "map_id": 1190972738,
+   "member": "assets/Data/Levels/DayEnd/Objects.level.bin",
+   "member_bytes": 366082,
+   "member_sha256": "16006db9284aa94425bdf352b8916d4347ff05e4ca95e585a8d9ad0c3c069569",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    12644,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1942,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "DayHubCave": {
+   "finite_group_counts": {
+    "floaty": 5,
+    "move_rails": 24,
+    "rotations": 2
+   },
+   "label": "中央神坛",
+   "map_id": 2394719185,
+   "member": "assets/Data/Levels/DayHubCave/Objects.level.bin",
+   "member_bytes": 1614948,
+   "member_sha256": "efee42f1a8efc1e17700ce9ceecb6c9f2c9af2af51f56f9c1e1f82c21bccb795",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    63310,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 10593,
+   "type_alias_applications": {}
+  },
+  "Dusk": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "边陲荒漠",
+   "map_id": 1147491976,
+   "member": "assets/Data/Levels/Dusk/Objects.level.bin",
+   "member_bytes": 467742,
+   "member_sha256": "cc8c46d7063dd778c0dcdb97a11a4331893d5df5e17adc7b98973c87a6dcb82d",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    4310,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3114,
+   "type_alias_applications": {}
+  },
+  "DuskEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "暮土神殿（主场景）",
+   "map_id": 4158956653,
+   "member": "assets/Data/Levels/DuskEnd/Objects.level.bin",
+   "member_bytes": 222926,
+   "member_sha256": "9e3948ba80ca35582ff8c1369f790e5eb92e8654d8babca10f51db754db5cc16",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    54113,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1384,
+   "type_alias_applications": {}
+  },
+  "DuskEnd_Past": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "暮土神殿（过去场景）",
+   "map_id": 371156238,
+   "member": "assets/Data/Levels/DuskEnd_Past/Objects.level.bin",
+   "member_bytes": 527109,
+   "member_sha256": "efc059d545639d44208f2c9ce1d859e81fbdd9c904d44c7f1d6d5a2f8d46e207",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    591,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3641,
+   "type_alias_applications": {}
+  },
+  "DuskGraveyard": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 3,
+    "rotations": 0
+   },
+   "label": "巨兽荒原",
+   "map_id": 864432821,
+   "member": "assets/Data/Levels/DuskGraveyard/Objects.level.bin",
+   "member_bytes": 697675,
+   "member_sha256": "3b844e5dfa37eee26e4e12fd94966babb325e5e973fc9a2fcdd3139c39234a36",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    19939,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4127,
+   "type_alias_applications": {
+    "LensFlair": 2
+   }
+  },
+  "DuskMid": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "远古战场",
+   "map_id": 1597085778,
+   "member": "assets/Data/Levels/DuskMid/Objects.level.bin",
+   "member_bytes": 561290,
+   "member_sha256": "2422d3cbf880692437e7d4d4acd6acb1b513f091be6bafe98a9fdc110f25770b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    64686,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4131,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "DuskMid_Past": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 4,
+    "rotations": 1
+   },
+   "label": "繁华王都",
+   "map_id": 1561318939,
+   "member": "assets/Data/Levels/DuskMid_Past/Objects.level.bin",
+   "member_bytes": 967689,
+   "member_sha256": "ea48c1d6052be2d7fb09ce1a02d63e57fe2e41127957f3a84567fcbf9abade5d",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    22227,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6256,
+   "type_alias_applications": {}
+  },
+  "DuskMid_PastMarket": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 4,
+    "rotations": 0
+   },
+   "label": "市集（独立场景）",
+   "map_id": 961583455,
+   "member": "assets/Data/Levels/DuskMid_PastMarket/Objects.level.bin",
+   "member_bytes": 937736,
+   "member_sha256": "68111bc40122c37e8cb5fd97798bba7e442162b3e5ef54c5978513c72f593db3",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    49107,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7577,
+   "type_alias_applications": {}
+  },
+  "DuskOasis": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 15,
+    "rotations": 0
+   },
+   "label": "失落方舟",
+   "map_id": 170656205,
+   "member": "assets/Data/Levels/DuskOasis/Objects.level.bin",
+   "member_bytes": 1059915,
+   "member_sha256": "88d0df5bb6d853060db0c5ae4f062e70d5a745f59b4a932456234a85eb1364c1",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    17784,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8592,
+   "type_alias_applications": {
+    "LensFlair": 10
+   }
+  },
+  "DuskStart": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "暮土大厅",
+   "map_id": 817373972,
+   "member": "assets/Data/Levels/DuskStart/Objects.level.bin",
+   "member_bytes": 504128,
+   "member_sha256": "5823936a845f04db5a5b00dca065568b139d68e1db8e0fa50eed0c53bd7a4f3f",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    64828,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3026,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Dusk_CrabField": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "黑水港湾",
+   "map_id": 2650921869,
+   "member": "assets/Data/Levels/Dusk_CrabField/Objects.level.bin",
+   "member_bytes": 544238,
+   "member_sha256": "1e971e164adce7dfb74ca7620298aa3fae9193e8d514db8c1e8f7cdd61af67cb",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    22429,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4005,
+   "type_alias_applications": {}
+  },
+  "Dusk_HiddenTemple": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "荒废神殿",
+   "map_id": 1152668600,
+   "member": "assets/Data/Levels/Dusk_HiddenTemple/Objects.level.bin",
+   "member_bytes": 547846,
+   "member_sha256": "34f9cabb9722e1760afcf83f875900fa97cadd2a9da47508a453f0c0faf13e25",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    22572,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2168,
+   "type_alias_applications": {}
+  },
+  "Dusk_PearlIsland": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "珍珠村",
+   "map_id": 607516458,
+   "member": "assets/Data/Levels/Dusk_PearlIsland/Objects.level.bin",
+   "member_bytes": 1101735,
+   "member_sha256": "33464c1b9807fca73a0a86f3dcec7f36bb61ccf44df1449b185901e3bbbe9da5",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    55327,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6852,
+   "type_alias_applications": {}
+  },
+  "Dusk_PearlSea": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 10,
+    "rotations": 0
+   },
+   "label": "珍珠海域",
+   "map_id": 1058995818,
+   "member": "assets/Data/Levels/Dusk_PearlSea/Objects.level.bin",
+   "member_bytes": 1290612,
+   "member_sha256": "40d67fa5e3d4af0b20082c85bfe811fb8f74c9048b9798dedc95f25eefbe4a08",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    40550,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 11772,
+   "type_alias_applications": {}
+  },
+  "Dusk_Triangle": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 20,
+    "rotations": 0
+   },
+   "label": "藏宝岛礁（主场景）",
+   "map_id": 4070111637,
+   "member": "assets/Data/Levels/Dusk_Triangle/Objects.level.bin",
+   "member_bytes": 1477191,
+   "member_sha256": "76b74bebb056cf76f70726f04c531a495d9469faae45e05c37e609aae0c1b05f",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    2032,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 10548,
+   "type_alias_applications": {
+    "LensFlair": 5
+   }
+  },
+  "Dusk_TriangleEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "藏宝岛礁（终段场景）",
+   "map_id": 3516048122,
+   "member": "assets/Data/Levels/Dusk_TriangleEnd/Objects.level.bin",
+   "member_bytes": 118685,
+   "member_sha256": "76c8f9dddc6617f957770c3817d2457099916651c60832810545b1d65720aac4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    386,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 989,
+   "type_alias_applications": {
+    "LensFlair": 3
+   }
+  },
+  "Event_Arr_ExhaleInhale": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·ExhaleInhale歌曲场景",
+   "map_id": 2779731386,
+   "member": "assets/Data/Levels/Event_Arr_ExhaleInhale/Objects.level.bin",
+   "member_bytes": 210937,
+   "member_sha256": "fea092fbbc6fade2e5a6add42ea60ffe65277560529f2ce2e2f669cdd338923a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    18128,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1202,
+   "type_alias_applications": {
+    "LensFlair": 5
+   }
+  },
+  "Event_Arr_EyesOfAChild": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·EyesOfAChild歌曲场景",
+   "map_id": 47024056,
+   "member": "assets/Data/Levels/Event_Arr_EyesOfAChild/Objects.level.bin",
+   "member_bytes": 175034,
+   "member_sha256": "7d86ea833132c7208618d068e2dac9a85493790e4cefc62a226e39883a08dfcc",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    47197,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1094,
+   "type_alias_applications": {
+    "LensFlair": 12
+   }
+  },
+  "Event_Arr_Runaway": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·Runaway歌曲场景",
+   "map_id": 4011385311,
+   "member": "assets/Data/Levels/Event_Arr_Runaway/Objects.level.bin",
+   "member_bytes": 411624,
+   "member_sha256": "362b0a9684d445c19306c0d61e46e0a0b4edcf221b4448e90cba7943d0bd8888",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    58451,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1876,
+   "type_alias_applications": {
+    "LensFlair": 6
+   }
+  },
+  "Event_Arr_SoftInside": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·SoftInside歌曲场景",
+   "map_id": 1661095040,
+   "member": "assets/Data/Levels/Event_Arr_SoftInside/Objects.level.bin",
+   "member_bytes": 465555,
+   "member_sha256": "507d9003a1400d5833168897b1691fd956ef3cfb325b6d4c962b8fa65d4654f8",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    3991,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1951,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Event_Arr_TheSeed": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·TheSeed歌曲场景",
+   "map_id": 2093785354,
+   "member": "assets/Data/Levels/Event_Arr_TheSeed/Objects.level.bin",
+   "member_bytes": 401317,
+   "member_sha256": "7f96fb79625c08ff40d2d278eb097613dd8e98a08dd818da8da4b3a815b0ad73",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    41045,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2017,
+   "type_alias_applications": {
+    "LensFlair": 6
+   }
+  },
+  "Event_Arr_Warrior": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "欧若拉·Warrior歌曲场景",
+   "map_id": 3530028462,
+   "member": "assets/Data/Levels/Event_Arr_Warrior/Objects.level.bin",
+   "member_bytes": 441249,
+   "member_sha256": "5a45ca3a795205076dc9058ab6573d9d17eb189de881c161816c1a279625c2d8",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    55898,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1909,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Event_Cinema": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 2,
+    "rotations": 2
+   },
+   "label": "群星影院",
+   "map_id": 417578099,
+   "member": "assets/Data/Levels/Event_Cinema/Objects.level.bin",
+   "member_bytes": 1690462,
+   "member_sha256": "7531c88ee8f26e42af8f85dc2a9a46f80df431b5424f2d92f8b03ee62503859d",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    14292,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 12305,
+   "type_alias_applications": {
+    "LensFlair": 5
+   }
+  },
+  "Event_DaysOfMischief": {
+   "finite_group_counts": {
+    "floaty": 12,
+    "move_rails": 24,
+    "rotations": 0
+   },
+   "label": "螃蟹的恶搞派对",
+   "map_id": 3082753918,
+   "member": "assets/Data/Levels/Event_DaysOfMischief/Objects.level.bin",
+   "member_bytes": 2353366,
+   "member_sha256": "d0addca809d7b31181d5548de13eac56844b44a73b7b26bf942b3e8f7451f0c0",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    21041,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 19208,
+   "type_alias_applications": {}
+  },
+  "Event_DaysOfMischief_Escape": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "恶作剧密室",
+   "map_id": 2418094228,
+   "member": "assets/Data/Levels/Event_DaysOfMischief_Escape/Objects.level.bin",
+   "member_bytes": 242138,
+   "member_sha256": "20d1e81f1338ad3d4cd8a1e43c0e8dbe4100b6f4b1f29f38679fc7da246dad01",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    10763,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1276,
+   "type_alias_applications": {}
+  },
+  "Event_DaysOfMoonlight_HugeMoon": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "月圆之地",
+   "map_id": 3452301396,
+   "member": "assets/Data/Levels/Event_DaysOfMoonlight_HugeMoon/Objects.level.bin",
+   "member_bytes": 109386,
+   "member_sha256": "bad64c02caffb30cb003fc590a163c11320214980e42fcc09096a3c00d71cc22",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    64024,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 290,
+   "type_alias_applications": {}
+  },
+  "Event_HidenSeek_SnowVillage": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 3
+   },
+   "label": "躲猫猫水晶球",
+   "map_id": 3530471012,
+   "member": "assets/Data/Levels/Event_HidenSeek_SnowVillage/Objects.level.bin",
+   "member_bytes": 693930,
+   "member_sha256": "0d76f41642f6076f6bfb66278f9e73b496de6fad6a97ce9b9d57e6b9d1dfbff1",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    3722,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1691,
+   "type_alias_applications": {}
+  },
+  "Event_Personality": {
+   "finite_group_counts": {
+    "floaty": 3,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "寻真之地",
+   "map_id": 2920756220,
+   "member": "assets/Data/Levels/Event_Personality/Objects.level.bin",
+   "member_bytes": 966384,
+   "member_sha256": "ea0f6c34c4ff721089629a6dbe16a9cb82303a06de4252ddffe2b4359736fe62",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    33380,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7744,
+   "type_alias_applications": {
+    "LensFlair": 11
+   }
+  },
+  "Event_WerewolfGame": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "永夜之地",
+   "map_id": 1737684623,
+   "member": "assets/Data/Levels/Event_WerewolfGame/Objects.level.bin",
+   "member_bytes": 52696,
+   "member_sha256": "f1778fd544662c0f5b51c1fc2266884c7fd6b3855eb328ed244899dbe6b6b73b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    61909,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 300,
+   "type_alias_applications": {}
+  },
+  "MainStreet": {
+   "finite_group_counts": {
+    "floaty": 6,
+    "move_rails": 4,
+    "rotations": 0
+   },
+   "label": "小镇",
+   "map_id": 1509719447,
+   "member": "assets/Data/Levels/MainStreet/Objects.level.bin",
+   "member_bytes": 3637972,
+   "member_sha256": "0b6e212a30040aac319750d05fdf6429feb810d151396ac78a51c2790f209bbf",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    1568,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 30336,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "MainStreetFlyingIntro": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "飞行指引",
+   "map_id": 1761965310,
+   "member": "assets/Data/Levels/MainStreetFlyingIntro/Objects.level.bin",
+   "member_bytes": 427366,
+   "member_sha256": "30772f118b7810f36cdc99671febb26b3cd18b6fc8c1e8701304661d840b033e",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    62514,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1751,
+   "type_alias_applications": {
+    "LensFlair": 5
+   }
+  },
+  "MainStreet_Apartment": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "小镇公寓",
+   "map_id": 3905084854,
+   "member": "assets/Data/Levels/MainStreet_Apartment/Objects.level.bin",
+   "member_bytes": 305777,
+   "member_sha256": "4d529ed68eecd20153e61ad0c6e985c2dd1a7f8530248e2a9a928b9e8f3d21d5",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    15232,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2080,
+   "type_alias_applications": {}
+  },
+  "MainStreet_Cafe": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "甜点工坊",
+   "map_id": 1444818677,
+   "member": "assets/Data/Levels/MainStreet_Cafe/Objects.level.bin",
+   "member_bytes": 545678,
+   "member_sha256": "6fe8da4f8cf420a6c815209ace85fc06b5bcd3ba7c06d34c4dd03abef1e57a58",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    17330,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4547,
+   "type_alias_applications": {}
+  },
+  "MainStreet_Cafe_Wonderland": {
+   "finite_group_counts": {
+    "floaty": 2,
+    "move_rails": 2,
+    "rotations": 0
+   },
+   "label": "仙境茶会",
+   "map_id": 1104763408,
+   "member": "assets/Data/Levels/MainStreet_Cafe_Wonderland/Objects.level.bin",
+   "member_bytes": 699519,
+   "member_sha256": "7b9857f285ad6b0d181f420b86d88f6d901b5df5d235cf3c9202b658b4b0c5b2",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    4688,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7219,
+   "type_alias_applications": {}
+  },
+  "MainStreet_ConcertHall": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "音乐餐厅",
+   "map_id": 1559613961,
+   "member": "assets/Data/Levels/MainStreet_ConcertHall/Objects.level.bin",
+   "member_bytes": 1342515,
+   "member_sha256": "9e8086c7c18430f92404793e91218f38649d816ed3bacc2b5e4c0d09f4b6fecd",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    26450,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8148,
+   "type_alias_applications": {}
+  },
+  "MainStreet_FunArmada": {
+   "finite_group_counts": {
+    "floaty": 12,
+    "move_rails": 3,
+    "rotations": 10
+   },
+   "label": "狂欢船队",
+   "map_id": 3743646255,
+   "member": "assets/Data/Levels/MainStreet_FunArmada/Objects.level.bin",
+   "member_bytes": 1281612,
+   "member_sha256": "738b56973e761a5cc6ed8fe71a8d2d5cfd7b320d6b0d013d96787e68d0a3302b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    59928,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8349,
+   "type_alias_applications": {}
+  },
+  "MainStreet_ShopOutfits": {
+   "finite_group_counts": {
+    "floaty": 3,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "服装店",
+   "map_id": 1563891948,
+   "member": "assets/Data/Levels/MainStreet_ShopOutfits/Objects.level.bin",
+   "member_bytes": 1296765,
+   "member_sha256": "f12ae0e8812234458995eee20de362ba557954b49e988918e2f1015f84d35882",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    63793,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8914,
+   "type_alias_applications": {}
+  },
+  "MainStreet_ShopProps": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "筑巢工坊",
+   "map_id": 372393162,
+   "member": "assets/Data/Levels/MainStreet_ShopProps/Objects.level.bin",
+   "member_bytes": 448887,
+   "member_sha256": "0f2f3dd8376a6492a9c561bc2d829f0a84683d8b3f98cdfea330e9b28abfa57b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    31779,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2845,
+   "type_alias_applications": {}
+  },
+  "MainStreet_ShopSpells": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "魔法商店",
+   "map_id": 4044469303,
+   "member": "assets/Data/Levels/MainStreet_ShopSpells/Objects.level.bin",
+   "member_bytes": 474298,
+   "member_sha256": "de365fc9512e8b6dd9a16a2677921b5ff34aa391c5311ba6a80ad4558320eb1f",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    32106,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2208,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "MainStreet_Soundbath": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "冥想之地",
+   "map_id": 3368878998,
+   "member": "assets/Data/Levels/MainStreet_Soundbath/Objects.level.bin",
+   "member_bytes": 331673,
+   "member_sha256": "d2425c92339255fef1421dc7e7f178d951234688677f1e874739c939d96d5d54",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    34484,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2323,
+   "type_alias_applications": {}
+  },
+  "MainStreet_StorySpace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "故事空间",
+   "map_id": 1936276829,
+   "member": "assets/Data/Levels/MainStreet_StorySpace/Objects.level.bin",
+   "member_bytes": 116117,
+   "member_sha256": "a0ec52798628ebe8e2502d841775ebc2e604a8cf3894506ffdc6e6f32d24ee9c",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    46559,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 449,
+   "type_alias_applications": {}
+  },
+  "Nest_Night_GO_Town": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季主题小屋",
+   "map_id": 1274288158,
+   "member": "assets/Data/Levels/Nest_Night_GO_Town/Objects.level.bin",
+   "member_bytes": 440969,
+   "member_sha256": "a0a0c8349557572235e0de89add9566a29a04ab8cf69039dd2d02e09612c7887",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    37837,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1269,
+   "type_alias_applications": {}
+  },
+  "Night": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 3
+   },
+   "label": "禁阁底层",
+   "map_id": 2358907137,
+   "member": "assets/Data/Levels/Night/Objects.level.bin",
+   "member_bytes": 1085704,
+   "member_sha256": "6c9890c1211ed8774cf62e7929fbaf359796082011ec74773c159fdf3517ca09",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    19043,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7492,
+   "type_alias_applications": {}
+  },
+  "Night2": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 13,
+    "rotations": 2
+   },
+   "label": "禁阁上层",
+   "map_id": 2307461961,
+   "member": "assets/Data/Levels/Night2/Objects.level.bin",
+   "member_bytes": 530648,
+   "member_sha256": "6c2603b92cc4e577a8b4fefb011b076c66858ed564929671cc269f93f3043905",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    41630,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4194,
+   "type_alias_applications": {}
+  },
+  "NightArchive": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 5,
+    "rotations": 5
+   },
+   "label": "档案阁",
+   "map_id": 2518601,
+   "member": "assets/Data/Levels/NightArchive/Objects.level.bin",
+   "member_bytes": 916398,
+   "member_sha256": "d5ee907701715ab751696a4fe8211c14b80c9de78e30a60e1007dff9daad997c",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    36184,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6715,
+   "type_alias_applications": {}
+  },
+  "NightDesert": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "星光沙漠（主场景）",
+   "map_id": 2060214456,
+   "member": "assets/Data/Levels/NightDesert/Objects.level.bin",
+   "member_bytes": 1584490,
+   "member_sha256": "f36333916611f6fb291865c715590b820f854c6f5c892227d6442b0c16cf4718",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    61447,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 10319,
+   "type_alias_applications": {
+    "LensFlair": 3
+   }
+  },
+  "NightDesert_Beach": {
+   "finite_group_counts": {
+    "floaty": 3,
+    "move_rails": 6,
+    "rotations": 0
+   },
+   "label": "星光沙漠（海滩场景）",
+   "map_id": 3051518728,
+   "member": "assets/Data/Levels/NightDesert_Beach/Objects.level.bin",
+   "member_bytes": 653273,
+   "member_sha256": "3fe65181af234823bf6e837828f06938e8583255061c38998c88db246dc68bd4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    35732,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5907,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "NightDesert_Planets": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "小王子的梦",
+   "map_id": 2824771136,
+   "member": "assets/Data/Levels/NightDesert_Planets/Objects.level.bin",
+   "member_bytes": 166091,
+   "member_sha256": "9f391ea5615db1b4234d997d007d8aeab46463df65ed541c64f22683be8feae9",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    55942,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1168,
+   "type_alias_applications": {}
+  },
+  "NightEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "禁阁（终段场景）",
+   "map_id": 2267185542,
+   "member": "assets/Data/Levels/NightEnd/Objects.level.bin",
+   "member_bytes": 212388,
+   "member_sha256": "9c9bbc869b021a7902a5a0b37cb7f6361cf56814dd93a588cd3455594cc7643b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    31079,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1205,
+   "type_alias_applications": {}
+  },
+  "Night_GO_City": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（城市场景）",
+   "map_id": 2458626594,
+   "member": "assets/Data/Levels/Night_GO_City/Objects.level.bin",
+   "member_bytes": 743533,
+   "member_sha256": "234bc46de4f9f686ab9e182c3afe36995f8b4943fcd16350a25227fa53d2a76a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    17253,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4662,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Farm": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（农场场景）",
+   "map_id": 2611321369,
+   "member": "assets/Data/Levels/Night_GO_Farm/Objects.level.bin",
+   "member_bytes": 658427,
+   "member_sha256": "f060358b26dbc69d5b8dd746c2b386f42d0d70fd8a7428082042a73939c87718",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    27680,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4048,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Field": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（田野场景）",
+   "map_id": 1665365959,
+   "member": "assets/Data/Levels/Night_GO_Field/Objects.level.bin",
+   "member_bytes": 330141,
+   "member_sha256": "67b89e51d345170b88233d293505718dec5ec460d7fd370c992687ae7b4ac4b4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    46218,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2556,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Gallery": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "星夜画廊",
+   "map_id": 98108829,
+   "member": "assets/Data/Levels/Night_GO_Gallery/Objects.level.bin",
+   "member_bytes": 1171193,
+   "member_sha256": "443b2d4d004adee2f3cd3134a61e9e1a4fe0d0696622ec2220ccb9e8c519241e",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    46138,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7275,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Island": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（岛屿场景）",
+   "map_id": 996052172,
+   "member": "assets/Data/Levels/Night_GO_Island/Objects.level.bin",
+   "member_bytes": 364106,
+   "member_sha256": "aa62974304fa2694a22e95e3f5a21bed35f29396b5b0bd5babb7ed8d4a35a5d4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    23855,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1818,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Town": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（小镇场景）",
+   "map_id": 3092325157,
+   "member": "assets/Data/Levels/Night_GO_Town/Objects.level.bin",
+   "member_bytes": 1102551,
+   "member_sha256": "8a29c8c1553c727c3634d83221d4746eaf260578b48b5329333703c351b7f205",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    38803,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6019,
+   "type_alias_applications": {}
+  },
+  "Night_GO_Tree": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "致梵高季（树场景）",
+   "map_id": 4023907509,
+   "member": "assets/Data/Levels/Night_GO_Tree/Objects.level.bin",
+   "member_bytes": 1071280,
+   "member_sha256": "7e9940fc04c6d2e163db45c940536ccde91d73b4ac3e29ae6723dd171e904886",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    4466,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5194,
+   "type_alias_applications": {}
+  },
+  "Night_IPHallway": {
+   "finite_group_counts": {
+    "floaty": 2,
+    "move_rails": 1,
+    "rotations": 1
+   },
+   "label": "藏星阁",
+   "map_id": 530831471,
+   "member": "assets/Data/Levels/Night_IPHallway/Objects.level.bin",
+   "member_bytes": 255515,
+   "member_sha256": "a616e3b8cb5eb2d1cc470b226659a9430e79e4b1265c07923f6483b42f26e721",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    29786,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1209,
+   "type_alias_applications": {}
+  },
+  "Night_InfiniteDesert": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "泪水的世界",
+   "map_id": 214074919,
+   "member": "assets/Data/Levels/Night_InfiniteDesert/Objects.level.bin",
+   "member_bytes": 259269,
+   "member_sha256": "4f9b11d1b30ef154552301b8bd1be17129e7c08128ddbfa56c3b33551d2f84db",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    34451,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1771,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Night_JarCave": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "星光沙漠（罐子洞场景）",
+   "map_id": 3258961934,
+   "member": "assets/Data/Levels/Night_JarCave/Objects.level.bin",
+   "member_bytes": 176843,
+   "member_sha256": "2ed5138409d5219b0853bdc63211320a2e8304f87714df61f9347356e37e8378",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    2938,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 713,
+   "type_alias_applications": {}
+  },
+  "Night_Jumble": {
+   "finite_group_counts": {
+    "floaty": 9,
+    "move_rails": 5,
+    "rotations": 1
+   },
+   "label": "残灯墟",
+   "map_id": 4182564783,
+   "member": "assets/Data/Levels/Night_Jumble/Objects.level.bin",
+   "member_bytes": 870966,
+   "member_sha256": "57c11e2b44717bef71476f6e756b278c94026414e4b0b4292614eda302769937",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    19522,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7476,
+   "type_alias_applications": {}
+  },
+  "Night_PaintedWorld": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "月牙绿洲",
+   "map_id": 1694829989,
+   "member": "assets/Data/Levels/Night_PaintedWorld/Objects.level.bin",
+   "member_bytes": 2072024,
+   "member_sha256": "f9f49a61ec674d0b39703251950978d705dab76c316093cfbb403908559ef03b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    49660,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 15859,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Night_Shelter": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 4,
+    "rotations": 0
+   },
+   "label": "庇护所",
+   "map_id": 2899790755,
+   "member": "assets/Data/Levels/Night_Shelter/Objects.level.bin",
+   "member_bytes": 916047,
+   "member_sha256": "50d085b99eb0282cf08bb0235c5dd16b721eaf785d0b76f58b68fcd3402249a0",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    41436,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7812,
+   "type_alias_applications": {
+    "LensFlair": 29
+   }
+  },
+  "Night_StoryBook": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "姆明故事书",
+   "map_id": 3803142938,
+   "member": "assets/Data/Levels/Night_StoryBook/Objects.level.bin",
+   "member_bytes": 291876,
+   "member_sha256": "0c3e1aeb8a820821ccc74cd264d90231eda12210d5444bc3e64bde83f428eff4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    50914,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1728,
+   "type_alias_applications": {}
+  },
+  "Night_ValleyForest": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "姆明谷的森林",
+   "map_id": 1801452336,
+   "member": "assets/Data/Levels/Night_ValleyForest/Objects.level.bin",
+   "member_bytes": 833093,
+   "member_sha256": "063ab1c6cf50fa01fce47e00804374289a18d8bcbe985eca26f0ef5a0cde9011",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    40183,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5672,
+   "type_alias_applications": {}
+  },
+  "Night_ValleyHouse": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "姆明屋（地面场景）",
+   "map_id": 217257707,
+   "member": "assets/Data/Levels/Night_ValleyHouse/Objects.level.bin",
+   "member_bytes": 339008,
+   "member_sha256": "01ad336a8c3b0e629bf119dece693c59480996b7286782d569ab59d230db6306",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    51358,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2329,
+   "type_alias_applications": {
+    "LensFlair": 4
+   }
+  },
+  "Night_ValleyHouseSky": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "姆明屋（天空场景）",
+   "map_id": 1185708672,
+   "member": "assets/Data/Levels/Night_ValleyHouseSky/Objects.level.bin",
+   "member_bytes": 266676,
+   "member_sha256": "5d8f3ce5cad3974ffa3d4598808eaafb6d7c260650785321970549c483b7bcf4",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    61885,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1267,
+   "type_alias_applications": {}
+  },
+  "Night_Workshop": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "织光阁",
+   "map_id": 3203226771,
+   "member": "assets/Data/Levels/Night_Workshop/Objects.level.bin",
+   "member_bytes": 531732,
+   "member_sha256": "03717160313e00f4ce8825d6dd34c78123a50d4bae7c5855f2774539b151403b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    34241,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4582,
+   "type_alias_applications": {}
+  },
+  "Nintendo_CandleSpace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 5,
+    "rotations": 0
+   },
+   "label": "隐藏关卡",
+   "map_id": 2199862534,
+   "member": "assets/Data/Levels/Nintendo_CandleSpace/Objects.level.bin",
+   "member_bytes": 248116,
+   "member_sha256": "4b8df24d4c7bf154878ff09b1e331649a6b81858fc3d70b35421e40bd3df3143",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    44969,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1466,
+   "type_alias_applications": {}
+  },
+  "OrbitEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "重生之路（终段场景）",
+   "map_id": 567986524,
+   "member": "assets/Data/Levels/OrbitEnd/Objects.level.bin",
+   "member_bytes": 240673,
+   "member_sha256": "0181f3bdf0aa3f7fe7e99589ea89ca2ee443a7c426ae59f27511b90ad3a0b82e",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    28077,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1539,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "OrbitMid": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 1
+   },
+   "label": "重生之路（中段场景）",
+   "map_id": 3437135515,
+   "member": "assets/Data/Levels/OrbitMid/Objects.level.bin",
+   "member_bytes": 648572,
+   "member_sha256": "d7a820fc1e2417bcf3c2bb2e3549266438751647847756efd0ce9e0e9ff51528",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    15789,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2586,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Prairie_ButterflyFields": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 1,
+    "rotations": 0
+   },
+   "label": "蝴蝶平原",
+   "map_id": 2477345666,
+   "member": "assets/Data/Levels/Prairie_ButterflyFields/Objects.level.bin",
+   "member_bytes": 1126674,
+   "member_sha256": "c1b4972a62a7152b21cfefc9e133a3b6c05d1e40bbd6fe2514a019b81ca1d642",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    42205,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 9054,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Prairie_Cave": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 24,
+    "rotations": 0
+   },
+   "label": "幽光山洞",
+   "map_id": 3244931597,
+   "member": "assets/Data/Levels/Prairie_Cave/Objects.level.bin",
+   "member_bytes": 912289,
+   "member_sha256": "7137940fcaf86f896d02d9ea614174ffa5bfbf2f0617c4c1aea3462c3e6ba1b3",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    4656,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6265,
+   "type_alias_applications": {
+    "LensFlair": 3
+   }
+  },
+  "Prairie_Island": {
+   "finite_group_counts": {
+    "floaty": 1,
+    "move_rails": 20,
+    "rotations": 0
+   },
+   "label": "圣岛",
+   "map_id": 3057325709,
+   "member": "assets/Data/Levels/Prairie_Island/Objects.level.bin",
+   "member_bytes": 2231702,
+   "member_sha256": "39919da8f4ecdf418020f588ea6b6c17478a6ef788ebaa840e72d855d72ea744",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    13967,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 20798,
+   "type_alias_applications": {}
+  },
+  "Prairie_NestAndKeeper": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 6,
+    "rotations": 0
+   },
+   "label": "云顶浮石",
+   "map_id": 312004957,
+   "member": "assets/Data/Levels/Prairie_NestAndKeeper/Objects.level.bin",
+   "member_bytes": 639920,
+   "member_sha256": "b27d68df457e915eeedb49927500f1986773eb29770cd71bae68b9e7e312a899",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    57895,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4788,
+   "type_alias_applications": {
+    "LensFlair": 2
+   }
+  },
+  "Prairie_Village": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 10,
+    "rotations": 0
+   },
+   "label": "仙乡",
+   "map_id": 2350532176,
+   "member": "assets/Data/Levels/Prairie_Village/Objects.level.bin",
+   "member_bytes": 1648318,
+   "member_sha256": "349ff3f826c204c291f9408978a753d9edbebb241c19fb71158fff4f2a29d91c",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    16774,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 14159,
+   "type_alias_applications": {
+    "LensFlair": 2
+   }
+  },
+  "Prairie_WildLifePark": {
+   "finite_group_counts": {
+    "floaty": 2,
+    "move_rails": 12,
+    "rotations": 0
+   },
+   "label": "云峰",
+   "map_id": 3429122502,
+   "member": "assets/Data/Levels/Prairie_WildLifePark/Objects.level.bin",
+   "member_bytes": 2000665,
+   "member_sha256": "89b4d3d8797c88e962a716ce15fb087fe0d21f2aa739a131956a24a178740a4a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    49588,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 16024,
+   "type_alias_applications": {}
+  },
+  "Rain": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 2,
+    "rotations": 0
+   },
+   "label": "雨林",
+   "map_id": 164626931,
+   "member": "assets/Data/Levels/Rain/Objects.level.bin",
+   "member_bytes": 1268834,
+   "member_sha256": "aed3128369a476501f748ddabae5fe1ffcfed6b46e602653212cc1f1b791a734",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    44931,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8066,
+   "type_alias_applications": {
+    "LensFlair": 2
+   }
+  },
+  "RainEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "雨林神殿",
+   "map_id": 128844448,
+   "member": "assets/Data/Levels/RainEnd/Objects.level.bin",
+   "member_bytes": 572516,
+   "member_sha256": "c7b7edc059f656028ba12529e2c088310e1f51f43c2a8ea22fdbf50b6aa3ac1d",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    6082,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2959,
+   "type_alias_applications": {}
+  },
+  "RainForest": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 3,
+    "rotations": 0
+   },
+   "label": "荧光森林",
+   "map_id": 2839585646,
+   "member": "assets/Data/Levels/RainForest/Objects.level.bin",
+   "member_bytes": 1269379,
+   "member_sha256": "8c9c4e4873a360e8c2ff3b9875de521e4e6f74b008749ddac0c1a4adb2fe19c2",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    43870,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 9703,
+   "type_alias_applications": {}
+  },
+  "RainMid": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 2,
+    "rotations": 0
+   },
+   "label": "密林遗迹",
+   "map_id": 2159642775,
+   "member": "assets/Data/Levels/RainMid/Objects.level.bin",
+   "member_bytes": 1225722,
+   "member_sha256": "7a08cdd71ff2752c35cb950557f9a6b2abc9462c2a34302efa46d12647061a40",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    25546,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 8864,
+   "type_alias_applications": {}
+  },
+  "RainShelter": {
+   "finite_group_counts": {
+    "floaty": 13,
+    "move_rails": 16,
+    "rotations": 0
+   },
+   "label": "秘密花园",
+   "map_id": 2720691892,
+   "member": "assets/Data/Levels/RainShelter/Objects.level.bin",
+   "member_bytes": 1681418,
+   "member_sha256": "b764609e42c90dc95131ed3fad72c3dab6f0c26838ac25b702cf7e9c0631cccb",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    39931,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 12751,
+   "type_alias_applications": {
+    "LensFlair": 5
+   }
+  },
+  "Rain_BaseCamp": {
+   "finite_group_counts": {
+    "floaty": 14,
+    "move_rails": 20,
+    "rotations": 0
+   },
+   "label": "大树屋",
+   "map_id": 3317260872,
+   "member": "assets/Data/Levels/Rain_BaseCamp/Objects.level.bin",
+   "member_bytes": 691795,
+   "member_sha256": "e0c2059cc8191195bdbf65be1d4f9efc0acec613c702fa6ddef970a85452ea34",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    8826,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4186,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Rain_BlueBirdTheater": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 6,
+    "rotations": 0
+   },
+   "label": "青鸟剧场",
+   "map_id": 3730271824,
+   "member": "assets/Data/Levels/Rain_BlueBirdTheater/Objects.level.bin",
+   "member_bytes": 515049,
+   "member_sha256": "dc8856fdcab29f1dd153035284976ef40451c67eec41e851120ad45280982f36",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    667,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4527,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Rain_Cave": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 5,
+    "rotations": 0
+   },
+   "label": "地下溶洞",
+   "map_id": 4133595729,
+   "member": "assets/Data/Levels/Rain_Cave/Objects.level.bin",
+   "member_bytes": 920384,
+   "member_sha256": "4a6d97d4d5ec41c32905d60791faede0bfc9f02aab222d70ca4f00acb5827eb1",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    35163,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5750,
+   "type_alias_applications": {}
+  },
+  "Season24Void1": {
+   "finite_group_counts": {
+    "floaty": 3,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "虚空",
+   "map_id": 3667302771,
+   "member": "assets/Data/Levels/Season24Void1/Objects.level.bin",
+   "member_bytes": 962287,
+   "member_sha256": "230cc2ae18da12526e1d01227810d199ad37d9270637cd1cebf2d0612e4cfc4e",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    49811,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5890,
+   "type_alias_applications": {
+    "LensFlair": 3
+   }
+  },
+  "Skyway": {
+   "finite_group_counts": {
+    "floaty": 7,
+    "move_rails": 13,
+    "rotations": 0
+   },
+   "label": "风行网道",
+   "map_id": 2081768701,
+   "member": "assets/Data/Levels/Skyway/Objects.level.bin",
+   "member_bytes": 1897504,
+   "member_sha256": "408388c85368eb87f421b51501f4ad7ae3dcaaaaf5e11aa9be1a16bfe7cd65c6",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    39846,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 11809,
+   "type_alias_applications": {
+    "LensFlair": 2
+   }
+  },
+  "Storm": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "暴风眼",
+   "map_id": 1705189686,
+   "member": "assets/Data/Levels/Storm/Objects.level.bin",
+   "member_bytes": 596947,
+   "member_sha256": "91590f45d4fe230575628f83c22774a6fe393491834f527a658c3fa7855989e7",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    24346,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3288,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "StormEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 10,
+    "rotations": 0
+   },
+   "label": "伊甸之眼",
+   "map_id": 3479786579,
+   "member": "assets/Data/Levels/StormEnd/Objects.level.bin",
+   "member_bytes": 321646,
+   "member_sha256": "cc898bdb4a4b76cca8dde5867e404c1d4dee6e71362069e50f58637a76e5e236",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    10808,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1953,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "StormEvent_VoidSpace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "远古回忆",
+   "map_id": 3928396665,
+   "member": "assets/Data/Levels/StormEvent_VoidSpace/Objects.level.bin",
+   "member_bytes": 221473,
+   "member_sha256": "cd4e14e30b75b374f0395a3551bce9648ff25b46343bce99b23300b70b72ac5f",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    64389,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 663,
+   "type_alias_applications": {
+    "LensFlair": 4
+   }
+  },
+  "StormStart": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 2,
+    "rotations": 0
+   },
+   "label": "伊甸大门",
+   "map_id": 3110721718,
+   "member": "assets/Data/Levels/StormStart/Objects.level.bin",
+   "member_bytes": 571191,
+   "member_sha256": "bbfd99ed2bafd7449245002a4dda662a31abadf9d8e15ce76b5db8069420635b",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    36413,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 3474,
+   "type_alias_applications": {}
+  },
+  "Sunset": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 15,
+    "rotations": 0
+   },
+   "label": "霞谷",
+   "map_id": 1638008359,
+   "member": "assets/Data/Levels/Sunset/Objects.level.bin",
+   "member_bytes": 1118022,
+   "member_sha256": "8b0428ec72a21fafcb58184b3a1ccd75ba4234a87f31499080cfa82eeec52285",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    50293,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 7597,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "SunsetColosseum": {
+   "finite_group_counts": {
+    "floaty": 1,
+    "move_rails": 13,
+    "rotations": 4
+   },
+   "label": "落日竞技场（Colosseum场景）",
+   "map_id": 263580627,
+   "member": "assets/Data/Levels/SunsetColosseum/Objects.level.bin",
+   "member_bytes": 1955078,
+   "member_sha256": "779a93161078074e21bdf70e579f96d129e5ad7907891c441ad0e16d21e2a2ed",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    55802,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 18389,
+   "type_alias_applications": {
+    "LensFlair": 13
+   }
+  },
+  "SunsetEnd": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "落日竞技场（End场景）",
+   "map_id": 2360310676,
+   "member": "assets/Data/Levels/SunsetEnd/Objects.level.bin",
+   "member_bytes": 392561,
+   "member_sha256": "3e8d89eee8bab7dd93eac6728c0cc95e51ebd7106b83e76f1833040664851d31",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    33428,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2141,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "SunsetEnd2": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "霞谷神殿",
+   "map_id": 507487826,
+   "member": "assets/Data/Levels/SunsetEnd2/Objects.level.bin",
+   "member_bytes": 453929,
+   "member_sha256": "80364f3c581ef617439662112bd6ddb43fbffcd9e836f3dcf66151ffa9e9620a",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    17841,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2933,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "SunsetRace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "滑雪赛道",
+   "map_id": 571720490,
+   "member": "assets/Data/Levels/SunsetRace/Objects.level.bin",
+   "member_bytes": 412312,
+   "member_sha256": "366f15c4eec54a71e8262b3f7ea85f09b76d9b37fc6e34cf5e100d919c6af7e4",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    41011,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2113,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "SunsetVillage": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 2
+   },
+   "label": "圆梦村",
+   "map_id": 1759178769,
+   "member": "assets/Data/Levels/SunsetVillage/Objects.level.bin",
+   "member_bytes": 1707726,
+   "member_sha256": "c7a17ed8740ac129711f8acb1175326390cb346d8c7d60a4289e11374e3ca870",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    17529,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 12967,
+   "type_alias_applications": {}
+  },
+  "SunsetVillage_MusicShop": {
+   "finite_group_counts": {
+    "floaty": 2,
+    "move_rails": 2,
+    "rotations": 1
+   },
+   "label": "音乐大厅",
+   "map_id": 1323747701,
+   "member": "assets/Data/Levels/SunsetVillage_MusicShop/Objects.level.bin",
+   "member_bytes": 595373,
+   "member_sha256": "8debc45cccc7c176d759567ab08eb632b6008b941f2ff53f46671b2538f7f347",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    45743,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 4467,
+   "type_alias_applications": {}
+  },
+  "Sunset_Citadel": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 7,
+    "rotations": 4
+   },
+   "label": "霞光城",
+   "map_id": 2179549040,
+   "member": "assets/Data/Levels/Sunset_Citadel/Objects.level.bin",
+   "member_bytes": 983599,
+   "member_sha256": "3cdcdf6cbd2120b76e0b135c66df1853695792c3b2cfff10b96f9751aeaa10be",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    37851,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 6314,
+   "type_alias_applications": {
+    "LensFlair": 1
+   }
+  },
+  "Sunset_FlyRace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "飞行赛道",
+   "map_id": 1844499196,
+   "member": "assets/Data/Levels/Sunset_FlyRace/Objects.level.bin",
+   "member_bytes": 437155,
+   "member_sha256": "4ea2bc60008c9d95e82df4016c768099cd4c6ed2b724b432436d59e93b5441e3",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    30151,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 2053,
+   "type_alias_applications": {}
+  },
+  "Sunset_Theater": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 5,
+    "rotations": 0
+   },
+   "label": "圆梦村剧场",
+   "map_id": 1612139937,
+   "member": "assets/Data/Levels/Sunset_Theater/Objects.level.bin",
+   "member_bytes": 1197098,
+   "member_sha256": "a4fd6830cccecce59911c05b21c4ef1d7b6f3ed787a54a414dff8b658d335cf7",
+   "native_record_comparison": true,
+   "netversion_u16": [
+    56922,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 10746,
+   "type_alias_applications": {}
+  },
+  "Sunset_YetiPark": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 3,
+    "rotations": 0
+   },
+   "label": "雪隐峰",
+   "map_id": 649101397,
+   "member": "assets/Data/Levels/Sunset_YetiPark/Objects.level.bin",
+   "member_bytes": 735881,
+   "member_sha256": "d152ed479296bf15c1857c3f73a3936f4b429b5edf3d5838f54b3edb028fb955",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    2078,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 5160,
+   "type_alias_applications": {
+    "LensFlair": 8
+   }
+  },
+  "TGCOffice": {
+   "finite_group_counts": {
+    "floaty": 12,
+    "move_rails": 7,
+    "rotations": 1
+   },
+   "label": "秘密基地",
+   "map_id": 295816905,
+   "member": "assets/Data/Levels/TGCOffice/Objects.level.bin",
+   "member_bytes": 1392450,
+   "member_sha256": "d89282144405d8785bb812fbc010b97b65f36cf39087f71cea0dc15b06fe8f88",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    42307,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 9858,
+   "type_alias_applications": {
+    "LensFlair": 4
+   }
+  },
+  "UndergroundOffice": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "基地迷宫",
+   "map_id": 3493360294,
+   "member": "assets/Data/Levels/UndergroundOffice/Objects.level.bin",
+   "member_bytes": 338642,
+   "member_sha256": "ab1b03ecb42d4e11053e8176483cd52a524dc4a8650ea92738a74f5133ccbfc5",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    10709,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 1139,
+   "type_alias_applications": {}
+  },
+  "VoidSharedSpace": {
+   "finite_group_counts": {
+    "floaty": 0,
+    "move_rails": 0,
+    "rotations": 0
+   },
+   "label": "共玩空间",
+   "map_id": 1482972144,
+   "member": "assets/Data/Levels/VoidSharedSpace/Objects.level.bin",
+   "member_bytes": 21535,
+   "member_sha256": "253dc9de9155d6208b8f991dddfe0f5aaa4c6dfb536ed17be7915dda8dad6c25",
+   "native_record_comparison": false,
+   "netversion_u16": [
+    2393,
+    49307,
+    23536,
+    0,
+    0,
+    25536
+   ],
+   "object_count": 101,
+   "type_alias_applications": {}
+  }
+ },
+ "schema": "xg-scene-inputs-evidence-v1",
+ "serialized_only_evidence": [
+  {
+   "class_member_count": 0,
+   "class_name": "AvatarTransformIntoAudienceBarnAnimal",
+   "native_literal_occurrences": 0,
+   "native_registered": false,
+   "proof_schema": "sky-orbitmid-unresolved-type-proof-v1",
+   "proof_sha256": "2683d0de6d0d3da0e76c1947145f12de1505bc66873412abbb7a0ecc53ab343c",
+   "serialized_object_indices": [
+    1180
+   ],
+   "verdict": "serialized_only_zero_member_native_absent"
+  }
+ ],
+ "serialized_only_type_classes": [
+  "AvatarTransformIntoAudienceBarnAnimal"
+ ],
+ "type_aliases": {
+  "LensFlair": "LensFlare"
+ },
+ "unknown_classes": [],
+ "version_name": "0.16.7"
+}

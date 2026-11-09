@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>小光</title>
+<link rel="stylesheet" href="/static/style.css?v=20261108-w4">
+<link rel="stylesheet" href="/static/xiaoguang.css?v=20261108-w4">
+<link rel="stylesheet" href="/static/standalone.css?v=20261108-w4">
+<script src="/static/xiaoguang.js?v=20261108-w4b" defer></script>
+<script src="/static/ai_settings.js?v=20261108-w4b" defer></script>
+<script src="/static/w4b.js?v=20261108-w4b" defer></script>
+</head>
+<body>
+<svg class="ui-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><defs><symbol id="sp-mark" viewBox="0 0 24 24"><path d="m12 3 8 5v8l-8 5-8-5V8l8-5Z"/><path d="m4 8 8 5 8-5M12 13v8"/></symbol><symbol id="sp-refresh" viewBox="0 0 24 24"><path d="M3 11a9 9 0 0 1 15.4-6.4L21 7M21 2v5h-5M21 13a9 9 0 0 1-15.4 6.4L3 17M3 22v-5h5"/></symbol><symbol id="sp-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.07 4.2l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></symbol></defs></svg>
+
+<header class="xg-solo-bar">
+  <a class="xg-solo-brand" href="/">
+    <span class="brand-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><use href="#sp-mark"></use></svg></span>
+    <span class="xg-solo-name"><b>小光</b><small>AI 陪伴 · 本机</small></span>
+  </a>
+  <div class="xg-solo-actions">
+    <span class="badge" id="badge">—</span>
+    <a class="button quiet small" id="b-wizard" href="/wizard">安装向导</a>
+    <button class="button quiet small" id="b-settings" type="button" aria-controls="settings" aria-expanded="false">
+      <svg class="ui-icon" viewBox="0 0 24 24"><use href="#sp-settings"></use></svg><span>设置</span>
+    </button>
+    <button class="button quiet small" id="b-restart-svc" type="button" title="重启后台服务（改过代码后用，约 3 秒）">重启后台</button>
+    <button class="button danger small" id="b-quit" type="button" title="停小光、停后台，然后关掉页面">退出小光</button>
+  </div>
+</header>
+
+<main id="workspace" class="workspace">
+  <p class="xg-ai-banner" id="ai-banner" hidden>
+    <span><strong>先设置 AI 接口</strong>：小光的聊天、换装、带路都靠模型，填好才能用。</span>
+    <button class="button primary small" id="b-ai-banner" type="button">去设置</button>
+  </p>
+
+  <section class="page-heading xg-hero">
+    <div class="hero-orb" id="orb" aria-hidden="true"><span class="halo"></span><span class="flame"></span><span class="wax"></span></div>
+    <div class="xg-hero-text">
+      <span class="eyebrow">AI 陪伴 · 光之子</span>
+      <h1>小光 <span class="persona-heading-accent">在天空等你</span></h1>
+      <p class="muted" id="hero-sub">正在读取状态…</p>
+    </div>
+  </section>
+
+  <p class="form-message warn xg-notice" id="notice" hidden></p>
+
+  <div class="xg-panel" id="panel" hidden>
+    <section class="summary-grid" aria-label="小光此刻">
+      <div class="summary-tile"><span>所在地图</span><strong class="xg-word" id="f-map">—</strong><small id="f-map-sub">点下方地图就能让他过去</small></div>
+      <div class="summary-tile"><span>房间人数</span><strong class="xg-word" id="f-players">—</strong><small>包括小光自己</small></div>
+      <div class="summary-tile"><span><b class="t-title">哥哥</b>在身边</span><strong class="xg-word" id="f-owner">—</strong><small>不在时会自动去找<b class="t-title">哥哥</b></small></div>
+    </section>
+
+    <div class="xg-grid">
+      <section class="surface" aria-labelledby="ctl-title">
+        <div class="section-heading"><div><span class="eyebrow">点一下就出发</span><h2 id="ctl-title">让小光去哪</h2></div></div>
+        <div class="xg-mapbar"><input class="xg-mapq" id="map-q" type="search" placeholder="搜地图，例如 霞谷、禁阁、月圆" autocomplete="off" aria-label="搜索地图"><span class="input-note" id="map-count"></span></div>
+        <div class="xg-mapgroups" id="mapgroups"></div>
+        <div class="maps" id="maps" role="radiogroup" aria-label="地图" hidden></div>
+        <p class="input-note xg-maps-note" id="maps-note"></p>
+        <label class="switch" id="join-wrap"><input type="checkbox" id="join" checked><span class="track"><span class="knob"></span></span><span>自动进哥哥所在的房间</span></label>
+        <div class="section-actions">
+          <button class="button primary" id="b-start" type="button">上线</button>
+          <button class="button secondary" id="b-restart" type="button">换图 / 重连</button>
+          <button class="button danger" id="b-stop" type="button">下线</button>
+        </div>
+        <div class="section-actions xg-sub-actions">
+          <button class="button quiet small" id="b-renew" type="button">续期登录态</button>
+          <span class="input-note xg-msg" id="ctl-msg" role="status" aria-live="polite"></span>
+        </div>
+      </section>
+
+      <section class="surface" aria-labelledby="st-title">
+        <div class="section-heading"><div><span class="eyebrow">状态</span><h2 id="st-title">此刻</h2></div></div>
+        <dl class="facts">
+          <div><dt id="f-follow-label">跟随哥哥</dt><dd id="f-follow">—</dd></div>
+          <div><dt>本次上线</dt><dd id="f-since">—</dd></div>
+          <div><dt>登录态</dt><dd id="f-session">—</dd></div>
+          <div><dt>版本</dt><dd id="f-version">—</dd></div>
+        </dl>
+        <p class="form-message warn xg-stopped" id="f-stopped" hidden></p>
+      </section>
+    </div>
+
+    <section class="surface" aria-labelledby="persona-title">
+      <div class="section-heading"><div><span class="eyebrow">人设</span><h2 id="persona-title">小光的性格</h2></div></div>
+      <p class="input-note">点一下就切换，下一句话生效，不用重新上线。只认哥哥、不说违规词、诚实承认是 AI 这些规则对所有人设都一样。</p>
+      <div class="maps personas" id="personas" role="radiogroup" aria-label="人设"></div>
+      <div class="persona-editor">
+        <label class="acct-field"><span>名字</span><input id="persona-name" maxlength="20" placeholder="比如：毒舌闺蜜"></label>
+        <label class="acct-field"><span>人设内容（性格、来历、说话方式；不限字数，不过太长会让回复变慢）</span>
+          <textarea id="persona-prompt" rows="9" placeholder="你是《光·遇》里的「小光」：……"></textarea></label>
+        <div class="section-actions">
+          <button class="button primary small" id="b-persona-new" type="button">另存为新人设</button>
+          <button class="button secondary small" id="b-persona-save" type="button">保存修改</button>
+          <button class="button danger small" id="b-persona-del" type="button">删除</button>
+          <span class="input-note xg-msg" id="persona-msg" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="surface" aria-labelledby="trig-title">
+      <div class="section-heading"><div><span class="eyebrow">聊天</span><h2 id="trig-title">怎么算在叫小光</h2></div></div>
+      <p class="input-note">设了触发词后，只有以它开头的消息才会回复；不带触发词的照样记进上下文，但只读不回。也可以改成“所有消息都回复”。</p>
+      <label class="acct-field"><span>模式</span>
+        <select id="trig-mode">
+          <option value="prefix">只回以触发词开头的消息</option>
+          <option value="all">所有消息都回复</option>
+        </select></label>
+      <label class="acct-field"><span>触发词（最多 3 个字符，默认 /）</span>
+        <input id="trig-prefix" maxlength="3" placeholder="/"></label>
+      <div class="section-actions">
+        <button class="button primary small" id="b-trig-save" type="button">保存触发词</button>
+        <span class="input-note xg-msg" id="trig-msg" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <section class="surface" aria-labelledby="mem-title">
+      <div class="section-heading"><div><span class="eyebrow">记忆</span><h2 id="mem-title">清空记忆</h2></div></div>
+      <p class="input-note">“清空聊天上下文”：忘掉最近聊的内容、房间摘要和最近发生的事，人还认得（对每个人的印象保留）。“清空全部记忆”：连对每个人的印象也忘掉。好友备注在游戏好友列表里，不受影响。小光在线时 2 秒内生效。</p>
+      <div class="section-actions">
+        <button class="button secondary small" id="b-mem-chat" type="button">清空聊天上下文</button>
+        <button class="button danger small" id="b-mem-all" type="button">清空全部记忆</button>
+        <span class="input-note xg-msg" id="mem-msg" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <section class="surface" aria-labelledby="owner-title">
+      <div class="section-heading"><div><span class="eyebrow t-title">哥哥</span><h2 id="owner-title">谁是<b class="t-title">哥哥</b></h2></div>
+        <button class="button quiet small" id="b-friends" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><use href="#sp-refresh"></use></svg>刷新好友</button></div>
+      <p class="input-note">从当前小光号的好友里选一个人当哥哥（双人互动直接接受、别人的互动要他同意、跟随他进房间）。记的是这个人本身，换小光号也认得，只要新号也加了他好友。</p>
+      <p class="form-message warn" id="owner-warn" hidden></p>
+      <ul class="acct-list" id="friends"></ul>
+      <p class="input-note xg-msg" id="owner-msg" role="status" aria-live="polite"></p>
+      <div class="xg-titlebar"><label for="title-input">小光怎么称呼他</label><input class="xg-mapq xg-title-input" id="title-input" maxlength="6" placeholder="例如 哥哥、姐姐、宝宝" autocomplete="off"><button class="button secondary small" id="b-title" type="button">保存称呼</button></div>
+      <p class="input-note xg-msg" id="title-msg" role="status" aria-live="polite">只能 1～6 个汉字、字母或数字；会按游戏聊天审核规则检查，像“主人”这类发不出去的词不能用。</p>
+    </section>
+
+    <section class="surface" aria-labelledby="acct-title">
+      <div class="section-heading"><div><span class="eyebrow">账号</span><h2 id="acct-title">小光用哪个号</h2></div></div>
+      <p class="input-note" id="acct-hint"></p>
+      <div class="xg-device" id="device-card">
+        <p class="input-note"><b>本机设备：</b><span id="device-status">正在检查…</span></p>
+        <p class="input-note">第一次登录会自动注册一台本机 Windows 设备（不冒充手机、不用电脑名），之后一直复用它。换设备可能触发网易安全验证。</p>
+        <div class="section-actions">
+          <button class="button quiet small" id="b-device-register" type="button">重新注册设备</button>
+          <span class="input-note xg-msg" id="device-msg" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <ul class="acct-list" id="accounts"></ul>
+      <p class="input-note xg-msg" id="acct-msg" role="status" aria-live="polite"></p>
+      <details class="acct-add">
+        <summary>添加账号</summary>
+        <div class="login-bar">
+          <div class="seg" role="tablist" aria-label="登录方式">
+            <button type="button" role="tab" class="seg-btn" id="tab-sms" aria-selected="true">手机号验证码</button>
+            <button type="button" role="tab" class="seg-btn" id="tab-email" aria-selected="false">邮箱密码</button>
+          </div>
+          <div class="seg" role="radiogroup" aria-label="平台">
+            <button type="button" role="radio" class="seg-btn" data-platform="android" aria-checked="true">安卓</button>
+            <button type="button" role="radio" class="seg-btn" data-platform="ios" aria-checked="false">iOS</button>
+          </div>
+        </div>
+        <div id="pane-sms">
+          <div class="acct-form">
+            <label class="acct-field"><span>手机号</span><input id="login-mobile" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="11 位手机号"></label>
+            <button class="button secondary small" id="b-send" type="button">获取验证码</button>
+          </div>
+          <div class="acct-form" id="login-step2" hidden>
+            <label class="acct-field"><span>验证码</span><input id="login-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="短信验证码"></label>
+            <button class="button primary small" id="b-verify" type="button">登录并加入</button>
+          </div>
+        </div>
+        <div id="pane-email" hidden>
+          <div class="acct-form">
+            <label class="acct-field"><span>邮箱</span><input id="login-email" type="email" autocomplete="off" maxlength="140" placeholder="网易邮箱账号"></label>
+            <label class="acct-field"><span>密码</span><input id="login-password" type="password" autocomplete="off" maxlength="64" placeholder="密码只用于这一次登录，不保存"></label>
+            <button class="button primary small" id="b-email" type="button">登录并加入</button>
+          </div>
+        </div>
+        <div class="risk-card" id="risk-sms" hidden>
+          <strong>网易要求做一次账号安全验证</strong>
+          <p class="input-note" id="risk-tips"></p>
+          <ol class="risk-steps">
+            <li>用这个账号<b>绑定的手机</b>编辑短信，内容是：<code id="risk-content"></code> <button class="button quiet small" id="b-copy-content" type="button">复制</button></li>
+            <li>发送到：<code id="risk-number"></code>（发不出去可以试 <code id="risk-alt"></code>）</li>
+            <li>发完点下面的按钮，验证通过后会自动重新登录。</li>
+          </ol>
+          <div class="section-actions">
+            <button class="button primary small" id="b-risk-sent" type="button">我已发送</button>
+            <span class="input-note xg-msg" id="risk-msg" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="risk-card warn" id="risk-device" hidden>
+          <strong>网易判定登录设备有风险</strong>
+          <p class="input-note" id="risk-device-tips"></p>
+          <p class="input-note">这一步只能账号本人去官方处理（网易大神 APP → 我 → 账号百宝箱 → 账号修复），处理完再回来重试。<a id="risk-device-url" target="_blank" rel="noopener noreferrer">查看官方提示</a></p>
+        </div>
+        <p class="input-note xg-msg" id="login-msg" role="status" aria-live="polite"></p>
+        <p class="input-note">新号加入后在上面点“切换到这个号”。大多数账号是安卓注册的，选错平台可能登不上。</p>
+      </details>
+    </section>
+
+    <section class="surface" aria-labelledby="log-title">
+      <div class="section-heading compact"><div><span class="eyebrow">第二步 · 陪伴</span><h2 id="log-title">最近的对话</h2></div><button class="button quiet small" id="b-refresh" type="button"><svg class="ui-icon" viewBox="0 0 24 24"><use href="#sp-refresh"></use></svg>刷新</button></div>
+      <ol class="chat" id="chat"></ol>
+    </section>
+
+    <section class="surface" aria-labelledby="cap-title">
+      <div class="section-heading compact"><div><span class="eyebrow">MuMu 本机</span><h2 id="cap-title">录图</h2></div><a class="button quiet small" href="/wizard#capture">打开向导</a></div>
+      <p class="input-note">在 MuMu 里用当前小光号走进遇境（或其他图），站稳别动，点“开始录图”。录完会在本机登记；遇境且这个号还没有地图目录时会自动生成。</p>
+      <div class="section-actions">
+        <button class="button primary small" id="b-cap-start" type="button">开始录图</button>
+        <button class="button danger small" id="b-cap-stop" type="button" hidden>停止录图</button>
+        <span class="input-note xg-msg" id="cap-msg" role="status" aria-live="polite"></span>
+      </div>
+      <dl class="facts">
+        <div><dt>状态</dt><dd id="cap-state">—</dd></div>
+        <div><dt>MuMu</dt><dd id="cap-mumu">—</dd></div>
+        <div><dt>当前图</dt><dd id="cap-scene">—</dd></div>
+        <div><dt>已录</dt><dd id="cap-recorded">—</dd></div>
+      </dl>
+    </section>
+  </div>
+</main>
+
+<section class="xg-settings" id="settings" hidden aria-labelledby="settings-title">
+  <div class="xg-settings-backdrop" id="settings-backdrop"></div>
+  <div class="xg-settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="section-heading">
+      <div><span class="eyebrow">本机设置</span><h2 id="settings-title">AI 接口</h2></div>
+      <button class="button quiet small" id="b-settings-close" type="button">关闭</button>
+    </div>
+    <p class="input-note">小光的聊天、换装、带路都靠模型调用工具。选一个服务商，填 Key，拉模型列表，点“测试”确认支持工具调用，再保存。</p>
+
+    <label class="acct-field"><span>服务商</span>
+      <select id="ai-provider" autocomplete="off"></select>
+    </label>
+    <p class="input-note" id="ai-provider-note"></p>
+    <p class="input-note xg-ai-links">
+      <a id="ai-key-link" target="_blank" rel="noopener noreferrer" hidden>去哪拿 Key</a>
+      <a id="ai-docs-link" target="_blank" rel="noopener noreferrer" hidden>接口文档</a>
+    </p>
+
+    <label class="acct-field"><span>API Key</span>
+      <input id="ai-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="粘贴 Key；已设置过就留空不改">
+    </label>
+    <p class="input-note" id="ai-key-hint"></p>
+
+    <label class="acct-field"><span>接口地址（预设会自动填，可改）</span>
+      <input id="ai-base" type="url" autocomplete="off" spellcheck="false" placeholder="https://…/v1">
+    </label>
+
+    <div class="section-actions">
+      <button class="button secondary small" id="ai-models-btn" type="button">获取模型列表</button>
+      <span class="input-note" id="ai-models-msg" role="status" aria-live="polite"></span>
+    </div>
+
+    <label class="acct-field"><span>模型（拉不到就手填）</span>
+      <input id="ai-model" list="ai-model-list" autocomplete="off" spellcheck="false" placeholder="先点“获取模型列表”，或直接填模型名">
+      <datalist id="ai-model-list"></datalist>
+      <div class="wz-menu" id="ai-model-menu" hidden></div>
+    </label>
+
+    <div class="section-actions">
+      <button class="button primary small" id="ai-test-btn" type="button">测试</button>
+      <span class="input-note" id="ai-save-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="xg-ai-result" id="ai-test-result" hidden></div>
+
+    <div class="section-actions xg-ai-savebar">
+      <button class="button primary" id="ai-save-btn" type="button">保存</button>
+      <button class="button secondary small" id="ai-restart-btn" type="button" hidden>重启聊天生效</button>
+    </div>
+    <div class="xg-ai-result" id="ai-save-result" hidden></div>
+
+    <div class="xg-autostart">
+      <label class="switch"><input type="checkbox" id="autostart"><span class="track"><span class="knob"></span></span><span>开机自动启动小光</span></label>
+      <p class="input-note" id="autostart-note">只往当前用户的“启动”文件夹放一个快捷方式，不改注册表。</p>
+    </div>
+  </div>
+</section>
+<script src="/static/auth_service.js"></script>
+</body>
+</html>

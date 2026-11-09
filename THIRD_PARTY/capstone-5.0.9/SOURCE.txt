@@ -1,0 +1,16 @@
+Capstone disassembly framework 5.0.9（BSD-3-Clause）
+====================================================
+
+本安装包随附的 capstone 5.0.9 是 PyPI 官方发布的**未修改** wheel
+（Windows amd64，`capstone-5.0.9-py3-none-win_amd64.whl`），只以
+`capstone/lib/capstone.dll` + Python 绑定的形式随包。
+
+上游 / 源码：
+  https://www.capstone-engine.org/
+  https://github.com/capstone-engine/capstone
+  https://pypi.org/project/capstone/5.0.9/#files
+
+许可证：BSD 3-Clause，Copyright (c) 2013, COSEINC. All rights reserved.
+全文见同目录 `LICENSE.TXT`。
+`capstone/lib/capstone.dll` 的 sha256：
+76958e18380023a68fd1714fa2e01c594cc6db1955a07ad6937b66e66dc5d6c3

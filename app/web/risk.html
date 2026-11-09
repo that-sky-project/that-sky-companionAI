@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>小光 · 使用前必读</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 16px/1.7 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+         background: #101620; color: #e8eef8; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 64px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  .sub { color: #9fb0c7; margin: 0 0 28px; }
+  .card { background: #182233; border: 1px solid #2a3a52; border-radius: 14px; padding: 22px 22px 18px; }
+  .risk { font-size: 17px; line-height: 1.9; }
+  .risk b { color: #ffcf6b; }
+  ul { margin: 16px 0 0; padding-left: 22px; color: #c9d6e8; }
+  li { margin: 8px 0; }
+  label.check { display: flex; gap: 10px; align-items: flex-start; margin: 24px 0 6px; cursor: pointer; }
+  input[type=checkbox] { width: 20px; height: 20px; margin-top: 3px; accent-color: #ffcf6b; }
+  button { margin-top: 18px; width: 100%; padding: 12px 16px; font-size: 16px; border: 0;
+           border-radius: 10px; background: #ffcf6b; color: #17202d; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #3a4658; color: #8494a8; cursor: not-allowed; }
+  .msg { min-height: 24px; margin-top: 12px; color: #ff9d9d; }
+  .fine { margin-top: 26px; color: #7e8fa6; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>小光 · 使用前必读</h1>
+  <p class="sub">这是一个第三方程序。请先完整读完下面的风险，再决定是否继续。</p>
+  <div class="card">
+    <p class="risk">
+      <b>第三方程序、直连网易服务器、账号可能被封（我们的号曾被判“使用外挂、脚本”封禁）、不得使用主号。</b>
+    </p>
+    <ul>
+      <li>它不是网易官方产品，和网易没有任何关系；它按游戏协议直接连接网易的服务器。</li>
+      <li>使用它违反游戏用户协议，账号存在被检测、封禁的风险；我们自己的号就曾被判“使用外挂、脚本”封禁。</li>
+      <li><b>不得使用主号。</b>请只用一个单独的、丢了也不心疼的账号。</li>
+      <li>程序只在本机运行；游戏数据、账号和设备注册都在你自己的电脑上生成，不上传给我们。</li>
+      <li>你可以随时关掉它；卸载时是否保留用户数据由你决定。</li>
+    </ul>
+    <label class="check">
+      <input type="checkbox" id="accept">
+      <span>我已经阅读并理解以上风险，知道这可能违反游戏用户协议并导致账号被封；我自愿使用，且不会使用主号。</span>
+    </label>
+    <button id="ok" type="button" disabled>同意并继续</button>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    <p class="fine">同意后会在本机数据目录的 config.json 里记下同意时间；以后不会再显示这一页。</p>
+  </div>
+</div>
+<script>
+  const box = document.getElementById("accept");
+  const btn = document.getElementById("ok");
+  const msg = document.getElementById("msg");
+  box.addEventListener("change", () => { btn.disabled = !box.checked; });
+  btn.addEventListener("click", async () => {
+    if (!box.checked) return;
+    btn.disabled = true; msg.textContent = "正在保存…";
+    try {
+      const r = await fetch("/api/consent", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted: true }), credentials: "same-origin", cache: "no-store" });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || !body.ok) throw new Error(body.message || "没有保存成功");
+      location.replace("/wizard");
+    } catch (e) {
+      msg.textContent = "没有保存成功：" + e.message;
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

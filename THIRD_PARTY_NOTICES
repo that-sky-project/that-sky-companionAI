@@ -1,0 +1,76 @@
+# Third-party notices for the source distribution
+
+This file describes the contents of the `that-sky-companionAI` source checkout,
+not a preassembled portable EXE distribution. The project license and its
+scope are stated in the root `LICENSE` and `NOTICE`. Third-party terms and
+copyrights are retained separately; this file does not relicense them.
+
+## Components actually included
+
+- **PCRE2**: `app/bin/libpcre2-8-0.dll` contains the version string
+  `10.47 2025-10-21`. The full corresponding upstream PCRE2 license
+  (BSD-3-Clause WITH PCRE2-exception) and pinned SLJIT license (BSD-2-Clause)
+  are in `THIRD_PARTY/pcre2-10.47/`. That directory's README records the binary
+  hash and the limits of the available build provenance.
+- **Recast Navigation JS per-tile generator**: the modified
+  `app/engine/vendor/tile_generator.mjs` and the copy under
+  `app/xg_gamedata/terrain/pipeline/engine/vendor/` retain the original MIT
+  notice in each adjacent `LICENSE.recast-generators` file. The project
+  preserves the upstream copyright, rather than assigning it to this project.
+- **Resource-format readers**: provenance and the retained MIT copyright
+  notices for the referenced SkyVEx and SkyBstbake implementations are in
+  `app/xg_gamedata/terrain/pipeline/src/skyterrain/formats/NOTICE.txt`.
+  These notices do not license proprietary game resources.
+
+## Dependencies installed separately
+
+This checkout does not contain Python or Node.js interpreters, a portable EXE,
+a complete `site-packages` tree, `node_modules`, or private login SDK templates.
+The dependency declarations are in `app/requirements.txt`,
+`requirements-desktop.txt`, and both terrain-engine `package-lock.json` files.
+Do not treat historical runtime-version lists as a reproducible environment.
+
+The terrain locks declare these external dependency families:
+
+- `@dimforge/rapier3d-compat` 0.21.0 — Apache-2.0;
+  https://github.com/dimforge/rapier.js
+- `recast-navigation`, `@recast-navigation/core`, `@recast-navigation/generators`
+  and `@recast-navigation/wasm` 0.44.0 — MIT;
+  https://github.com/isaac-mason/recast-navigation-js
+- `meshoptimizer` 1.3.0 — MIT;
+  https://github.com/zeux/meshoptimizer
+
+Those packages are not vendored as installed dependencies in this checkout.
+When assembling a binary distribution, retain the complete licenses and
+notices from the actual packages being redistributed. A package's dependency
+license is not changed by the root license metadata for the project's own
+`xiaoguang-terrain-core` package.
+
+Python requirements include NumPy, requests, cryptography, zstandard, PySocks,
+psutil, Unicorn and Capstone. The desktop build adds pywebview and PyInstaller,
+which may bring transitive dependencies. Their installed distribution metadata
+and full original licenses must accompany any redistribution that requires
+those notices; this source list is not a replacement for those texts.
+
+The following original notice files are retained as reference material from
+previous distribution work, not as a claim that their binaries are included:
+
+- `THIRD_PARTY/capstone-5.0.9/LICENSE.TXT`;
+- `THIRD_PARTY/unicorn-2.1.4/LICENSE` and `SOURCE-OFFER.txt`;
+- the package license files under `THIRD_PARTY/Desktop/` for bottle, cffi,
+  clr_loader, pythonnet and pywebview.
+
+The historical Unicorn source-offer text refers to the earlier portable
+package described in that text. This checkout includes no Unicorn binary.
+The original offer is preserved without modifying any prior commitment;
+see `THIRD_PARTY/unicorn-2.1.4/README.md` for that scope distinction.
+
+## Source and resource boundaries
+
+Research snapshots and validation artifacts mentioned in the terrain notices
+are retained separately and are not shipped as a `research` directory here.
+No game APK, extracted map geometry, compression dictionary, user account
+cache, or private server configuration is supplied by this source checkout.
+The root `NOTICE` retains the original distinction between project-owned work,
+third-party materials and game resources. Missing provenance is not converted
+into a blanket project copyright or license grant.

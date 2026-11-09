@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang='zh-CN'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta name='color-scheme' content='light'>
+<title>小光 · 首次安装向导</title>
+<link rel='stylesheet' href='/static/desktop.css'>
+<link rel='stylesheet' href='/static/wizard.css'>
+</head>
+<body class='wz-body'>
+<svg class='wz-sprite' aria-hidden='true' focusable='false' xmlns='http://www.w3.org/2000/svg'>
+<symbol id='wz-i-spark' viewBox='0 0 24 24'><path d='M12 3.2l1.6 4.7 4.7 1.6-4.7 1.6L12 15.8l-1.6-4.7L5.7 9.5l4.7-1.6L12 3.2Z'/><path d='M18.2 15.1l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2Z'/></symbol>
+<symbol id='wz-i-alert' viewBox='0 0 24 24'><path d='M12 4.5 20 19H4l8-14.5Z'/><path d='M12 9.5v4.2'/><path d='M12 16.7h.01'/></symbol>
+<symbol id='wz-i-shield' viewBox='0 0 24 24'><path d='M12 3.5 19 6v5.4c0 4.3-2.7 7.3-7 9.1-4.3-1.8-7-4.8-7-9.1V6l7-2.5Z'/><path d='M9.4 12.1l1.7 1.7 3.6-3.8'/></symbol>
+<symbol id='wz-i-phone' viewBox='0 0 24 24'><rect x='7' y='3' width='10' height='18' rx='2.2'/><path d='M10.4 6.4h3.2'/><path d='M11 18h2'/></symbol>
+<symbol id='wz-i-package' viewBox='0 0 24 24'><path d='M12 3.3 20 7v10l-8 3.7L4 17V7l8-3.7Z'/><path d='m4.4 7.1 7.6 3.6 7.6-3.6'/><path d='M12 10.7v10'/></symbol>
+<symbol id='wz-i-database' viewBox='0 0 24 24'><ellipse cx='12' cy='5.6' rx='7.4' ry='2.8'/><path d='M4.6 5.6v12.8c0 1.5 3.3 2.8 7.4 2.8s7.4-1.3 7.4-2.8V5.6'/><path d='M4.6 11.8c0 1.5 3.3 2.8 7.4 2.8s7.4-1.3 7.4-2.8'/></symbol>
+<symbol id='wz-i-camera' viewBox='0 0 24 24'><rect x='3.2' y='6.6' width='17.6' height='12.8' rx='2.5'/><circle cx='12' cy='13' r='3.4'/><path d='M8.4 6.6 9.8 4h4.4l1.4 2.6'/></symbol>
+<symbol id='wz-i-key' viewBox='0 0 24 24'><circle cx='8.4' cy='12' r='3.6'/><path d='M12 12h8.2'/><path d='M17.4 12v3.3'/><path d='M20.2 12v2.4'/></symbol>
+<symbol id='wz-i-cpu' viewBox='0 0 24 24'><rect x='7' y='7' width='10' height='10' rx='2'/><rect x='10' y='10' width='4' height='4' rx='.7'/><path d='M9 3v2.4M15 3v2.4M9 18.6V21M15 18.6V21M3 9h2.4M3 15h2.4M18.6 9H21M18.6 15H21'/></symbol>
+<symbol id='wz-i-heart' viewBox='0 0 24 24'><path d='M12 20.2S4.2 15.6 4.2 10.2a4.3 4.3 0 0 1 7.8-2.5 4.3 4.3 0 0 1 7.8 2.5c0 5.4-7.8 10-7.8 10Z'/></symbol>
+<symbol id='wz-i-flag' viewBox='0 0 24 24'><path d='M6 21V3.8'/><path d='M6 4.5c3.2-2 6.2 1.7 9.5-.2l2.3-1.2v8.6l-2.3 1.2c-3.3 1.9-6.3-1.8-9.5.2'/></symbol>
+<symbol id='wz-i-back' viewBox='0 0 24 24'><path d='M19 12H5'/><path d='m11 6-6 6 6 6'/></symbol>
+<symbol id='wz-i-min' viewBox='0 0 24 24'><path d='M6 12h12'/></symbol>
+<symbol id='wz-i-max' viewBox='0 0 24 24'><rect x='6' y='6' width='12' height='12' rx='1.4'/></symbol>
+<symbol id='wz-i-close' viewBox='0 0 24 24'><path d='M7 7l10 10M17 7 7 17'/></symbol>
+<symbol id='wz-i-info' viewBox='0 0 24 24'><circle cx='12' cy='12' r='8.5'/><path d='M12 10.6v5'/><path d='M12 7.6h.01'/></symbol>
+</svg>
+<div class='ambient' aria-hidden='true'><span class='ambient-orb orb-a'></span><span class='ambient-orb orb-b'></span><span class='ambient-orb orb-c'></span></div>
+<a class='wz-skip' href='#wz-main'>跳到当前步骤</a>
+<div class='wz-app'>
+<header class='wz-bar glass-strong'>
+<div class='wz-drag pywebview-drag-region'>
+<span class='wz-brand-mark' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-spark'></use></svg></span>
+<div class='wz-brand'><b>小光</b><span class='wz-brand-sub'>初次见面</span></div>
+<p class='wz-tagline'>准备好一起出发</p>
+</div>
+<div class='wz-bar-actions'>
+<span class='wz-badge' id='wz-badge' role='status' aria-live='polite'>读取中…</span>
+<a class='wz-link' href='/desktop' aria-label='返回主界面'><svg class='wz-icon' aria-hidden='true'><use href='#wz-i-back'></use></svg><span class='wz-link-text'>返回主界面</span></a>
+<div class='window-controls' role='group' aria-label='窗口控制'>
+<button class='window-control win-min' id='win-min' type='button' aria-label='最小化窗口'><svg class='wz-icon' aria-hidden='true'><use href='#wz-i-min'></use></svg></button>
+<button class='window-control win-max' id='win-max' type='button' aria-label='最大化或还原窗口'><svg class='wz-icon' aria-hidden='true'><use href='#wz-i-max'></use></svg></button>
+<button class='window-control win-close' id='win-close' type='button' aria-label='关闭窗口'><svg class='wz-icon' aria-hidden='true'><use href='#wz-i-close'></use></svg></button>
+</div>
+</div>
+</header>
+<div class='wz-wrap'>
+<aside class='wz-side glass-panel' aria-label='安装步骤'>
+<div class='wz-side-head'><span class='wz-eyebrow'>首次安装向导</span><p class='wz-side-title'>九步，慢慢来</p></div>
+<ol class='wz-steps' id='wz-steps'>
+<li data-step='risk'><span class='wz-step-group-label'>环境准备</span><button class='wz-step-hit' type='button'><span class='n'>1</span><span class='wz-step-label'>风险告知</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='mumu'><button class='wz-step-hit' type='button'><span class='n'>2</span><span class='wz-step-label'>检查 MuMu</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='apk'><button class='wz-step-hit' type='button'><span class='n'>3</span><span class='wz-step-label'>游戏安装包</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='data'><span class='wz-step-group-label'>游戏与地图</span><button class='wz-step-hit' type='button'><span class='n'>4</span><span class='wz-step-label'>生成游戏数据</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='capture'><button class='wz-step-hit' type='button'><span class='n'>5</span><span class='wz-step-label'>录制遇境</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='login'><span class='wz-step-group-label'>陪伴设置</span><button class='wz-step-hit' type='button'><span class='n'>6</span><span class='wz-step-label'>登录游戏号</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='ai'><button class='wz-step-hit' type='button'><span class='n'>7</span><span class='wz-step-label'>AI 接口</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='owner'><button class='wz-step-hit' type='button'><span class='n'>8</span><span class='wz-step-label'>选“哥哥”</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+<li data-step='finish'><span class='wz-step-group-label'>准备上线</span><button class='wz-step-hit' type='button'><span class='n'>9</span><span class='wz-step-label'>完成上线</span><b class='tick' aria-hidden='true'>✓</b></button></li>
+</ol>
+<p class='wz-side-note'>每一步都能回来看；状态存在 <code>data&#92;config.json</code>，关了页面不会丢。失败的可以重试。</p>
+</aside>
+<main class='wz-main' id='wz-main' tabindex='-1'>
+<div class='wz-scroll' tabindex='0' role='region' aria-label='当前步骤内容'>
+<section class='wz-panel glass-strong' data-panel='risk'>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-alert'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 1 步 · 环境准备</span><h1>风险告知</h1><p class='wz-panel-sub'>先看清会发生什么，再决定是否继续。小光不是网易官方产品。</p></div>
+</header>
+<div class='wz-risk-lead'><span class='wz-risk-lead-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-shield'></use></svg></span><p><b>第三方程序、直连网易服务器、账号可能被封（我们的号曾被判“使用外挂、脚本”封禁）、不得使用主号。</b></p></div>
+<div class='wz-card wz-risk'>
+<ul class='wz-risk-list'>
+<li>不是网易官方产品，按游戏协议直接连接网易服务器；使用它违反游戏用户协议。</li>
+<li><b>不得使用主号</b>：只用一个单独的、丢了也不心疼的账号。</li>
+<li>游戏名称与地形由本机生成；账号登录与自动续期通过你配置的私有服务完成，本机不保存邮箱密码。</li>
+<li>密码摘要与续期凭据由私有服务加密托管；设备由私有服务在登录时登记。</li>
+</ul>
+<p class='wz-note wz-risk-state' id='wz-risk-state' role='status' aria-live='polite'>读取同意状态…</p>
+</div>
+<div class='wz-actions'><a class='wz-btn primary' href='/'>回到风险告知页</a></div>
+</section>
+<section class='wz-panel glass-strong' data-panel='mumu' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-phone'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 2 步 · 环境准备</span><h1>检查 MuMu</h1><p class='wz-panel-sub'>小光要在 MuMu 模拟器里读游戏画面和内存来录图。</p></div>
+</header>
+<p class='wz-note wz-lede'>需要：MuMu 12、<b>打开「手机 Root 权限」并重启模拟器</b>、在 MuMu 里装好光遇并登进遇境。</p>
+<div class='wz-card'>
+<label class='wz-field'><span>adb.exe 路径（自动找不到时手填）</span><input id='wz-adb' autocomplete='off' spellcheck='false' placeholder='例如 D:&#92;GAME&#92;MuMuPlayer&#92;nx_device&#92;12.0&#92;shell&#92;adb.exe'></label>
+<div class='wz-actions'><button class='wz-btn primary' id='wz-mumu-check' type='button'>检查 MuMu</button></div>
+<div class='wz-result' id='wz-mumu-result' hidden role='status' aria-live='polite'></div>
+</div>
+<ol class='wz-tips'>
+<li>MuMu 设置 → 其他设置 → 打开「手机 Root 权限」，然后<b>重启模拟器</b>。</li>
+<li>MuMu 里装好光遇 0.16.7 / 421589，登录要给小光用的号，走进遇境。</li>
+<li>如果杀毒软件拦 adb，把 MuMu 目录加进信任。</li>
+</ol>
+</section>
+<section class='wz-panel glass-strong' data-panel='apk' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-package'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 3 步 · 环境准备</span><h1>游戏安装包</h1><p class='wz-panel-sub'>要用<b>你自己从 MuMu 里拉出来的</b>安装包生成游戏数据；小光只适配 <b>0.16.7 / 421589</b>，版本不对会明确说明。</p></div>
+</header>
+<div class='wz-card'>
+<div class='wz-actions wz-actions-flat'>
+<button class='wz-btn primary' id='wz-apk-pull' type='button'>从 MuMu 拉安装包</button>
+<span class='wz-sep'>或</span>
+<input id='wz-apk-path' class='wz-grow' autocomplete='off' spellcheck='false' placeholder='手动填 APK 的完整路径'>
+<button class='wz-btn' id='wz-apk-check' type='button'>校验这个文件</button>
+</div>
+<div class='wz-result' id='wz-apk-result' hidden role='status' aria-live='polite'></div>
+<p class='wz-note'>安装包放在 <code>data&#92;game&#92;0.16.7-421589&#92;apk&#92;</code>；native 库会从安装包里取出来放到 <code>data&#92;runtime&#92;native&#92;</code>，不会随小光安装包分发。</p>
+</div>
+</section>
+<section class='wz-panel glass-strong' data-panel='data' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-database'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 4 步 · 游戏与地图</span><h1>生成游戏数据</h1><p class='wz-panel-sub'>名称表与地形由本机生成，按顺序跑完即可。</p></div>
+</header>
+<p class='wz-note wz-lede'>先名称表、再地形，总共约 <b>25 分钟</b>。可以关掉这个页面，后台会继续跑；回来接着看进度。失败可以重试 / 续跑。</p>
+<div class='wz-task-stage' aria-hidden='true'><span>名称表</span><i></i><span>地形</span></div>
+<div class='wz-card'>
+<div class='wz-actions wz-actions-flat'>
+<button class='wz-btn primary' id='wz-data-start' type='button'>开始生成</button>
+<label class='wz-check'><input type='checkbox' id='wz-data-resume' checked> 失败后续跑（terrain --resume）</label>
+<button class='wz-btn quiet' id='wz-task-stop' type='button' hidden>取消任务</button>
+</div>
+<div class='wz-progress'><progress id='wz-data-progress' max='100' value='0'></progress><span id='wz-data-pct'>0%</span></div>
+<p class='wz-note' id='wz-data-msg' role='status' aria-live='polite'>还没开始。</p>
+<details class='wz-details' id='wz-task-details' hidden><summary>详情（错误码 / 原始信息 / 日志位置）</summary><pre class='wz-log' id='wz-task-detail' tabindex='0' aria-label='生成任务详情'></pre></details>
+</div>
+<div class='wz-log-wrap'><span class='wz-log-label'>运行日志</span><pre class='wz-log' id='wz-data-log' tabindex='0' role='log' aria-live='polite' aria-label='游戏数据生成日志'></pre></div>
+</section>
+<section class='wz-panel glass-strong' data-panel='capture' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-camera'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 5 步 · 游戏与地图</span><h1>录制遇境</h1><p class='wz-panel-sub'>先在 MuMu 里用<b>要给小光用的那个号</b>走进<b>遇境</b>，点“开始录图”（登录放到第 6 步）。</p></div>
+</header>
+<p class='wz-note wz-lede'>录的时候站稳别动，不要切图。录完会在本机登记；如果这个号还没有地图目录，会自动接着生成（第 4 步之后台任务）。</p>
+<div class='wz-actions'>
+<button class='wz-btn primary' id='wz-cap-start' type='button'>开始录图</button>
+<button class='wz-btn danger' id='wz-cap-stop' type='button' hidden>停止录图</button>
+<button class='wz-btn quiet' id='wz-cap-register' type='button' hidden>重新登记已有录制</button>
+<button class='wz-btn quiet' id='wz-catalog-start' type='button'>生成这个号的地图目录</button>
+</div>
+<div class='wz-card wz-cap-card' id='wz-cap-card'>
+<div class='wz-status-grid'>
+<p><b>状态：</b><span id='wz-cap-state' role='status' aria-live='polite'>还没开始</span></p>
+<p><b>MuMu：</b><span id='wz-cap-mumu'>—</span></p>
+<p><b>当前图：</b><span id='wz-cap-scene'>—</span></p>
+<p><b>已录：</b><span id='wz-cap-recorded'>—</span></p>
+<p class='wz-status-wide'><b>说明：</b><span id='wz-cap-msg' role='status' aria-live='polite'>—</span></p>
+</div>
+<details class='wz-details' id='wz-cap-details' hidden><summary>详情（错误码 / 原始信息 / 录制目录）</summary><pre class='wz-log' id='wz-cap-detail' tabindex='0' aria-label='录制详情'></pre></details>
+</div>
+<div class='wz-catalog-block'>
+<span class='wz-log-label'>地图目录生成</span>
+<div class='wz-progress'><progress id='wz-cat-progress' max='100' value='0'></progress><span id='wz-cat-pct'>0%</span></div>
+<p class='wz-note' id='wz-cat-msg' role='status' aria-live='polite'></p>
+<details class='wz-details' id='wz-cat-details' hidden><summary>详情（错误码 / 原始信息 / 日志位置）</summary><pre class='wz-log' id='wz-cat-detail' tabindex='0' aria-label='地图目录生成详情'></pre></details>
+</div>
+</section>
+<section class='wz-panel glass-strong' data-panel='login' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-key'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 6 步 · 陪伴设置</span><h1>登录游戏号</h1><p class='wz-panel-sub'>登录通过你配置的私有服务完成，游戏号仍存在被封风险。</p></div>
+</header>
+<p class='wz-warn'><b>不得使用主号。</b>请只用一个单独的、丢了也不心疼的账号。登录通过你配置的私有服务完成，账号仍有被封风险。</p>
+<div class='wz-tabs' role='group' aria-label='登录方式'>
+<button class='wz-tab active' id='wz-tab-sms' type='button' aria-controls='wz-pane-sms'>手机号验证码</button>
+<button class='wz-tab' id='wz-tab-email' type='button' aria-controls='wz-pane-email'>邮箱密码</button>
+<span class='wz-platform'><label><input type='radio' name='wz-platform' value='android' checked> 安卓</label><label><input type='radio' name='wz-platform' value='ios'> iOS</label></span>
+</div>
+<div class='wz-privacy'><svg class='wz-icon' aria-hidden='true'><use href='#wz-i-info'></use></svg><p>账号登录与自动续期通过你配置的私有服务完成；密码摘要与续期凭据由私有服务加密托管，本机不保存邮箱密码。</p></div>
+<div id='wz-pane-sms' class='wz-pane'>
+<div class='wz-row'><input id='wz-mobile' inputmode='numeric' maxlength='11' placeholder='11 位手机号'><button class='wz-btn' id='wz-send' type='button'>获取验证码</button></div>
+<div class='wz-row' id='wz-step2' hidden><input id='wz-code' inputmode='numeric' maxlength='8' placeholder='短信验证码'><button class='wz-btn primary' id='wz-verify' type='button'>登录</button></div>
+</div>
+<div id='wz-pane-email' class='wz-pane' hidden>
+<div class='wz-row'><input id='wz-email' type='email' placeholder='网易邮箱账号'></div>
+<div class='wz-row'><input id='wz-password' type='password' placeholder='密码（默认不保存）'><button class='wz-btn primary' id='wz-email-btn' type='button'>登录</button></div>
+<label class='wz-check'><input type='checkbox' id='wz-remember' checked disabled> 自动续期已启用：密码摘要与续期凭据由私有服务加密托管，本机不保存邮箱密码</label>
+</div>
+<div class='wz-card warn' id='wz-risk-card' hidden role='alert' aria-live='assertive'><b>网易要求做一次账号安全验证</b><p class='wz-note' id='wz-risk-tips'></p><p class='wz-note' id='wz-risk-extra'></p></div>
+<section class='wz-auth-block' aria-labelledby='wz-auth-heading'>
+<div class='wz-section-head'><h2 id='wz-auth-heading'>小光服务账号</h2><p>这是小光账号注册与登录，与上方网易游戏账号分开。注册或重置密码需8至30个字符，包含大写字母、小写字母和符号，不强制数字。</p></div>
+<div id='wizard-auth-service-mount'></div>
+</section>
+<div class='wz-card' id='wz-device-card'>
+<div class='wz-inline-head'><b>私有登录服务：</b><span id='wz-device-status' role='status' aria-live='polite'>正在检查服务状态…</span></div>
+<p class='wz-note'>设备由私有服务在登录时登记，后续会继续复用同一设备；换环境可能触发网易安全验证。</p>
+<div class='wz-actions'><button class='wz-btn quiet' id='wz-device-register' type='button'>检查服务连接</button><span class='wz-note' id='wz-device-msg' role='status' aria-live='polite'></span></div>
+</div>
+<p class='wz-note wz-login-msg' id='wz-login-msg' role='status' aria-live='polite'></p>
+<p class='wz-note'>登录成功后点“这一步完成了”，或直接去第 7 步。大多数账号是安卓注册的，平台选错可能登不上。</p>
+<div class='wz-actions'><button class='wz-btn primary' id='wz-login-done' type='button'>这一步完成了</button></div>
+</section>
+<section class='wz-panel glass-strong' data-panel='ai' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-cpu'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 7 步 · 陪伴设置</span><h1>AI 接口</h1><p class='wz-panel-sub'>小光的聊天、换装、带路都靠模型。选服务商、填 Key、拉模型、点“测试”确认支持工具调用，再保存。Key 用 Windows DPAPI 加密存本机。</p></div>
+</header>
+<div class='wz-card'>
+<div class='wz-section-head'><h2>连接</h2><p>接口由你选择的服务商提供。</p></div>
+<label class='wz-field'><span>服务商</span><select id='wz-provider'></select></label>
+<p class='wz-note' id='wz-provider-note'></p>
+<label class='wz-field'><span>API Key</span><input id='wz-key' type='password' autocomplete='new-password' placeholder='粘贴 Key；已设置过就留空不改'></label>
+<p class='wz-note' id='wz-key-hint'></p>
+<label class='wz-field'><span>接口地址</span><input id='wz-base' type='url' placeholder='https://…/v1'></label>
+</div>
+<div class='wz-card'>
+<div class='wz-section-head'><h2>模型</h2><p>拉到列表后选一个，也可以手动填写模型名。</p></div>
+<div class='wz-row'><button class='wz-btn' id='wz-models' type='button'>获取模型列表</button><span class='wz-note' id='wz-models-msg' role='status' aria-live='polite'></span></div>
+<label class='wz-field'><span>模型</span><input id='wz-model' list='wz-model-list' autocomplete='off' placeholder='点下面“获取模型列表”，选一个或手填'><datalist id='wz-model-list'></datalist></label>
+<div class='wz-menu' id='wz-model-menu' hidden></div>
+<div class='wz-row'><button class='wz-btn' id='wz-ai-test' type='button'>测试</button><span class='wz-note' id='wz-ai-msg' role='status' aria-live='polite'></span></div>
+<div class='wz-result' id='wz-ai-result' hidden role='status' aria-live='polite'></div>
+</div>
+<div class='wz-actions'><button class='wz-btn primary' id='wz-ai-save' type='button'>保存</button><button class='wz-btn' id='wz-ai-done' type='button'>这一步完成了</button></div>
+</section>
+<section class='wz-panel glass-strong' data-panel='owner' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-heart'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 8 步 · 陪伴设置</span><h1>选“哥哥”</h1><p class='wz-panel-sub'>从当前小光号的<b>好友</b>里选一个人当“哥哥”（先互相加好友）。也可以直接填他的 uuid。称呼会做字数和保留字检查。</p></div>
+</header>
+<div class='wz-owner-grid'>
+<div class='wz-card'>
+<div class='wz-row'><button class='wz-btn quiet' id='wz-friends-refresh' type='button'>刷新好友</button><span class='wz-note' id='wz-friends-msg' role='status' aria-live='polite'></span></div>
+<ul class='wz-friends' id='wz-friends' aria-live='polite' aria-label='好友列表'></ul>
+</div>
+<div class='wz-card'>
+<label class='wz-field'><span>或手填好友 uuid</span><input id='wz-owner-uuid' autocomplete='off' spellcheck='false' placeholder='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'></label>
+<label class='wz-field'><span>小光怎么称呼他</span><input id='wz-title' maxlength='6' placeholder='例如 哥哥、姐姐、宝宝'></label>
+<label class='wz-field'><span>人设</span><select id='wz-persona'><option value=''>用默认人设</option></select></label>
+<div class='wz-actions'><button class='wz-btn primary' id='wz-owner-save' type='button'>保存“哥哥”和称呼</button></div>
+<p class='wz-note' id='wz-owner-msg' role='status' aria-live='polite'></p>
+</div>
+</div>
+</section>
+<section class='wz-panel glass-strong' data-panel='finish' hidden>
+<header class='wz-panel-head'>
+<span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-flag'></use></svg></span>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 9 步 · 准备上线</span><h1>完成上线</h1><p class='wz-panel-sub'>九步都完成后点下面按钮。小光会按当前号上线；以后双击桌面“小光”就能打开后台。</p></div>
+</header>
+<div class='wz-card'><ul class='wz-summary' id='wz-summary' aria-live='polite' aria-label='完成检查'></ul></div>
+<div class='wz-actions'><button class='wz-btn primary' id='wz-finish' type='button'>完成，上线</button><span class='wz-note' id='wz-finish-msg' role='status' aria-live='polite'></span></div>
+</section>
+</div>
+<div class='wz-footer glass-strong'>
+<button class='wz-btn quiet' id='wz-prev' type='button'>上一步</button>
+<span class='wz-note' id='wz-footer-note' role='status' aria-live='polite'></span>
+<button class='wz-btn primary' id='wz-next' type='button'>下一步</button>
+</div>
+</main>
+</div>
+</div>
+<script src='/static/wizard.js'></script>
+<script src='/static/auth_service.js'></script>
+<script src="/static/service_account.js"></script></body>
+</html>
