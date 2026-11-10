@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -429,24 +430,15 @@ class Handler(BaseHTTPRequestHandler):
                                         "message": "读取本机设备失败：" + str(exc)[:160]})
         if api == "/chat/trigger":
             path = xg_paths.CONTROL / "chat_trigger.json"
-            if self.command == "GET":
-                try:
-                    doc = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    doc = {}
-                if not isinstance(doc, dict):
-                    doc = {}
-                return self.reply(200, {"ok": True,
-                                        "mode": "all" if doc.get("mode") == "all" else "prefix",
-                                        "prefix": (doc.get("prefix") if isinstance(doc.get("prefix"), str) and doc.get("prefix").strip() else "/")})
-            mode = "all" if str(data.get("mode") or "prefix") == "all" else "prefix"
-            prefix = str(data.get("prefix") or "/").strip() or "/"
-            if len(prefix) > 3:
-                return self.reply(400, {"ok": False, "message": "触发词最多 3 个字符"})
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({"mode": mode, "prefix": prefix}, ensure_ascii=False), encoding="utf-8")
-            return self.reply(200, {"ok": True, "mode": mode, "prefix": prefix,
-                                    "message": "已保存，小光重启后生效" if False else "已保存，下一句聊天生效"})
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = {}
+            if not isinstance(doc, dict):
+                doc = {}
+            return self.reply(200, {"ok": True,
+                                    "mode": "all" if doc.get("mode") == "all" else "prefix",
+                                    "prefix": (doc.get("prefix") if isinstance(doc.get("prefix"), str) and doc.get("prefix").strip() else "/")})
         if api == "/personas":
             return self.reply(200, persona_cmd("list"))
         if api == "/friends":
@@ -479,6 +471,9 @@ class Handler(BaseHTTPRequestHandler):
             raw = self.rfile.read(n) if 0 <= n <= 2 * 1024 * 1024 else b""
             data = json.loads(raw or b"{}")
         except (ValueError, OSError):
+            return self.reply(400, {"error": "bad_json"})
+
+        if not isinstance(data, dict):
             return self.reply(400, {"error": "bad_json"})
 
         if path == "/api/consent":
@@ -541,6 +536,27 @@ class Handler(BaseHTTPRequestHandler):
         if not LOCK.acquire(blocking=False):
             return self.reply(409, {"error": "busy", "message": "上一个操作还没完成"})
         try:
+            if api == "/chat/trigger":
+                # Keep legacy all-chat mode readable/writable; the desktop only
+                # exposes explicit-prefix replies. Never coerce an empty prefix.
+                mode = data.get("mode", "prefix")
+                prefix = data.get("prefix")
+                if mode not in ("prefix", "all"):
+                    return self.reply(400, {"ok": False, "message": "触发方式无效"})
+                if (not isinstance(prefix, str)
+                        or any(unicodedata.category(ch).startswith("C")
+                               or unicodedata.category(ch) in ("Zl", "Zp") for ch in prefix)):
+                    return self.reply(400, {"ok": False, "message": "前缀须为 1～3 个字符，不能含控制字符或换行"})
+                prefix = prefix.strip()
+                if not 1 <= len(prefix) <= 3:
+                    return self.reply(400, {"ok": False, "message": "前缀须为 1～3 个非空字符"})
+                try:
+                    xg_paths.write_json(xg_paths.CONTROL / "chat_trigger.json",
+                                        {"mode": mode, "prefix": prefix})
+                except OSError:
+                    return self.reply(500, {"ok": False, "message": "保存前缀失败，原设置未更改"})
+                return self.reply(200, {"ok": True, "mode": mode, "prefix": prefix,
+                                        "message": "已保存，下一句聊天生效"})
             if api in ("/api/device/ensure", "/api/device/register"):
                 import local_device
                 platform = str(data.get("platform") or "android")
@@ -705,7 +721,7 @@ class Handler(BaseHTTPRequestHandler):
                 doc = _last_json(out) or {}
                 ok = code_ == 0 and doc.get("ok") is not False
                 return self.reply(200 if ok else 500, {
-                    "ok": ok, "message": "聊天已重启，新接口已生效" if ok else "重启聊天失败",
+                    "ok": ok, "message": "聊天已重启，新设置已生效" if ok else "重启聊天失败",
                     "detail": re.sub(r"\s+", " ", out)[-300:] if not ok else ""})
             if api == "/renew":
                 ok, out = renew()
@@ -745,7 +761,11 @@ class Handler(BaseHTTPRequestHandler):
                 ok, why = owner_title.set_title(t)
                 if not ok:
                     return self.reply(400, {"ok": False, "message": why})
-                return self.reply(200, {"ok": True, "message": why, "title": owner_title.get()})
+                running = chat_running()
+                message = why + ("。点“重启聊天生效”使用新称呼，不影响游戏连接。" if running
+                                 else "。下次启动聊天生效。")
+                return self.reply(200, {"ok": True, "message": message, "title": owner_title.get(),
+                                        "chat_running": running, "restart_required": running})
             if api == "/owner":
                 uuid = str(data.get("uuid") or "").strip()
                 if not xg_account.UUID_RE.fullmatch(uuid):

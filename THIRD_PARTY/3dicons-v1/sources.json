@@ -1,0 +1,35 @@
+[
+  {
+    "asset": "chat-bubble-dynamic-clay.png",
+    "source_url": "https://3dicons.sgp1.cdn.digitaloceanspaces.com/v1/dynamic/clay/chat-bubble-dynamic-clay.png",
+    "metadata_url": "https://github.com/realvjy/3dicons/blob/develop/content/3dicons-meta/chat-bubble.md",
+    "sha256": "9824d5fcb9146c2e473e3af313faae5b5ec5998b94aae11a439a57c17cfb030d",
+    "dimensions": [
+      400,
+      400
+    ],
+    "license": "CC0-1.0"
+  },
+  {
+    "asset": "map-pin-dynamic-clay.png",
+    "source_url": "https://3dicons.sgp1.cdn.digitaloceanspaces.com/v1/dynamic/clay/map-pin-dynamic-clay.png",
+    "metadata_url": "https://github.com/realvjy/3dicons/blob/develop/content/3dicons-meta/map-pin.md",
+    "sha256": "7308e230bcc19c7796188b001dc0c74c2c80351e392cfd9d3759346645e2de58",
+    "dimensions": [
+      400,
+      400
+    ],
+    "license": "CC0-1.0"
+  },
+  {
+    "asset": "star-dynamic-clay.png",
+    "source_url": "https://3dicons.sgp1.cdn.digitaloceanspaces.com/v1/dynamic/clay/star-dynamic-clay.png",
+    "metadata_url": "https://github.com/realvjy/3dicons/blob/develop/content/3dicons-meta/star.md",
+    "sha256": "dc70517cd73ce736895c2b2e84b1c36e8e5cfaef644e9034a2584d675c7703a4",
+    "dimensions": [
+      400,
+      400
+    ],
+    "license": "CC0-1.0"
+  }
+]

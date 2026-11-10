@@ -70,13 +70,13 @@
           <button class="btn btn-primary" type="submit" data-sa="redeem">兑换</button>
         </form>
       </div>
-      <div class="xg-service-tabs" role="tablist" aria-label="小光服务账号操作">
+      <div class="xg-service-tabs" data-sa="auth-tabs" hidden role="tablist" aria-label="小光服务账号操作">
         <button type="button" class="btn" data-mode="login" role="tab">登录</button>
         <button type="button" class="btn" data-mode="register" role="tab">注册</button>
         <button type="button" class="btn" data-mode="reset" role="tab">忘记密码</button>
       </div>
       <p class="mini-note" data-sa="reset-help" hidden>忘记密码：填写小光服务邮箱 → 发送并验证邮箱验证码 → 设置新密码（8至30个字符，含大写、小写和符号） → 重置后重新登录。</p>
-      <form data-sa="form" novalidate>
+      <form data-sa="form" hidden novalidate>
         <label class="field">小光服务邮箱 <input data-sa="input-email" type="email" autocomplete="username" maxlength="254" placeholder="不是网易游戏邮箱登录入口" required></label>
         <div data-sa="verification" hidden>
           <button type="button" class="btn" data-sa="send-code">发送邮箱验证码</button>
@@ -94,7 +94,7 @@
     document.head.append(style);
 
     const el = name => card.querySelector('[data-sa="' + name + '"]');
-    let mode = 'login', info = {}, pending = false, challenge = null, verified = false, cooldown = 0;
+    let mode = 'login', info = {}, statusLoaded = false, pending = false, challenge = null, verified = false, cooldown = 0;
     const notify = message => { el('message').textContent = message; };
     async function api(action, body) {
       const response = await fetch('/api/service-account/' + action, {
@@ -106,8 +106,12 @@
       return result;
     }
     function render() {
-      el('badge').textContent = info.authenticated ? '已登录' : '未登录';
-      el('summary').textContent = info.authenticated ? '服务邮箱已验证，登录有效。' : '使用小光服务邮箱注册或登录。';
+      const authenticated = info.authenticated === true;
+      const showSignIn = statusLoaded && !authenticated;
+      el('auth-tabs').hidden = !showSignIn;
+      el('form').hidden = !showSignIn;
+      el('badge').textContent = !statusLoaded ? '查询中' : (authenticated ? '已登录' : '未登录');
+      el('summary').textContent = !statusLoaded ? '正在读取服务登录状态…' : (authenticated ? '服务邮箱已验证，登录有效。' : '使用小光服务邮箱注册或登录。');
       if (info.error) el('summary').textContent = errorText(info.error);
       el('service-url').textContent = info.service_url ? '服务地址：' + info.service_url : '';
       el('busy').hidden = !info.busy;
@@ -126,15 +130,15 @@
       el('redeem-code').disabled = pending || !canRedeem;
       if (!canRedeem) el('redeem-code').value = '';
       el('verification').hidden = mode === 'login';
-      el('reset-help').hidden = mode !== 'reset';
+      el('reset-help').hidden = !showSignIn || mode !== 'reset';
       el('password-label').textContent = mode === 'login' ? '服务密码（支持原有密码）' : (mode === 'reset' ? '新服务密码：' : '注册密码：') + NEW_PASSWORD_HINT;
       el('password').minLength = mode === 'login' ? 1 : 8;
       el('password').maxLength = mode === 'login' ? 256 : 60;
       el('password').placeholder = mode === 'login' ? '输入已有服务密码' : NEW_PASSWORD_HINT;
       el('password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
       el('submit').textContent = mode === 'login' ? '登录小光服务' : (mode === 'register' ? '注册并登录' : '重置密码');
-      el('submit').disabled = pending || !!info.busy || (mode !== 'login' && !verified);
-      el('logout').hidden = !info.configured;
+      el('submit').disabled = !showSignIn || pending || !!info.busy || (mode !== 'login' && !verified);
+      el('logout').hidden = !(authenticated || info.configured || info.legacy);
       el('logout').disabled = pending || !!info.busy;
       el('refresh').disabled = pending;
       el('send-code').disabled = pending || cooldown > Date.now();
@@ -148,7 +152,7 @@
     }
     async function refresh() {
       try {
-        info = await api('status'); render();
+        info = await api('status'); statusLoaded = true; render();
         const routingStatus = Object.freeze({authenticated: info.authenticated === true, legacy: info.legacy === true});
         root.XGServiceAccountStatus = routingStatus;
         root.dispatchEvent(new CustomEvent('xg-service-account-status', {detail: routingStatus}));
@@ -231,6 +235,7 @@
       if (!root.confirm('退出本机小光服务账号？仅清本地登录及运行凭据，地形、录图和其他配置保留。')) return;
       perform(async () => {
         await api('logout', {});
+        mode = 'login';
         el('password').value = ''; invalidateVerification(); await refresh();
         notify('已退出本机服务账号，地形和录图未删除。');
         root.dispatchEvent(new Event('xg-service-account-changed'));

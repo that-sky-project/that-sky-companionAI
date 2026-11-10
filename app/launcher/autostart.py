@@ -30,8 +30,17 @@ def shortcut_path():
 
 
 def _target():
-    """返回 (target, arguments, workdir)。安装版优先跑 小光.vbs（pythonw，无控制台）。"""
+    """返回 (target, arguments, workdir)：打包 EXE 优先，其次旧启动器/源码。"""
     root = APP.parent
+    desktop = root / "XiaoGuang.exe"
+    if desktop.is_file():
+        return str(desktop), "", str(root)
+    vbs = root / "小光.vbs"
+    if vbs.is_file():
+        wscript = os.environ.get("WSCRIPT_EXE")
+        if not wscript and os.name == "nt":
+            wscript = str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "wscript.exe")
+        return wscript or "wscript.exe", f'"{vbs}"', str(root)
     exe = os.environ.get("XG_PYTHONW")
     if not exe:
         for cand in (root / "runtime" / "python" / "pythonw.exe",
@@ -64,16 +73,7 @@ def enable():
         return {"ok": False, "message": "只有 Windows 支持开机自启动"}
     d = startup_dir()
     d.mkdir(parents=True, exist_ok=True)
-    root = APP.parent
-    vbs = root / "小光.vbs"
-    if vbs.is_file():
-        target = os.environ.get("WSCRIPT_EXE")
-        if not target and os.name == "nt":
-            target = str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "wscript.exe")
-        target = target or "wscript.exe"
-        args = f'"{vbs}"'
-    else:
-        target, args, _ = _target()
+    target, args, root = _target()
     lnk = shortcut_path()
     script = (
         "$ws = New-Object -ComObject WScript.Shell;"

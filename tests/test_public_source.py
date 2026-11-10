@@ -92,7 +92,7 @@ print('public-imports-offline-ok')
             self.assertEqual(lock['packages']['']['dependencies'],package['dependencies'])
 
     def test_release_and_entrypoints_exist(self):
-        self.assertEqual(json.loads((ROOT/'BUILD.json').read_text())['client_revision'],'r8')
+        self.assertEqual(json.loads((ROOT/'BUILD.json').read_text())['client_revision'],'r10')
         for rel in ('desktop.py','tools/build_desktop.ps1','app/bot/control_api.py','app/bot/account_login.py','app/web/desktop.html','app/web/desktop.js','app/web/desktop.css','app/launcher/supervisor_sixhour.py','LICENSE','NOTICE','THIRD_PARTY_NOTICES'):
             self.assertTrue((ROOT/rel).is_file(),rel)
 

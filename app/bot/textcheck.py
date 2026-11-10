@@ -28,6 +28,7 @@ def _rules_dir():
 
 RULES = _rules_dir()
 CHAT_GROUPS = ("shield", "intercept", "replace", "remind")
+EXPECTED_RULE_COUNTS = {"shield": 689, "intercept": 88, "replace": 2, "remind": 1}
 BLOCKING = ("shield", "intercept")          # 这两类会让别人看不到 / 发不出去
 _lock = threading.Lock()
 _engine = None
@@ -42,6 +43,8 @@ def _subject_mod():
 
 class Engine:
     def __init__(self):
+        # PCRE2 match data/context are mutable; every thread shares this engine.
+        self._check_lock = threading.Lock()
         lib = None
         _cands = ["libpcre2-8.so.0"]
         _app = Path(getattr(xg_paths, "APP", "") or ".")
@@ -69,6 +72,8 @@ class Engine:
         ctx_create.restype, ctx_create.argtypes = pv, [pv]
         self.md = md_create(256, None)
         self.ctx = ctx_create(None)
+        if not self.md or not self.ctx:
+            raise MemoryError("pcre2_match_buffer_allocation_failed")
         for name, val in (("pcre2_set_match_limit_8", 500000), ("pcre2_set_depth_limit_8", 1000)):
             f = getattr(lib, name)
             f.argtypes = [pv, C.c_uint32]
@@ -76,7 +81,7 @@ class Engine:
         self.subject = _subject_mod().make_subject
         self.rules = {g: [] for g in CHAT_GROUPS}
         self.failed = []
-        for line in (RULES / "cached_patterns.jsonl").open(encoding="utf-8"):
+        for line in (RULES / "cached_patterns.jsonl").read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
             if r["group"] not in self.rules:
                 continue
@@ -88,18 +93,27 @@ class Engine:
                 continue
             self.rules[r["group"]].append((str(r["id"]), code))
 
+    def require_ready(self):
+        """Require all 780 rules from the bundled 0.16.7 rule set to compile."""
+        if self.failed or any(len(self.rules.get(group, ())) != count
+                              for group, count in EXPECTED_RULE_COUNTS.items()):
+            raise RuntimeError("text_rules_incomplete")
+        if not self.md or not self.ctx:
+            raise RuntimeError("text_rules_matcher_unavailable")
+
     def check(self, text, groups=CHAT_GROUPS, level="1", channel="chat_max"):
         """[(分组, 规则编号)]；引擎出错（超限等）的规则记为 (分组, 编号+'?')，当作可疑。"""
-        hits = []
-        for g in groups:
-            subj = self.subject(text, g, level=level, channel=channel).encode("utf-8")
-            for rid, code in self.rules[g]:
-                r = self.match(code, subj, len(subj), 0, 0, self.md, self.ctx)
-                if r >= 0:
-                    hits.append((g, rid))
-                elif r != -1:
-                    hits.append((g, rid + "?"))
-        return hits
+        with self._check_lock:
+            hits = []
+            for g in groups:
+                subj = self.subject(text, g, level=level, channel=channel).encode("utf-8")
+                for rid, code in self.rules[g]:
+                    r = self.match(code, subj, len(subj), 0, 0, self.md, self.ctx)
+                    if r >= 0:
+                        hits.append((g, rid))
+                    elif r != -1:
+                        hits.append((g, rid + "?"))
+            return hits
 
 
 def engine():

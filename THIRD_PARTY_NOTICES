@@ -74,3 +74,12 @@ cache, or private server configuration is supplied by this source checkout.
 The root `NOTICE` retains the original distinction between project-owned work,
 third-party materials and game resources. Missing provenance is not converted
 into a blanket project copyright or license grant.
+
+## 3dicons V1 desktop illustrations
+
+The desktop embeds three unmodified 3dicons V1 clay PNGs (Star, Chat Bubble
+and Map Pin), created by Vijay Verma / realvjy and dedicated under CC0 1.0.
+They are local data URLs in `app/web/desktop.js`, not game assets. The complete
+license and per-asset source URLs, hashes and dimensions are retained in
+`THIRD_PARTY/3dicons-v1/LICENSE` and `THIRD_PARTY/3dicons-v1/sources.json`.
+See that directory's README for the exact embedding location and provenance.
