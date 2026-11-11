@@ -75,6 +75,7 @@ FLAGS = dict(native_collision_verified=False, calibration_verified=False, runtim
 # reads, and nothing else.
 CATALOG_PROFILE = "experimental_multimap_v13"
 CATALOG_SHA256_V13 = "d6129a6a0be79dfce1536a4bfdc2983cf570398e3f80a6ef3d672ee683e5e5f9"
+# Reference count only: a valid on-demand descriptor replaces two nav files.
 EXPECTED_FULL_ASSET_FILES = 697
 CANONICAL_REPORT_BUNDLE = PIPELINE / "nav-reports-v13.json"
 GALLERY_SCENE = "Night_GO_Gallery"
@@ -828,6 +829,20 @@ def copy_verified(source: Path, destination: Path) -> tuple[int, str]:
     return size, sha_file(Path(_long_path(destination)))
 
 
+
+def verify_assembled_files(out: Path, expected: set[str]) -> int:
+    """Validate this build's exact file set, including legitimate nav fallbacks."""
+    actual = {path.relative_to(out).as_posix()
+              for path in out.rglob("*") if path.is_file()}
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if missing or unexpected:
+        raise RuntimeError(
+            f"组装后文件集不完整：缺少 {len(missing)} 个，多出 {len(unexpected)} 个；"
+            f"缺少示例 {missing[:8]}；多出示例 {unexpected[:8]}")
+    return len(actual)
+
+
 def static_files(manifest_path: Path) -> list[str]:
     manifest, _ = read_json(manifest_path)
     names = ["runtime-manifest.json", "manifest.json",
@@ -1056,11 +1071,11 @@ def assemble(work: Path, out: Path, base_root: Path, world_root: Path,
     removed = 0
     if full_run:
         removed = prune_unexpected(out, expected)
-        actual = sum(1 for path in out.rglob("*") if path.is_file())
+        actual = verify_assembled_files(out, expected)
         if actual != EXPECTED_FULL_ASSET_FILES:
-            raise RuntimeError(
-                f"组装后文件数 {actual} != {EXPECTED_FULL_ASSET_FILES}；"
-                "路径布局与 release-v13 不一致")
+            log(f"      [提示] 本次资产 {actual} 个文件；release-v13 参考为 "
+                f"{EXPECTED_FULL_ASSET_FILES}。本次所需文件集完整，"
+                f"按需寻路地图 {on_demand} 张。")
     catalog_path = Path(catalog_path)
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     raw = json.dumps(catalog, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8")

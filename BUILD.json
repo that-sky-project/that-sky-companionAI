@@ -1,8 +1,8 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.1",
-  "client_revision": "r10",
-  "frontend": "Redesigned desktop workspace with preserved r9 controls and APIs",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.4",
+  "client_revision": "r10.2-terrainfix.4",
+  "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
     "production_login_retested": false,
@@ -51,5 +51,100 @@
     "initial_status_pending_and_failure": true,
     "logout_and_expired_legacy_credentials": true,
     "real_account_mutation_tested": false
+  },
+  "ui_redesign_revision": {
+    "revision": "r10.2",
+    "files_changed": [
+      "app/web/desktop.css",
+      "app/web/desktop.html",
+      "app/web/desktop.js"
+    ],
+    "exe_host_rebuilt": false,
+    "exe_host_reused_from_revision": "r9",
+    "source_unittest_cases_passed": 12,
+    "render_pages_checked": 7,
+    "themes_checked": [
+      "night",
+      "dawn"
+    ],
+    "compact_960x640_checked": true,
+    "packaged_window_tested": false
+  },
+  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.3",
+  "terrain_generation_patch": {
+    "revision": "terrainfix.1",
+    "date": "2026-11-11",
+    "files_changed": [
+      "app/xg_gamedata/terrain/terrain_build.py"
+    ],
+    "description": "Validate exact required output file set; allow existing on-demand navigation fallbacks instead of requiring the 697-file reference count.",
+    "source_sha256": "079c920440fb6a4435971d4d3cd861bb33d0f8559d43c58f3577111695ac93b7",
+    "patched_sha256": "7475b4a637c8137b5e64bfdd277ccb67c87f65bb9270bab4276278a5d776f576",
+    "real_cache_696_file_assembly_passed": true,
+    "real_cache_697_file_baseline_byte_identical": true,
+    "missing_and_wrong_file_rejection_passed": true,
+    "exe_host_rebuilt": false,
+    "live_game_retested": false,
+    "friend_pc_resume_retested": false,
+    "inherited_verification_note": "Earlier build/UI checks belong to the r10.2 baseline; this patch did not rerun those checks."
+  },
+  "task_status_patch": {
+    "revision": "terrainfix.2",
+    "date": "2026-11-11",
+    "description": "Read task status separately from job success. Preserve failed job details and enable retry without clearing cached terrain.",
+    "files_changed": [
+      "app/web/desktop.js",
+      "app/web/desktop.html"
+    ],
+    "offline_ui_tests_passed": 15,
+    "friend_failure_replayed": true,
+    "http_auth_and_real_status_errors_still_rejected": true,
+    "terrainfix_1_included": true,
+    "user_state_reset_required": false,
+    "friend_pc_resume_retested": false,
+    "live_game_retested": false,
+    "exe_host_rebuilt": false
+  },
+  "sms_login_patch": {
+    "revision": "terrainfix.3",
+    "date": "2026-11-11",
+    "description": "Show failed SMS submissions as errors, preserving retry job IDs and genuine upload-SMS challenges; translate sms_code label.",
+    "files_changed": [
+      "app/bot/account_login.py",
+      "app/web/desktop.js",
+      "app/web/desktop.html"
+    ],
+    "backend_offline_tests_passed": 25,
+    "sms_ui_offline_tests_passed": 18,
+    "task_ui_regression_tests_passed": 15,
+    "terrainfix_1_and_2_included": true,
+    "server_modified": false,
+    "sms_sent_during_tests": 0,
+    "user_state_reset_required": false,
+    "exe_host_rebuilt": false,
+    "friend_real_login_retested": false,
+    "scope": "Client-side error handling; not a guarantee that the upstream login failure is resolved."
+  },
+  "login_release_patch": {
+    "revision": "terrainfix.4",
+    "date": "2026-11-11",
+    "description": "Explicit pending-login-capacity, request-rate and cancelled-job messages; preserves previous client fixes.",
+    "client_changes": [
+      "app/bot/account_login.py"
+    ],
+    "offline_checks_passed": 72,
+    "user_state_reset_required": false,
+    "login_flow_logic_unchanged": true,
+    "prior_terrain_and_task_fixes_included": true,
+    "related_hosted_service_fix": {
+      "bundled_version": "0.16.7.421589",
+      "deployed_separately": true,
+      "private_server_code_in_archive": false,
+      "user_reported_login_success_after_fix": true
+    },
+    "friend_pc_latest_archive_tested": false,
+    "new_archive_live_login_tested": false,
+    "automatic_task_cancellation_added": false,
+    "exe_host_rebuilt": false
   }
 }

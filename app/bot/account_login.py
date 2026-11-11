@@ -26,6 +26,13 @@ AUTH_ERROR_MESSAGES = {
     "too_many_verification_attempts": "本次验证尝试次数已用完，请重新发起登录。",
     "invalid_code": "请检查验证码格式后再试。",
     "confirmation_required": "请完成短信操作后点击确认。",
+    "too_many_pending_logins": "已有 3 个未结束的登录任务。请先完成已有验证，或等旧任务过期释放名额后再试（等待验证任务有效期为 30 分钟）。重启软件或清缓存不会清除这些任务。（错误码：too_many_pending_logins）",
+    "rate_limited": "请求过于频繁，请稍候再试，先不要连续发送或提交验证码。（错误码：rate_limited）",
+    "login_cancelled": "这次登录任务已结束，请重新发起登录。（错误码：login_cancelled）",
+    "upstream_unavailable": "登录服务暂时未能完成请求，请稍后再试。",
+    "device_verification_required": "登录服务要求设备安全验证，请先在官方客户端完成验证后再试。",
+    "device_context_missing": "本次登录的设备状态缺失，请重新发起登录。",
+    "login_failed": "本次登录未成功，登录服务未返回更具体的原因。请核对验证码；若仍失败，请保留此错误码排查。",
 }
 
 
@@ -56,6 +63,17 @@ def result(job, client):
                                 if job.get("error") == "verification_pending" else "请按提示完成网易安全验证"),
                     "verify": {"kind": "upload_sms", "ticket": job["job_id"], "number": challenge.get("number", ""),
                                "content": challenge.get("content", ""), "tips": "完成后点击确认"}}
+        # A rejected submission can retain the original SMS challenge. That
+        # is a retryable failure, not evidence of a new verification step.
+        # Explicit upload_sms challenges above still use the verification UI.
+        error = job.get("error")
+        kind = challenge.get("kind")
+        if error and (kind in ("sms", "sms_code") or (state == "needs_code" and not kind)):
+            if not isinstance(error, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", error):
+                error = "login_failed"
+            message = AUTH_ERROR_MESSAGES.get(error, "本次登录未完成，登录服务未返回更具体的原因。请保留错误码排查。")
+            return {"ok": False, "pending": job["job_id"], "error": error,
+                    "message": message + "（错误码：" + error + "）"}
         return {"ok": False, "pending": job["job_id"], "message": "请填写短信验证码",
                 "verify": {"ticket": job["job_id"], "kind": challenge.get("kind", "sms")}}
     if state == "running":
