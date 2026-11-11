@@ -219,6 +219,68 @@ def going():
     return g
 
 
+def startup_failure():
+    """Read only this account's latest attempt, then classify its last traceback."""
+    attempt = _json(GO) or {}
+    if attempt.get("account") != xg_account.active_id() or not attempt.get("started_at"):
+        return None
+
+    def tail(path, offset, limit):
+        with path.open("rb") as stream:
+            stream.seek(0, 2)
+            end = stream.tell()
+            # A log may have been rotated/truncated since the attempt was submitted.
+            start = int(offset or 0)
+            if start > end:
+                start = 0
+            stream.seek(max(start, end - limit))
+            return stream.read(limit).decode("utf-8", errors="replace")
+
+    try:
+        text = tail(GO_LOG, attempt.get("log_offset"), 16384)
+    except (OSError, ValueError, TypeError):
+        return None
+    failed = "Traceback (most recent call last)" in text
+    for line in text.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("step") == "lease" and row.get("status") in ("failed", "stopped", None):
+            failed = True
+    if not failed:
+        return None
+
+    runner_log = OUT / "candidate-runner.out"
+    try:
+        if runner_log.stat().st_mtime >= float(attempt["started_at"]):
+            runner_text = tail(runner_log, attempt.get("runner_log_offset"), 16384)
+            if runner_text.strip():
+                text = runner_text
+    except (OSError, ValueError, TypeError):
+        pass
+    # Legacy attempts have no byte offset. The final traceback wins, never an
+    # earlier failure that merely shares the same append-only log file.
+    marker = "Traceback (most recent call last):"
+    if marker in text:
+        text = text.rsplit(marker, 1)[1]
+    code = "startup_failed"
+    message = "上线未成功，游戏连接进程已退出。请查看本次启动的诊断日志。"
+    if "仅支持当前 0.16.7 / 421589 模式" in text:
+        code = "protocol_version_mismatch"
+        message = "上线失败：运行协议与选择的游戏版本不一致。请更新匹配版本的客户端；反复续期或重建地图不会修复这个错误。"
+    elif "当前已验证入口为网易安卓渠道" in text or "当前连接入口仅支持网易国服 Android / iOS 账号" in text:
+        code = "unsupported_account_platform"
+        message = "上线失败：账号渠道或登录平台未被当前连接器支持。请核对账号平台；这不是地图生成或游戏版本错误。"
+    elif "401 Unauthorized" in text or "session_expired" in text:
+        code = "login_expired"
+        message = "上线失败：游戏登录状态已失效。请先退出 MuMu 中的同一账号，再到账号页点“续期登录”；若仍失败，请重新登录。"
+    elif "map_capture_not_recorded_for_account" in text or "map_capture_not_configured" in text:
+        code = "account_capture_missing"
+        message = "上线失败：本账号的地图开局数据尚未就绪，请检查遇境采集和本账号地图目录的校验结果。"
+    return {"code": code, "message": message, "attempt": attempt["started_at"]}
+
+
 def live(owner):
     runner = pids()
     st = _json(POSE) or {}
@@ -236,7 +298,10 @@ def live(owner):
     def name_of(mid):
         return names.get(mid) or (rec.get(mid) or ("未知地图",))[0] if mid else "—"
 
+    pending_go = going()
+    error = startup_failure() if not runner and not pending_go else None
     return {
+        "startupError": error,
         "runner": bool(runner), "online": bool(fresh), "map": map_id, "mapName": name_of(map_id),
         "changing": bool(runner and pending and pending != map_id), "pendingMap": pending, "pendingName": name_of(pending),
         "players": len(slots) if runner else None, "ownerHere": bool(owner) and owner in slots.values(),
@@ -244,7 +309,7 @@ def live(owner):
         "since": (lease or {}).get("launch_utc") and time.strftime(
             "%Y-%m-%d %H:%M:%S", time.localtime((lease or {}).get("launch_unix") or 0)),
         "windowEnd": time.strftime("%m-%d %H:%M", time.localtime(stop_at)) if stop_at else None,
-        "going": going(),
+        "going": pending_go,
     }
 
 
@@ -260,8 +325,12 @@ def go(map_id):
         Client().session(xg_account.active_id())
     except AuthError as exc:
         raise RuntimeError(exc.code) from None
-    GO.write_text(json.dumps({"map": int(map_id), "name": maps[int(map_id)]["name"],
-                              "since": time.strftime("%H:%M:%S")}, ensure_ascii=False), encoding="utf-8")
+    xg_paths.write_json(GO, {"map": int(map_id), "name": maps[int(map_id)]["name"],
+                             "since": time.strftime("%H:%M:%S"), "started_at": time.time(),
+                             "account": xg_account.active_id(),
+                             "log_offset": GO_LOG.stat().st_size if GO_LOG.exists() else 0,
+                             "runner_log_offset": (OUT / "candidate-runner.out").stat().st_size
+                             if (OUT / "candidate-runner.out").exists() else 0})
     GO_LOG.parent.mkdir(parents=True, exist_ok=True)
     with GO_LOG.open("ab") as log:
         log.write(f"\n== {time.strftime('%F %T')} go {map_id} {maps[int(map_id)]['scene']}\n".encode())

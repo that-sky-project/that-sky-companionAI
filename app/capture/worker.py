@@ -33,6 +33,12 @@ HOME_NAME = "遇境"
 SCENE_NAMES = {"CandleSpace": "遇境"}
 
 
+def recorded_hint(scene, count):
+    if scene == HOME_SCENE:
+        return "遇境采集成功，已自动登记。只需采集一次遇境，不需要逐张跑图；可停止采集，并查看地图目录构建进度。"
+    return "「%s」已经录制（已录 %d 张）。安装只需要遇境录制，无需逐张跑图。" % (scene_name(scene), count)
+
+
 def _now():
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -299,8 +305,7 @@ def run(once=False):
         if scene in recorded:
             if time.time() - last_hint > 8:
                 last_hint = time.time()
-                status["message"] = "「%s」这个号已经录过了，去下一张图（已录 %d 张）。" % (
-                    scene_name(scene), len(recorded))
+                status["message"] = recorded_hint(scene, len(recorded))
                 write_status(status)
             if once:
                 return 0
@@ -365,13 +370,15 @@ def run(once=False):
                       message="「%s」已登记到 %s 名下（这个号已录 %d 张）。" % (
                           final.get("map") or scene_name(scene),
                           final.get("alias") or account or "本机", len(recorded)))
+        if scene == HOME_SCENE:
+            status["message"] = recorded_hint(scene, len(recorded))
         apk = _apk_path(cfg, gd)
         need_catalog = bool(scene == HOME_SCENE and account and apk
                             and not _catalog_dir(account).is_dir())
         status["catalog"] = {"needed": need_catalog, "account": account, "apk": apk,
                              "started": False, "done": not need_catalog}
         if need_catalog:
-            status["message"] += " 这是遇境：接着给这个号生成地图目录（约几分钟，后台继续）。"
+            status["message"] += " 下一步：在“地图目录”查看或启动自动构建，等绿色“构建成功 · 校验通过”。"
         elif scene == HOME_SCENE and not account:
             status["message"] += " 还没登录游戏号，登录后才能生成这个号的地图目录。"
         write_status(status)

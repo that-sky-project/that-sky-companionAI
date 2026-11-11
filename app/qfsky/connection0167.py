@@ -52,8 +52,11 @@ def _validate_account(account,build):
         and public_ref['broker_account_id']==account['id'])
     if not account.get('owner') and not broker_owned:
         raise ValueError('缺少账号归属信息')
-    if account.get('channel')!='netease' or account.get('platform')!='android':
-        raise ValueError('当前已验证入口为网易安卓渠道')
+    # Login platform is not the captured wire-format platform. Both official
+    # account types use their unmodified broker session. The prepared capture
+    # still has to pass account/build/revision/scene/netversion validation below.
+    if account.get('channel')!='netease' or account.get('platform') not in ('android','ios'):
+        raise ValueError('当前连接入口仅支持网易国服 Android / iOS 账号')
     try:
         uuid_raw(account['user_uuid'])
         if len(bytes.fromhex(account['session']))!=16 or not account['session2']:raise ValueError()

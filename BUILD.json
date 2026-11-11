@@ -1,19 +1,20 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.4",
-  "client_revision": "r10.2-terrainfix.4",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.5",
+  "client_revision": "r10.2-terrainfix.5",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
-    "production_login_retested": false,
-    "production_server_modified": false,
-    "live_game_retested": false,
+    "source_unittest_cases_passed": 44,
+    "candidate_live_game_retested": true,
+    "candidate_live_game_platform": "ios",
+    "candidate_live_game_map": "CandleSpace",
+    "candidate_live_game_observed_seconds": 20,
+    "new_archive_live_login_retested": false,
+    "friend_pc_retested": false,
     "exe_host_rebuilt": false,
     "exe_host_reused_from_revision": "r9",
-    "ui_fixture_tests_passed": 59,
-    "source_unittest_cases_passed": 12,
-    "exe_backend_smoke_passed": true,
-    "isolated_backend_tests_passed": 28
+    "private_server_modified_in_this_patch": false
   },
   "inherited_r8_release_record": {
     "base_version": "1.0.5",
@@ -70,7 +71,7 @@
     "compact_960x640_checked": true,
     "packaged_window_tested": false
   },
-  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.3",
+  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.4",
   "terrain_generation_patch": {
     "revision": "terrainfix.1",
     "date": "2026-11-11",
@@ -146,5 +147,49 @@
     "new_archive_live_login_tested": false,
     "automatic_task_cancellation_added": false,
     "exe_host_rebuilt": false
+  },
+  "inherited_current_revision_verification": {
+    "production_login_retested": false,
+    "production_server_modified": false,
+    "live_game_retested": false,
+    "exe_host_rebuilt": false,
+    "exe_host_reused_from_revision": "r9",
+    "ui_fixture_tests_passed": 59,
+    "source_unittest_cases_passed": 12,
+    "exe_backend_smoke_passed": true,
+    "isolated_backend_tests_passed": 28
+  },
+  "cumulative_client_patch": {
+    "revision": "terrainfix.5",
+    "date": "2026-11-11",
+    "program_files": [
+      "app/account_preferences.py",
+      "app/bot/account_login.py",
+      "app/bot/control_api.py",
+      "app/bot/xg_runtime.py",
+      "app/capture/worker.py",
+      "app/escort-v31-server/qfsky/connection0167.py",
+      "app/qfsky/connection0167.py",
+      "app/qfsky/version.py",
+      "app/web/desktop.css",
+      "app/web/desktop.html",
+      "app/web/desktop.js",
+      "app/xg_gamedata/status.py",
+      "app/xg_gamedata/terrain.py",
+      "app/xg_gamedata/terrain/terrain_build.py"
+    ],
+    "fixes": [
+      "Preserve long catalog filenames across Windows short-path resume; report 115 enabled maps separately from 118 resources.",
+      "Explain one Home capture only; show truthful capture/catalog progress and verified completion.",
+      "Per-account manual renewal and persistent local nickname; no silent account switching.",
+      "Use the packaged 0.16.7.421589 protocol version instead of the app-store version.",
+      "Accept official Android and iOS login sessions without rewriting platform or removing account/capture validation.",
+      "Scope startup errors to this attempt and its final traceback, not earlier append-only log failures."
+    ],
+    "previous_terrainfix_1_to_4_included": true,
+    "game_data_reset_required": false,
+    "private_server_code_in_archive": false,
+    "user_credentials_in_archive": false,
+    "readme_files_preserved_byte_for_byte": true
   }
 }

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import spawn_loader
+
 from .common import (GAME_VERSION, GameDataError, Progress, final, game_dir,
                      read_json, resolve_data, sha256_file, xg_paths)
 
@@ -44,7 +46,11 @@ def collect(data: Path) -> dict:
     catalog = terrain_dir / "multimap-catalog.json"
     if catalog.is_file():
         doc = read_json(catalog, {}) or {}
-        terrain_row = {"path": str(terrain_dir), "maps": len(doc.get("entries") or []),
+        entries = doc.get("entries") or []
+        scenes = {row.get("scene_name") for row in entries if isinstance(row, dict)}
+        enabled = set(spawn_loader.load()["placements"])
+        terrain_row = {"path": str(terrain_dir), "maps": len(scenes & enabled),
+                       "resource_maps": len(entries), "excluded_maps": len(scenes - enabled),
                        "catalog_sha256": sha256_file(catalog),
                        "matches_w3_v13": (doc.get("profile") == "experimental_multimap_v13")}
 

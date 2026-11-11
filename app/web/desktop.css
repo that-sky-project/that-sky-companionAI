@@ -3462,3 +3462,43 @@ html[data-active-page]:not([data-active-page="overview"]) .hero *::before,
 html[data-active-page]:not([data-active-page="overview"]) .hero *::after {
   animation-play-state: paused;
 }
+
+/* Clear completion feedback for home capture and account catalog generation. */
+.resource-status-panel{margin:16px 0;padding:16px 18px;border:1px solid var(--line,rgba(157,183,225,.22));border-radius:14px;background:rgba(126,157,214,.07);overflow-wrap:anywhere;}
+.resource-status-heading{display:flex;align-items:center;gap:10px;color:var(--text);line-height:1.5;}
+.resource-status-heading strong{font-size:15px;flex:1;min-width:0;}
+.resource-status-symbol{display:inline-grid;place-items:center;flex:0 0 26px;width:26px;height:26px;border:1px solid currentColor;border-radius:50%;font-size:15px;font-weight:700;}
+.resource-status-metric{font-variant-numeric:tabular-nums;font-size:13px;font-weight:650;white-space:nowrap;}
+.resource-status-message{margin:10px 0 0;font-size:13px;line-height:1.7;}
+.resource-status-detail,.resource-status-note{margin:8px 0 0;font-size:12px;line-height:1.65;color:var(--muted);}
+.resource-status-panel[data-state="success"]{border-color:color-mix(in srgb,var(--ok) 40%,transparent);background:color-mix(in srgb,var(--ok) 8%,transparent);}
+.resource-status-panel[data-state="success"] .resource-status-heading{color:var(--ok);}
+.resource-status-panel[data-state="error"]{border-color:color-mix(in srgb,var(--err) 45%,transparent);background:color-mix(in srgb,var(--err) 7%,transparent);}
+.resource-status-panel[data-state="error"] .resource-status-heading{color:var(--err);}
+.resource-status-panel[data-state="running"] .resource-status-symbol{animation:resource-status-turn 2.8s linear infinite;}
+.resource-progress{display:block;width:100%;height:9px;margin:13px 0 3px;border:0;border-radius:20px;overflow:hidden;appearance:none;accent-color:var(--gold,#e8bd68);background:rgba(146,170,210,.15);}
+.resource-progress::-webkit-progress-bar{background:rgba(146,170,210,.15);border-radius:20px;}
+.resource-progress::-webkit-progress-value{background:var(--gold,#e8bd68);border-radius:20px;transition:width .25s ease;}
+.resource-progress::-moz-progress-bar{background:var(--gold,#e8bd68);border-radius:20px;}
+.resource-status-panel[data-state="success"] .resource-progress{accent-color:var(--ok);}
+.resource-status-panel[data-state="success"] .resource-progress::-webkit-progress-value{background:var(--ok);}
+.resource-status-panel[data-state="success"] .resource-progress::-moz-progress-bar{background:var(--ok);}
+.resource-progress:indeterminate{background:linear-gradient(90deg,rgba(146,170,210,.1),rgba(232,189,104,.45),rgba(146,170,210,.1));background-size:200% 100%;animation:resource-progress-wait 2s linear infinite;}
+.resource-progress[hidden],.resource-status-note[hidden]{display:none;}
+.resource-capture-advanced{margin-top:14px;font-size:12px;color:var(--muted);}
+.resource-capture-advanced summary{cursor:pointer;margin-bottom:12px;}
+.resource-capture-advanced[open]{padding-bottom:5px;}
+@keyframes resource-status-turn{to{transform:rotate(360deg);}}
+@keyframes resource-progress-wait{to{background-position:-200% 0;}}
+@media(prefers-reduced-motion:reduce){.resource-status-panel *{animation:none!important;transition:none!important;}}
+
+/* Account operations: persistent local labels and explicit renewal feedback. */
+.account-remark-editor[hidden]{display:none}
+.account-remark-editor{margin:14px 0;padding:14px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:14px;background:rgba(100,150,210,.06)}
+.account-remark-editor label{display:grid;gap:8px;font-size:13px}
+.account-remark-editor input{width:100%;box-sizing:border-box;padding:10px 12px;color:inherit;background:rgba(110,140,190,.08);border:1px solid rgba(130,160,200,.35);border-radius:9px}
+.account-local-hint{font-size:12px;opacity:.7;overflow-wrap:anywhere;margin:8px 0}
+.account-operation-feedback{font-size:13px;line-height:1.6;overflow-wrap:anywhere;margin:8px 0}
+.account-operation-feedback:empty{display:none}
+.account-operation-feedback[data-tone="error"]{color:#db6b64}
+.account-operation-feedback[data-tone="success"]{color:#309a75}

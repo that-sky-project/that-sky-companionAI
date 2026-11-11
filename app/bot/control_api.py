@@ -188,6 +188,7 @@ def status():
     offers = st.get("offers") or []
     return {
         "online": lv["online"], "runner": lv["runner"], "chat": chat,
+        "startupError": lv.get("startupError"),
         "phase": "observing" if lv["online"] else None,
         "map": lv["map"], "mapName": lv["mapName"], "followOwner": True,
         "changing": lv["changing"], "pendingMap": lv["pendingMap"], "pendingName": lv["pendingName"],
@@ -231,7 +232,7 @@ def _last_json(text):
 
 
 def account_cmd(cmd, payload=None):
-    code, out = _run([BOT / "account_login.py", cmd], stdin=json.dumps(payload or {}, ensure_ascii=False), timeout=195)
+    code, out = _run([BOT / "account_login.py", cmd], stdin=json.dumps(payload or {}, ensure_ascii=False), timeout=390 if cmd == "renew" else 195)
     return _last_json(out) or {"ok": False, "message": "账号工具没有返回结果：" + out[-160:]}
 
 
@@ -242,6 +243,33 @@ def persona_cmd(*args, stdin=None):
 
 def kill_chats(timeout=3.0):
     return xg_proc.stop_all(("bot/ai_companion.py",), grace=timeout)
+
+
+def account_process_matches(row, identity):
+    argv = xg_proc.argv_of(row["pid"])
+    for i, item in enumerate(argv):
+        if item == "--account" and i + 1 < len(argv):
+            return str(argv[i + 1]) == identity
+        if str(item).startswith("--account="):
+            return str(item).split("=", 1)[1] == identity
+    return identity == xg_account.active_id()
+
+
+def renew_account(identity):
+    # Rotate offline credentials only; never silently disconnect a live game.
+    if not xg_account.account_by_id(identity):
+        return {"ok": False, "message": "没有这个账号，请先刷新账号列表"}
+    running = xg_proc.find_any_script(xg_runtime.RUN_SCRIPTS + xg_runtime.GO_SCRIPTS)
+    if any(account_process_matches(row, identity) for row in running):
+        return {"ok": False, "message": "该账号正在上线、换图或在线，请先让小光下线，再续期。"}
+    # A failed runner may leave its chat retry loop alive. Stop only this account's chat.
+    for row in xg_proc.find_script("bot/ai_companion.py"):
+        if account_process_matches(row, identity):
+            xg_proc.terminate(row["pid"], grace=3.0)
+    out = account_cmd("renew", {"account": identity})
+    if out.get("ok"):
+        xg_account.cache_clear()
+    return out
 
 
 def renew(attempts=1):
@@ -723,9 +751,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200 if ok else 500, {
                     "ok": ok, "message": "聊天已重启，新设置已生效" if ok else "重启聊天失败",
                     "detail": re.sub(r"\s+", " ", out)[-300:] if not ok else ""})
-            if api == "/renew":
-                ok, out = renew()
-                return self.reply(200 if ok else 500, {"ok": ok, "detail": re.sub(r"\s+", " ", out)[-300:]})
+            if api in ("/renew", "/accounts/renew"):
+                identity = str(data.get("account") or xg_account.active_id()) if api == "/renew" else str(data.get("account") or "")
+                out = renew_account(identity)
+                return self.reply(200 if out.get("ok") else 409, out)
+            if api == "/accounts/remark":
+                out = account_cmd("remark", {"account": data.get("account"), "nickname": data.get("nickname", "")})
+                return self.reply(200 if out.get("ok") else 400, out)
             if api == "/memory/reset":
                 scope = "all" if data.get("scope") == "all" else "chat"
                 if xg_proc.find_script("bot/ai_companion.py"):

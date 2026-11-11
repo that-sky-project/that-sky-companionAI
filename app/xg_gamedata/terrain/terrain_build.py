@@ -137,8 +137,16 @@ def _long_path(path, force=False):
         return ("\\\\?\\UNC\\" + p[2:]) if p.startswith("\\\\") else ("\\\\?\\" + p)
 
 
+def _output_path(path):
+    """Keep short parents, but never atomically replace a file through its 8.3 alias."""
+    path = _abs(path)
+    if os.name == "nt" and path.exists():
+        path = path.with_name(path.resolve().name)
+    return path
+
+
 def atomic_bytes(path: Path, data: bytes):
-    path = Path(path)
+    path = _output_path(path)
     os.makedirs(_long_path(path.parent), exist_ok=True)
     tmp = path.with_name(path.name + ".t")
     with open(_long_path(tmp), "wb") as fh:
@@ -278,8 +286,10 @@ def log(message: str):
 
 
 class StageProgress:
-    def __init__(self, name: str, total: int):
+    def __init__(self, name: str, total: int, counted_maps=None):
         self.name, self.total, self.done = name, total, 0
+        self.counted_maps = None if counted_maps is None else frozenset(counted_maps)
+        self.completed_maps = set()
         self.started = time.monotonic()
         self._last = 0.0
 
@@ -287,14 +297,22 @@ class StageProgress:
         if done is not None:
             self.done = done
         self.done = min(self.done, self.total)
+        display_done, display_total = self.done, self.total
+        if self.counted_maps is not None:
+            scene = label.split(" ", 1)[0]
+            if scene in self.counted_maps:
+                self.completed_maps.add(scene)
+            if self.done == self.total:
+                self.completed_maps.update(self.counted_maps)
+            display_done, display_total = len(self.completed_maps), len(self.counted_maps)
         current = time.monotonic()
         if not force and self.done and current - self._last < 0.4:
             return
         self._last = current
         elapsed = current - self.started
-        rate = elapsed / self.done if self.done else 0.0
-        eta = rate * (self.total - self.done)
-        log(f"[{self.name} {self.done}/{self.total}] {label}  "
+        rate = elapsed / display_done if display_done else 0.0
+        eta = rate * (display_total - display_done)
+        log(f"[{self.name} {display_done}/{display_total}] {label}  "
             f"elapsed {fmt_seconds(elapsed)}  ETA {fmt_seconds(eta)}")
 
 
@@ -1166,7 +1184,8 @@ def main(argv=None):
         description="从国服 0.16.7 / 421589 APK 现场生成小光运行时地形资产")
     parser.add_argument("--apk", required=True, type=Path, help="游戏 APK（只读）")
     parser.add_argument("--out", required=True, type=Path, help="输出资产目录（--assets 指向它）")
-    parser.add_argument("--maps", help="只生成这些场景，逗号分隔（默认全部 118 张）")
+    parser.add_argument("--maps", help="只生成这些场景，逗号分隔（默认全部资源场景）")
+    parser.add_argument("--progress-maps", help="进度统计的启用地图，逗号分隔；不改变资源生成范围")
     parser.add_argument("--resume", action="store_true", help="续跑已有输出")
     parser.add_argument("--work", type=Path, help="中间目录（默认 <out>.work）")
     parser.add_argument("--node", default=shutil.which("node") or "node")
@@ -1186,8 +1205,8 @@ def main(argv=None):
     apk = _abs(args.apk)
     out = _abs(args.out)
     work = _abs(args.work or Path(str(out) + ".work"))
-    catalog_path = _abs(args.catalog or (out.parent / "multimap-catalog.json"))
-    summary_path = _abs(args.summary or (out.parent / "build-summary.json"))
+    catalog_path = _output_path(args.catalog or (out.parent / "multimap-catalog.json"))
+    summary_path = _output_path(args.summary or (out.parent / "build-summary.json"))
     if out == work or out.is_relative_to(work) or work.is_relative_to(out):
         parser.error("--out 与 --work 不能互相包含")
     if catalog_path.is_relative_to(out) or summary_path.is_relative_to(out):
@@ -1254,7 +1273,13 @@ def main(argv=None):
                 raise SystemExit(f"未知场景: {', '.join(unknown)}")
             if len(set(requested)) != len(requested):
                 raise SystemExit("--maps 有重复场景")
+        counted_maps = None
+        if args.progress_maps:
+            counted_maps = {name.strip() for name in args.progress_maps.split(",") if name.strip()}
+            if not counted_maps or not counted_maps.issubset(requested):
+                raise ValueError("进度地图必须属于本次生成的资源场景")
         summary["maps_requested"] = requested
+        summary["progress_maps"] = sorted(counted_maps) if counted_maps is not None else requested
         existing_catalog = catalog_path if catalog_path.is_file() else out / "multimap-catalog.json"
         if existing_catalog.is_file() and args.resume:
             try:
@@ -1265,7 +1290,7 @@ def main(argv=None):
             except Exception:
                 pass
 
-        base_progress = StageProgress("base", len(requested))
+        base_progress = StageProgress("base", len(requested), counted_maps)
         catalog = base_stage(apk, work, requested, all_scenes, args.node, args.resume,
                              args.timeout, summary, base_progress)
         base_root = work / "all-scenes-v1"
@@ -1274,19 +1299,19 @@ def main(argv=None):
         bindings_path = bindings_stage(apk, work, requested, all_scenes, summary)
 
         log("[3/6] 合并 Beamo 实例地形 ...")
-        world_progress = StageProgress("world", len(requested))
+        world_progress = StageProgress("world", len(requested), counted_maps)
         world_summary = world_stage(apk, work, bindings_path, base_root, requested,
                                     all_scenes, summary, world_progress)
 
         log("[4/6] 构建合并几何导航 ...")
-        nav_progress = StageProgress("nav", len(requested))
+        nav_progress = StageProgress("nav", len(requested), counted_maps)
         nav_root = nav_stage(work, world_summary, base_root / "catalog.json", requested,
                              all_scenes, args.node, args.workers, summary, nav_progress)
 
         log("[5/6] 组装运行时资产（只保留引擎实际读取的文件）...")
         world_doc, _ = read_json(world_summary)
         nav_doc, _ = read_json(nav_root / "summary.json")
-        assemble_progress = StageProgress("assemble", len(requested))
+        assemble_progress = StageProgress("assemble", len(requested), counted_maps)
         assemble(work, out, base_root, work / "beamo-world-all-v1", nav_root,
                  out / "on-demand-navigation-v13", catalog, world_doc, nav_doc,
                  requested, all_scenes, summary, assemble_progress,

@@ -9,10 +9,15 @@ import sys
 import time
 
 import xg_paths
+import account_preferences
 from xg_auth_client import Client, AuthError, atomic, cache_update
 
 
 AUTH_ERROR_MESSAGES = {
+    "renew_in_progress": "续期仍在处理中，请稍后刷新账号列表，避免重复点击。",
+    "renew_failed": "续期未完成，请重新登录该账号。",
+    "account_not_found": "账号已不存在，请刷新账号列表。",
+    "not_found": "没有找到该账号，请刷新列表后重新登录。",
     "auth_service_not_configured": "请先配置私有登录服务",
     "unauthorized": "服务令牌无效或已撤销",
     "account_in_use": "该账号正在另一客户端使用",
@@ -44,8 +49,11 @@ def active_id():
 
 
 def view(account):
-    return {**account, "active": account.get("id") == active_id(), "remember": True,
-            "created": time.strftime("%m-%d %H:%M", time.localtime(account.get("created_at", 0)))}
+    remark = account_preferences.nickname(account.get("id", ""))
+    return {**account, "alias": remark or account.get("alias", ""),
+            "nickname": remark, "service_alias": account.get("alias", ""),
+            "active": account.get("id") == active_id(), "remember": True,
+            "created": time.strftime("%m-%d %H:%M", time.localtime(account.get("created_at") or 0))}
 
 
 def result(job, client):
@@ -230,7 +238,23 @@ def cmd_owner(req):
 # the integration script. They use only the current runtime session, not SDK credentials.
 
 
-COMMANDS = {"list": cmd_list, "email": cmd_email, "send": cmd_send, "verify": cmd_verify,
+def cmd_remark(req):
+    identity = str(req.get("account") or "")
+    row = account_preferences.known_account(identity)
+    account_preferences.save(identity, req.get("nickname", ""))
+    safe = {k: row.get(k) for k in ("id", "alias", "platform", "status", "created_at")}
+    return {"ok": True, "account": view(safe), "message": "备注已保存" if req.get("nickname", "").strip() else "已恢复原名称"}
+
+
+def cmd_renew(req):
+    identity = str(req.get("account") or "")
+    account_preferences.known_account(identity)
+    row = Client().renew(identity)
+    safe = {k: row.get(k) for k in ("id", "alias", "platform", "status", "created_at")}
+    return {"ok": True, "account": view(safe), "message": "续期成功，下次上线会使用新的登录状态。"}
+
+
+COMMANDS = {"remark": cmd_remark, "renew": cmd_renew, "list": cmd_list, "email": cmd_email, "send": cmd_send, "verify": cmd_verify,
             "confirm": cmd_confirm, "select": cmd_select, "resume": cmd_resume, "friends": cmd_friends, "owner": cmd_owner}
 
 
@@ -242,6 +266,8 @@ def main(argv):
     except AuthError as exc:
         code = "login_expired" if exc.code == "not_found" and cmd in ("confirm", "verify", "resume") else exc.code
         out = {"ok": False, "error": code, "message": AUTH_ERROR_MESSAGES.get(code, "操作未完成，请稍后重试")}
+    except ValueError as exc:
+        out = {"ok": False, "error": "invalid_input", "message": str(exc) if cmd == "remark" else "账号信息不完整，请刷新列表后重试"}
     except Exception:
         out = {"ok": False, "error": "request_failed", "message": "操作未完成"}
     print(json.dumps(out, ensure_ascii=False))

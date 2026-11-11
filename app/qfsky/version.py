@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""国服版本号管理：UA 版本（华为商店自动刷新）+ JoinGame build 推导。
+"""国服版本号管理：运行协议使用随包基线，商店版本仅用于显式检查更新。
 
 对齐 SkyApi.refreshCnHuaweiVersion / cnUaVersion / buildFromVersion。
 2026-07-31 起华为接口用 pkgName=com.huawei.appmarket + appId 定位。
@@ -59,16 +59,11 @@ def refresh_cn_version() -> str | None:
 
 
 def cn_version() -> str:
-    """UA 版本号：缓存(10min) → 华为实时 → 兜底。"""
-    global _cached
-    with _lock:
-        if _cached and time.time() - _cached[1] < _TTL:
-            return _cached[0]
-    v = _huawei_fetch()
-    if v:
-        with _lock:
-            _cached = (v, time.time())
-        return v
+    """Use the bundled protocol baseline, not the latest app-store release.
+
+    The runner, APK resources and login worker must agree on this version.
+    refresh_cn_version() is an explicit update check, never a runtime override.
+    """
     return CN_FALLBACK_VERSION
 
 

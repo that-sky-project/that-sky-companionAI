@@ -21,6 +21,7 @@ from pathlib import Path
 from .common import (GameDataError, Progress, final, game_dir, human_size, long_path,
                      resolve_data, xg_paths)
 from .apk import inspect_apk
+from . import spawn_loader
 import xg_exec
 
 HERE = Path(__file__).resolve().parent
@@ -56,6 +57,7 @@ def run(apk: Path, data: Path, maps: list[str] | None, resume: bool, workers: in
     root = game_dir(data) / "terrain"
     assets = root / "assets"
     catalog = root / "multimap-catalog.json"
+    counted_maps = maps or sorted(spawn_loader.load()["placements"])
     summary = root / "build-summary.json"
     work = root / "assets.work"
     for d in (root, assets, work):
@@ -65,15 +67,19 @@ def run(apk: Path, data: Path, maps: list[str] | None, resume: bool, workers: in
     xg = xg_paths()
     try:
         out_arg = xg.short_path(assets)
-        catalog_arg = xg.short_path(catalog) if catalog.exists() else xg.short_path(root) + "\\multimap-catalog.json"
-        summary_arg = xg.short_path(root) + "\\build-summary.json"
+        # Only shorten the parent directory. Atomic replace via a file's
+        # 8.3 alias can replace its long name with MULTIM~1.JSO on resume.
+        output_root = Path(xg.short_path(root))
+        catalog_arg = str(output_root / catalog.name)
+        summary_arg = str(output_root / summary.name)
         work_arg = xg.short_path(work)
     except Exception:
         out_arg, catalog_arg, summary_arg, work_arg = map(str, (assets, catalog, summary, work))
     cmd = [sys.executable, "-X", "utf8", "-B", str(BUILDER),
            "--apk", str(apk), "--out", out_arg,
            "--catalog", catalog_arg, "--summary", summary_arg,
-           "--work", work_arg, "--workers", str(workers)]
+           "--work", work_arg, "--workers", str(workers),
+           "--progress-maps", ",".join(counted_maps)]
     if maps:
         cmd += ["--maps", ",".join(maps)]
     if resume or (assets / "catalog.json").exists():
@@ -81,7 +87,7 @@ def run(apk: Path, data: Path, maps: list[str] | None, resume: bool, workers: in
     env = dict(os.environ)
     env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"})
     started = time.monotonic()
-    total = len(maps) if maps else 118
+    total = len(counted_maps)
     progress.emit("启动地形流水线（%s 张）…" % total, done=0, total=total, force=True)
     log_path = root / "terrain.log"
     with log_path.open("ab") as log:
@@ -113,6 +119,12 @@ def run(apk: Path, data: Path, maps: list[str] | None, resume: bool, workers: in
                             "terrain_no_catalog")
     doc = json.loads(catalog.read_text(encoding="utf-8"))
     entries = doc.get("entries") or []
+    scenes = {row.get("scene_name") for row in entries if isinstance(row, dict)}
+    missing = sorted(set(counted_maps) - scenes)
+    if missing:
+        raise GameDataError("地形清单缺少启用地图：%s" % ", ".join(missing),
+                            "terrain_catalog_incomplete")
+    enabled_count = len(set(counted_maps) & scenes)
     files = 0
     bytes_total = 0
     for dirpath, _dirnames, filenames in os.walk(long_path(assets)):
@@ -122,11 +134,12 @@ def run(apk: Path, data: Path, maps: list[str] | None, resume: bool, workers: in
                 bytes_total += os.path.getsize(os.path.join(dirpath, name))
             except OSError:
                 pass
-    progress.finish("地形完成：%d 张，%d 个文件" % (len(entries), files))
+    progress.finish("地形完成：%d 张启用地图，%d 个文件" % (enabled_count, files))
     return {
         "ok": True, "terrain_dir": str(root), "assets": str(assets),
         "catalog": str(catalog), "catalog_sha256": _sha(catalog),
-        "maps": len(entries), "files": files, "bytes": bytes_total,
+        "maps": enabled_count, "resource_maps": len(entries),
+        "excluded_maps": len(scenes - set(counted_maps)), "files": files, "bytes": bytes_total,
         "bytes_human": human_size(bytes_total), "seconds": round(time.monotonic() - started, 1),
         "log": str(log_path), "summary": str(summary),
         "catalog_profile": doc.get("profile"),
@@ -140,7 +153,7 @@ def _sha(path: Path) -> str:
 
 
 def cmd_terrain(args) -> int:
-    progress = Progress("terrain", len(_maps(args.maps) or []) or 118)
+    progress = Progress("terrain", 0)
     try:
         apk = Path(args.apk).expanduser().resolve()
         data = resolve_data(args.data)
