@@ -427,11 +427,14 @@ def pull_apk():
 
 def _version_ok(final):
     code = final.get("version_code") or final.get("versionCode") or final.get("build")
-    if code not in (None, "") and str(code) != "421589":
-        return False, f"版本不对：装的是 {code}，小光只适配 0.16.7 / 421589"
     ver = final.get("version") or final.get("app_version") or ""
-    if ver and not str(ver).startswith("0.16.7"):
-        return False, f"版本不对：装的是 {ver}，小光只适配 0.16.7 / 421589"
+    from qfsky.version_profile import profile_for_version, CURRENT_BUILD
+    profile = profile_for_version(code) or profile_for_version(ver)
+    if profile is None:
+        return False, f"版本不对：装的是 {code or ver or '未知'}，小光只适配 0.16.8 / 421629"
+    if profile["legacy"]:
+        return False, (f"识别为旧版 {profile['version']} / {profile['version']}；"
+                       "0.16.7 只保留识别，不再用于生成数据，请升级到 0.16.8 / 421629")
     return True, ""
 
 
@@ -463,14 +466,14 @@ def check_apk(path):
     w = cfg.setdefault("wizard", {"version": WIZARD_VERSION, "steps": {}})
     w.setdefault("apk", {}).update({"path": str(apk_final), "from": "manual" if not
                                     (w.get("apk") or {}).get("from") else w["apk"].get("from"),
-                                    "checked": True, "version": final.get("version") or "0.16.7",
-                                    "version_code": final.get("version_code") or 421589})
+                                    "checked": True, "version": final.get("version") or "0.16.8",
+                                    "version_code": final.get("version_code") or 421629})
     w.setdefault("steps", {}).setdefault("apk", {})["done"] = True
     w["steps"]["apk"]["at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     w["steps"]["apk"]["detail"] = {"path": str(apk_final), "native": native, "check": final}
     xg_paths.save_config(cfg)
     return {"ok": True, "apk": str(apk_final), "native": native, "detail": final,
-            "message": "安装包版本正确（0.16.7 / 421589）"}
+            "message": "安装包版本正确（0.16.8 / 421629）"}
 
 
 # ------------------------------------------------------------------ 第 4 步

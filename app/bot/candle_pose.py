@@ -1,7 +1,7 @@
 """把 MuMu“对人举蜡烛”的姿态移植到小光自己的 Actor 种子上，生成 KeepCandle 版本的种子。
 
 做法：对 MuMu 待机帧(I)与举烛帧(C)做 token 级比对得到编辑脚本，再套到小光种子(S)上：
-  - 插入：照搬（举烛新增的字段，如“有目标坐标”后的坐标、0x21dd434/0x21dd444 子结构）
+  - 插入：照搬（举烛新增的字段，如“有目标坐标”后的坐标、0x21ddc30/0x21ddc40 子结构）
   - 替换：仅当 S 与 I 在该 token 相同（说明是固定字段、纯因举烛而变）才套用；
           时钟、坐标这类 S 与 I 本来就不同的 token 自动跳过
 最后用位写入器重写、再用 inspect_actor_wire 解析一遍，确认结构合法。
@@ -125,14 +125,14 @@ def transplant(seed, idle, candle, ops, seed_labels=None, idle_labels=None):
 # 举烛时上半身/手的姿态向量（世界坐标，随朝向转）。旧 token 级移植把两份姿态块拼错（第二份成了
 # (129, 78, 113) 这种混合值），客户端在两份之间来回切 → “举烛时上半身一直乱转”。现在两份都取模板，再由
 # room_pose 按“朝向目标的角度 − 模板朝向”整体旋转。
-UPPER_BODY = ("0x1715e78", "0x1716184", "0x1716288")
+UPPER_BODY = ("0x1716360", "0x171666c", "0x1716770")
 
 
 def template_heading():
     """MuMu 举烛模板录制时的朝向（度）：举烛帧偏航码 → heading。"""
     import anim_pose
     _idle, cand, _il, cl = _template()
-    yaw = next(t.value for t, l in zip(cand, cl) if l == "0x21dc9e0" and t.kind == "bits" and t.extent == 6)
+    yaw = next(t.value for t, l in zip(cand, cl) if l == "0x21dd1dc" and t.kind == "bits" and t.extent == 6)
     return anim_pose.yaw_heading(yaw)
 
 
@@ -254,9 +254,9 @@ def describe(body):
     labels = [l for l, _ in o._boundaries]
     origin = None
     for l, bit in o._boundaries:
-        if l == "0x21dc858":
+        if l == "0x21dd054":
             byte = (bit + 7) // 8
             origin = struct.unpack_from("<3f", body, byte)
             break
-    return {"bytes": len(body), "bits": o.bit_length, "has_0x21dd434": "0x21dd434" in labels,
-            "has_0x21dd444": "0x21dd444" in labels, "origin": origin}
+    return {"bytes": len(body), "bits": o.bit_length, "has_0x21ddc30": "0x21ddc30" in labels,
+            "has_0x21ddc40": "0x21ddc40" in labels, "origin": origin}

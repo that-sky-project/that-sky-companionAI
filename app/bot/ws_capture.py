@@ -9,8 +9,8 @@ import struct
 import threading
 import time
 
-from qfsky import skyws
-from qfsky.skyapi import CN_BUILD_ACCESS_KEY, cn_user_agent
+from qfsky import skyws, fp
+from qfsky.skyapi import cn_user_agent
 
 
 class CaptureWs(skyws.WsSession):
@@ -77,7 +77,7 @@ def run_forever(account, out_path, stop_event):
     backoff = 5
     while not stop_event.is_set():
         ws = CaptureWs(uid=getattr(client, "uid", ""), session=getattr(client, "session", ""),
-                       ua=ua, access_key=CN_BUILD_ACCESS_KEY, out_path=out_path)
+                       ua=ua, access_key=fp.build_access_key(), out_path=out_path)
         if ws.connect():
             ws._write("open", b"connected")
             backoff = 5

@@ -1,4 +1,4 @@
-"""Strict offline legacy->0.16.7 Actor typed-token migration.
+"""Strict offline legacy->0.16.8 Actor typed-token migration.
 Only the three statically verified additions are inserted. No field producer,
 float requantizer, animation reset, entity mapping, network or product hook.
 Input/output payloads remain in RAM and never appear in metadata/repr.
@@ -11,10 +11,10 @@ from . import actor_wire_0167 as new
 from . import actor_wire_schema_0167 as nschema
 from .bit_stream import BitWriter
 OLD_SHA256='c5a7c9756f97b76562e7e28d86cbe4a58763c1295cd0c01f316f9e49d76fc9f8'
-NEW_SHA256='0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321'
+NEW_SHA256='0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed'
 _PREFIX_OLD='0x2144620';_TIMED_OLD='0x2144bac';_BOOL_OLD='0x2143cf4'
-_NEW_ADDITIONS={'0x21dc908','0x21ded14','0x21ddf2c'}
-_DYNAMIC={'0x2142aa4':'pose','0x21dccb8':'pose','0x2145220':'history','0x21df36c':'history','0x1eb530c':'strings','0x1f5e92c':'strings','0x1ebb468':'bool256','0x1f64a88':'bool256','0x21473dc':'bool48','0x21e1534':'bool48','0x2144024':'multipass','0x21de25c':'multipass'}
+_NEW_ADDITIONS={'0x21dd104','0x21df510','0x21de728'}
+_DYNAMIC={'0x2142aa4':'pose','0x21dccb8':'pose','0x21dd4b4':'pose','0x2145220':'history','0x21df36c':'history','0x21dfb68':'history','0x1eb530c':'strings','0x1f5e92c':'strings','0x1ebb468':'bool256','0x1f64a88':'bool256','0x21473dc':'bool48','0x21e1534':'bool48','0x2144024':'multipass','0x21de25c':'multipass','0x21dea58':'multipass'}
 
 def _profiles(old_sha,new_sha):
  if type(old_sha)is not str or old_sha!=OLD_SHA256 or type(new_sha)is not str or new_sha!=NEW_SHA256:raise ValueError('actor_migration_profile_unverified')
@@ -48,7 +48,7 @@ def _verify_delta():
  # Refuse a fourth schema or dynamic-code difference instead of inventing data.
  om,nm=oschema.MAIN,nschema.MAIN
  if om[6]!=(_PREFIX_OLD,'raw',4):raise ValueError('actor_migration_anchor_changed')
- expected={'0x21dc908':('raw',8),'0x21ded14':('raw',1),'0x21ddf2c':('bool',)}
+ expected={'0x21dd104':('raw',8),'0x21df510':('raw',1),'0x21de728':('bool',)}
  rows=list(nm)+[row for plan in nschema.FIXED_HELPERS.values()for row in plan]
  for label,shape in expected.items():
   matches=[tuple(row[1:])for row in rows if row[0]==label]
@@ -58,7 +58,7 @@ def _verify_delta():
  if sorted(repr(_flatten(p,oschema.FIXED_HELPERS))for p in oschema.FIXED_HELPERS.values())!=sorted(repr(_flatten(p,nschema.FIXED_HELPERS,_NEW_ADDITIONS))for p in nschema.FIXED_HELPERS.values()):raise ValueError('actor_migration_fourth_helper_difference')
  if tuple(tuple(x[1:])for x in oschema.POSE)!=tuple(tuple(x[1:])for x in nschema.POSE):raise ValueError('actor_migration_pose_difference')
  if not any(row==(_TIMED_OLD,'raw',8)for row in om):raise ValueError('actor_migration_anchor_changed')
- target=tuple(tuple(x[1:])for x in nschema.FIXED_HELPERS['0x21ddde4']if x[0]!='0x21ddf2c')
+ target=tuple(tuple(x[1:])for x in nschema.FIXED_HELPERS['0x21de5e0']if x[0]!='0x21de728')
  matches=[p for p in oschema.FIXED_HELPERS.values()if tuple(tuple(x[1:])for x in p)==target]
  if len(matches)!=1 or matches[0][-2]!=(_BOOL_OLD,'range',-4,4):raise ValueError('actor_migration_anchor_changed')
  for name in ('raw','bits','bounded','count','raw_float','history','strings','fixed_boolean_array','multipass_arrays'):

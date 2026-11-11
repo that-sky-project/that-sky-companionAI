@@ -266,7 +266,7 @@ def startup_failure():
         text = text.rsplit(marker, 1)[1]
     code = "startup_failed"
     message = "上线未成功，游戏连接进程已退出。请查看本次启动的诊断日志。"
-    if "仅支持当前 0.16.7 / 421589 模式" in text:
+    if "仅支持当前 0.16.8 / 421629 模式" in text:
         code = "protocol_version_mismatch"
         message = "上线失败：运行协议与选择的游戏版本不一致。请更新匹配版本的客户端；反复续期或重建地图不会修复这个错误。"
     elif "当前已验证入口为网易安卓渠道" in text or "当前连接入口仅支持网易国服 Android / iOS 账号" in text:

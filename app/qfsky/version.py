@@ -21,7 +21,7 @@ HUAWEI_UA = (
 CN_HUAWEI_APP_ID = "C100685413"
 
 # 兜底：华为接口拉不到时使用。随游戏大版本更新手动/同步升级。
-CN_FALLBACK_VERSION = "0.16.7.421589"
+CN_FALLBACK_VERSION = "0.16.8.421629"
 
 _lock = threading.Lock()
 _cached: tuple[str, float] | None = None
@@ -108,8 +108,8 @@ def cn_build() -> int | None:
 #               （fp.device(key)["sdk"]），否则同一个请求的 UA 写 (机型;33)、
 #               表单写 sv=31，自己跟自己矛盾 —— 真机不可能出现。
 MPAY_CV = "a5.16.0"
-MPAY_GV_FALLBACK = "421589"
-MPAY_GVN_FALLBACK = "0.16.7"
+MPAY_GV_FALLBACK = "421629"
+MPAY_GVN_FALLBACK = "0.16.8"
 
 
 def mpay_gv() -> str:

@@ -101,7 +101,7 @@ def _parses(toks) -> bool:
 def sanitize_frame(raw: bytes, groups) -> tuple[bytes, int, list[str]]:
     """清零身份组里能安全清零的 token，返回 (新字节, 清零数, 保留的结构字段)。
 
-    有些组里混着长度/计数字段（例如 0x21dec48 是一张 6 条的记录表，里面有
+    有些组里混着长度/计数字段（例如 0x21df444 是一张 6 条的记录表，里面有
     字符串长度 0x0c）。把这些也清零会让整帧解析不过（unexpected trailer），
     所以逐 token 试：清零后还能被 inspect_actor_wire 完整解析才保留改动，
     否则恢复原值并记进 kept。这样形状一定不变，也不会为了“全零”硬改结构。

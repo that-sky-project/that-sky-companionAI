@@ -12,9 +12,9 @@ from pathlib import Path
 
 PKG_DIR = Path(__file__).resolve().parent
 APP_ROOT = PKG_DIR.parent
-GAME_VERSION = "0.16.7-421589"
-APK_BUILD = 421589
-APK_VERSION = "0.16.7"
+GAME_VERSION = os.environ.get("XG_GAME_VERSION", "0.16.8-421629")
+APK_BUILD = 421629
+APK_VERSION = "0.16.8"
 APK_PACKAGE = "com.netease.sky"
 
 

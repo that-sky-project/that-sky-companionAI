@@ -1,4 +1,4 @@
-"""Pure same-current-map Move preparation for native build 421589.
+"""Pure same-current-map Move preparation for native build 421629.
 
 No network, I/O, target-map selection, account rebinding, or transport promotion.
 The caller must freeze the active profile/endpoint/map at Move installation and

@@ -1,6 +1,6 @@
 """Explicit Zstd trained-dictionary adapter for the recovered native type-2 path.
 
-Verified dictionary is extracted from APK421589; implementation is independently
+Verified dictionary is extracted from APK421629; implementation is independently
 round-trip tested. Native live compressed response equivalence remains unobserved.
 No network, device access or secret output. Install zstandard separately.
 """
@@ -15,8 +15,8 @@ DICTIONARY_SIZE=2097152
 DEFAULT_DICTIONARY=Path(__file__).resolve().parent/'resources'/'CompressDictionary.zst'
 
 
-def load_type2_decoder(path=DEFAULT_DICTIONARY,*,apk_build=421589):
-    if apk_build!=421589:raise ReceiveError('unsupported dictionary APK build')
+def load_type2_decoder(path=DEFAULT_DICTIONARY,*,apk_build=421629):
+    if apk_build!=421629:raise ReceiveError('unsupported dictionary APK build')
     path=Path(path)
     if path.stat().st_size!=DICTIONARY_SIZE:raise ReceiveError('dictionary length mismatch')
     raw=path.read_bytes()

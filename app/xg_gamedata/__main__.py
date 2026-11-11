@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = ap.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("check-apk", parents=[common], help="校验国服 0.16.7/421589 APK")
+    p = sub.add_parser("check-apk", parents=[common], help="校验国服 0.16.8/421629 APK")
     p.add_argument("--apk", required=True)
     p.set_defaults(func="check")
 

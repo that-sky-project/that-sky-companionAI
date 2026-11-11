@@ -136,7 +136,7 @@ def build_outfits(native: dict[int, str], names: dict[int, str], out_dir: Path) 
 def build_gifts(arsc: dict, out_dir: Path) -> dict:
     keys = {k: v for k, v in name_data.DATA["GIFT"]["keys"].items()
             if k.startswith("commerce_item_name_")}
-    table = {"source": "resources.arsc 0.16.7 commerce_item_name_* + astrbot_plugin_sky gift_catalog.json",
+    table = {"source": "resources.arsc 0.16.8 commerce_item_name_* + astrbot_plugin_sky gift_catalog.json",
              "keys": keys, "skus": dict(name_data.DATA["GIFT"]["skus"])}
     found = sum(1 for k in keys if k in arsc)
     path = out_dir / "gift_names.json"

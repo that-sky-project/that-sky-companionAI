@@ -1,4 +1,4 @@
-"""光遇国服聊天审核规则（0.16.7 设备缓存，780 条）离线检查：小光发言前先过一遍，命中就换种说法。
+"""光遇国服聊天审核规则（0.16.7 设备缓存，0.16.8 沿用，780 条）离线检查：小光发言前先过一遍，命中就换种说法。
 
 规则来源：ref/textrules/cached_patterns.jsonl（GPT 从 ma75_147897_regex.txt 解密还原；engine_pattern 在 PCRE2 10.40 下
 复编译与原字节码逐字节一致）。这里用系统 libpcre2-8（10.46）按 compileOptions 编译 engine_pattern 匹配——语法相同，
@@ -94,7 +94,7 @@ class Engine:
             self.rules[r["group"]].append((str(r["id"]), code))
 
     def require_ready(self):
-        """Require all 780 rules from the bundled 0.16.7 rule set to compile."""
+        """Require all 780 rules from the bundled 0.16.7 rule set (unchanged in 0.16.8) to compile."""
         if self.failed or any(len(self.rules.get(group, ())) != count
                               for group, count in EXPECTED_RULE_COUNTS.items()):
             raise RuntimeError("text_rules_incomplete")

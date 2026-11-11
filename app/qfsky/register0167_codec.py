@@ -1,4 +1,4 @@
-"""Build-421589 NetMsg 0x04 body, recovered from native serializer 0x1f7f044.
+"""Build-421629 NetMsg 0x04 body, recovered from native serializer 0x1f7f044.
 
 Offline codec only. This does not establish a connection or verify the complete
 registration chain. field00 is read from the active connection, not player ID.
@@ -7,7 +7,7 @@ The one-bit tail is sampled from connection-state +0x3b0 before native clears it
 from __future__ import annotations
 import struct
 
-BUILD = 421589
+BUILD = 421629
 SIZE = 83
 _FORMAT = struct.Struct('<B6HBI64sB')
 
@@ -18,12 +18,12 @@ def _uint(value, bits, name):
 
 def encode(*, build, field00, netversion, level_flag, level_id, matrix, tail_flag):
     if build != BUILD:
-        raise ValueError('serializer is verified statically only for build 421589')
+        raise ValueError('serializer is verified statically only for build 421629')
     if not isinstance(netversion, (tuple, list)) or len(netversion) != 6:
         raise ValueError('explicit six-value NetVersion required')
     nv = [_uint(v, 16, f'netversion[{i}]') for i, v in enumerate(netversion)]
     if nv[2] != 23536:
-        raise ValueError('NetVersion constant does not match build 421589')
+        raise ValueError('NetVersion constant does not match build 421629')
     if not isinstance(matrix, (bytes, bytearray)) or len(matrix) != 64:
         raise ValueError('matrix must be exactly 64 explicit bytes')
     if type(tail_flag) is not bool:
@@ -34,7 +34,7 @@ def encode(*, build, field00, netversion, level_flag, level_id, matrix, tail_fla
 
 def decode(data, *, build, require_zero_padding=False):
     if build != BUILD or len(data) != SIZE:
-        raise ValueError('expected the build-421589 83-byte registration body')
+        raise ValueError('expected the build-421629 83-byte registration body')
     fields = _FORMAT.unpack(data)
     padding = fields[-1] >> 1
     if require_zero_padding and padding:

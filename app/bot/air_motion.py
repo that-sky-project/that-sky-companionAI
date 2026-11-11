@@ -38,34 +38,34 @@ except Exception:  # pragma: no cover - only for isolated unit import
 import air_planner
 
 CLIP_FILE = Path(__file__).with_name("air_clips.json")
-FLOAT_LABELS = {"0x21dcf64", "0x21dcf94"}
-VECTOR_LABELS = {"0x1715a60", "0x1715a88"}
+FLOAT_LABELS = {"0x21dd760", "0x21dd790"}
+VECTOR_LABELS = {"0x1715f48", "0x1715f70"}
 
 # Ground token values observed on stand/walk frames (also in social_pose).
 LANDED_AIR = {
-    "0x1f80044|1": 0,
-    "0x1f80070|1": 0,
-    "0x21dcc10|1": 0,
-    "0x21dd4cc|1": 0,
-    "0x21dd4ec|1": 0,
-    "0x21dd044|1": 0,
-    "0x21dcfb4|1": 1,
-    "0x21dd1e0|1": 0,
-    "0x21dd170|1": 16383,
-    "0x21dd190|1": 127,
-    "0x1715a60|1": 7,
-    "0x1715a88|1": 7,
-    "0x21dcf54|1": 0,
-    "0x21dcf64|1": 0.0,
-    "0x21dcf84|1": 0,
-    "0x21dcf94|1": 0.0,
-    "0x21dee4c|1": 488,
+    "0x1f80818|1": 0,
+    "0x1f80844|1": 0,
+    "0x21dd40c|1": 0,
+    "0x21ddcc8|1": 0,
+    "0x21ddce8|1": 0,
+    "0x21dd840|1": 0,
+    "0x21dd7b0|1": 1,
+    "0x21dd9dc|1": 0,
+    "0x21dd96c|1": 16383,
+    "0x21dd98c|1": 127,
+    "0x1715f48|1": 7,
+    "0x1715f70|1": 7,
+    "0x21dd750|1": 0,
+    "0x21dd760|1": 0.0,
+    "0x21dd780|1": 0,
+    "0x21dd790|1": 0.0,
+    "0x21df648|1": 488,
 }
 WALK_AIR = dict(LANDED_AIR, **{
-    "0x21dcc10|1": 1,
-    "0x21dd4cc|1": 31,
-    "0x1715a60|1": 0,
-    "0x1715a88|1": 0,
+    "0x21dd40c|1": 1,
+    "0x21ddcc8|1": 31,
+    "0x1715f48|1": 0,
+    "0x1715f70|1": 0,
 })
 
 
@@ -82,7 +82,7 @@ def _token_index(o):
 
     Occurrence counts *tokens*, not schema boundaries.  This is what
     ``air_keys`` uses: a scalar token has occurrence 1, the two components of
-    ``0x1715a60`` have occurrences 1 and 2.
+    ``0x1715f48`` have occurrences 1 and 2.
     """
     starts = anim_pose._starts(o)
     bounds = sorted(o._boundaries, key=lambda row: row[1])
@@ -123,8 +123,8 @@ def write_air(body, values):
             nxt = index.get((label, int(occurrence) + 1))
             if nxt:
                 targets.append(nxt[0])
-        # Some labels are multi-component quant groups (e.g. 0x1715a60 /
-        # 0x1715a88 have two 3-bit components).  The clip stores the group
+        # Some labels are multi-component quant groups (e.g. 0x1715f48 /
+        # 0x1715f70 have two 3-bit components).  The clip stores the group
         # value once; apply it to every component of that label occurrence.
         for token_id in targets:
             token = o._tokens[token_id]

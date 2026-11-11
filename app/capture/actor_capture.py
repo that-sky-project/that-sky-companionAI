@@ -1,4 +1,4 @@
-"""Read-only build421589 current Scene + own Actor collector.
+"""Read-only build421629 current Scene + own Actor collector.
 
 Device access occurs only in capture()/main(), never on import. Payloads and
 account binding stay in a new private record; stdout is a redacted summary.

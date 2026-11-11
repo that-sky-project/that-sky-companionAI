@@ -438,7 +438,7 @@ def apk_inventory(apk: Path):
         except ValueError as exc:
             raise ValueError(
                 "APK 版本校验失败：lib/arm64-v8a/libBootloader.so 的 SHA-256 与 "
-                f"{PROFILE} 不符（{exc}）。本工具只接受国服 0.16.7 / 421589。") from exc
+                f"{PROFILE} 不符（{exc}）。本工具接受国服 0.16.8 / 421629（也识别 0.16.7 / 421589 的旧数据）。") from exc
         digest = hashlib.sha256()
         with apk.open("rb") as stream:
             while block := stream.read(8 * 1024 * 1024):
@@ -1181,7 +1181,7 @@ def finalize_summary(summary: dict, monitor: MemoryMonitor, work: Path, out: Pat
 # --------------------------------------------------------------------------- #
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="从国服 0.16.7 / 421589 APK 现场生成小光运行时地形资产")
+        description="从国服 0.16.8 / 421629 APK 现场生成小光运行时地形资产")
     parser.add_argument("--apk", required=True, type=Path, help="游戏 APK（只读）")
     parser.add_argument("--out", required=True, type=Path, help="输出资产目录（--assets 指向它）")
     parser.add_argument("--maps", help="只生成这些场景，逗号分隔（默认全部资源场景）")

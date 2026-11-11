@@ -1,7 +1,7 @@
 """Current Home Scene contract; no transport or schema guessing."""
 from .codec import scene_wire as wire
 from .level_authority import LevelRecord
-PUBLIC_ELF_SHA256='0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321'
+PUBLIC_ELF_SHA256='0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed'
 def _check_record(record,*,expected_resource_tag,verified_profile_sha256):
  if type(record)is not LevelRecord:raise ValueError('room0167_scene_record_type')
  if expected_resource_tag!=36851 or verified_profile_sha256!=PUBLIC_ELF_SHA256:raise ValueError('room0167_scene_profile')

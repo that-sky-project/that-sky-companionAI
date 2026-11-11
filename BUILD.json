@@ -1,7 +1,7 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.5",
-  "client_revision": "r10.2-terrainfix.5",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.6",
+  "client_revision": "r10.2-terrainfix.6",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
@@ -138,7 +138,7 @@
     "login_flow_logic_unchanged": true,
     "prior_terrain_and_task_fixes_included": true,
     "related_hosted_service_fix": {
-      "bundled_version": "0.16.7.421589",
+      "bundled_version": "0.16.8.421629",
       "deployed_separately": true,
       "private_server_code_in_archive": false,
       "user_reported_login_success_after_fix": true

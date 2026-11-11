@@ -80,11 +80,11 @@ def select_catalog_parts(folder,manifest,map_id,variant=None):
         for name in VARIANT_FILES:parts[name]=_scoped_file(vfolder,name)
     return parts,row,vrow
 
-def load_catalog_trial(account_uuid,map_id,*,build=421589,variant=None):
+def load_catalog_trial(account_uuid,map_id,*,build=421629,variant=None):
     if os.environ.get('QFSKY_ASSET_CATALOG_TRIAL')!='1':
         return None
     from .map_long0167 import asset_catalog_v32c as adapter
-    if type(map_id)is not int or type(build)is not int or build!=421589:
+    if type(map_id)is not int or type(build)is not int or build!=421629:
         raise ValueError('asset_catalog_map_or_build')
     if variant is not None and(type(variant)is not str or VARIANT_NAME.fullmatch(variant)is None):
         raise ValueError('asset_catalog_variant_name')

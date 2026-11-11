@@ -1,4 +1,4 @@
-"""Current->current Actor elapsed/prepared-revision update, build 421589.
+"""Current->current Actor elapsed/prepared-revision update, build 421629.
 
 No legacy conversion, Home constant, identity rebinding, pose reconstruction,
 position rewrite or replacement of new dynamic fields. Input must be the
@@ -55,7 +55,7 @@ def advance_current_actor(body,*,elapsed_seconds,tick_steps,map_id,verified_nati
         raise ValueError('current_actor_elapsed')
     if type(tick_steps)is not int or not 1<=tick_steps<=_CW_STEPS:raise ValueError('current_actor_steps')
     observed=_checked(body,map_id,verified_native_sha256);locations=_token_locations(observed)
-    clocks=[position for label,position in observed._boundaries if label=='0x1715998']
+    clocks=[position for label,position in observed._boundaries if label=='0x1715e80']
     counts=dict(observed._counts);expected=counts.get('pose_records',0)+counts.get('history_pose_records',0)
     if not 0<=expected<=8 or len(clocks)!=expected or len(set(clocks))!=expected:
         raise ValueError('current_actor_pose_boundary_count')
@@ -66,7 +66,7 @@ def advance_current_actor(body,*,elapsed_seconds,tick_steps,map_id,verified_nati
             raise ValueError('current_actor_pose_timestamp_shape')
         clock_tokens[position]=found[0][3].value
     offsets=[]
-    for label in('0x21dc8cc','0x21de7c4'):
+    for label in('0x21dd0c8','0x21defc0'):
         positions=[p for name,p in observed._boundaries if name==label]
         if len(positions)!=1:raise ValueError('current_actor_revision_boundary')
         entries=[entry for entry in locations if entry[0]==positions[0]]

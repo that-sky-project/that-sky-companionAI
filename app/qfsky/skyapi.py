@@ -30,12 +30,14 @@ RATE_LIMIT_ATTEMPTS = 5         # 撞上限流时自动加试到 5 次（约 0.9
 # 用户情报「build-access-key 原本是空的，现在补上了」得到证实。
 # 闸门 1：请求头 x-sky-build-access-key 必须等于官方 APK 编译期常量
 #         com.tgc.sky.BuildConfig.SKY_BUILD_ACCESS_KEY（从重修的 ntp dex 用 androguard 读出）。
+#         0.16.8 换新值，且不能进公开仓库；每次请求前由 fp.build_access_key() 解析。
 #         空串 / "1" / 只取时间戳段 一律 HTTP 418。
 # 闸门 2：User-Agent 必须是官方形态 Sky-Live-<数字>/<版本>.<build> (<设备>)，
 #         且版本 ≥ 0.16.5。`Sky/<版本>` 旧形态与 0.15.8 版本号现均被拒（418）。
 # 两者必须同时满足；满足后 /account/get_vars、/account/get_motd 立刻 200。
 # 常量与 UA 助手统一放在 fp.py（cnlogin.py 也要用，避免循环导入）。
-CN_BUILD_ACCESS_KEY = fp.BUILD_ACCESS_KEY
+# 兼容旧导入名：不要把它当常量缓存；实际值在请求时重新解析。
+CN_BUILD_ACCESS_KEY = ""
 
 # 兜底常量：fp 关闭（QFLY_FP_OFF=1 或 netcfg.fp=false）时才用。
 # 改造前**所有**账号都报这一个机型 —— 137 个号自称同一台小米 12S Ultra，
@@ -151,7 +153,7 @@ class SkyClient:
             "User-Agent": cn_user_agent(ua_version or self.client_version, self.fp_key),
             "X-Session-ID": str(uuid.uuid4()),
             "trace-id": random_trace(),
-            "x-sky-build-access-key": CN_BUILD_ACCESS_KEY,
+            "x-sky-build-access-key": fp.build_access_key(),
             "session": self.session,
             "x-session-token": self.session,
             "user-id": self.uid,

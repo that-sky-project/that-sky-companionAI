@@ -10,7 +10,7 @@ import socket
 
 from . import join0167_profile as profiles
 
-BUILD = 421589
+BUILD = 421629
 REGISTRATION_CHAIN_VERIFIED = False
 
 
@@ -29,7 +29,7 @@ def config():
     name = os.environ.get("QFLY_JOIN_CONFIG", "").strip()
     revision = os.environ.get("QFLY_RESOURCE_REVISION", "").strip()
     if not name:
-        raise CaptureRequired("缺少 0.16.7 实测缓存配置；不会回退到历史模板")
+        raise CaptureRequired("缺少 0.16.8 实测缓存配置；不会回退到历史模板")
     if not revision:
         raise CaptureRequired("尚未显式选择当前实际资源版本 QFLY_RESOURCE_REVISION")
     p = Path(name).resolve(strict=True)
@@ -52,7 +52,7 @@ def config():
 
 def load_profile(map_id: int, account_uuid: str, build: int):
     if build != BUILD:
-        raise CaptureRequired("当前 JoinGame codec 仅对应 APK build 421589")
+        raise CaptureRequired("当前 JoinGame codec 仅对应 APK build 421629")
     doc, root, revision = config()
     entry = doc["maps"].get(str(map_id))
     if not isinstance(entry, dict):
@@ -121,7 +121,7 @@ def status_for_account(account_uuid: str, build=BUILD):
     selected = mode()
     result = {"mode": selected, "maps": {}, "registration_chain_verified": False}
     if selected == "legacy":
-        result["message"] = "显式历史模式：不是 0.16.7 联机验证结果"
+        result["message"] = "显式历史模式：不是 0.16.8 联机验证结果"
         return result
     try:
         doc, _, revision = config()

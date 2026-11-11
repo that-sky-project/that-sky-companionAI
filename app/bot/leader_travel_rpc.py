@@ -4,7 +4,7 @@ No I/O, hooks, queue mutation or network activity occurs at import. The caller
 must supply *current* room/PlayerId bindings and independently verify a fresh,
 accepted handhold/carrier relationship. A role is not encoded in this RPC.
 
-libBootloader.so SHA256 0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321:
+libBootloader.so SHA256 0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed:
 serializer 0x1808c2c writes PlayerId, length-prefixed scene, two u32 values.
 PlayerId serializer 0x1f7c218 selects byte/mapped-byte/u32 by stream mode.
 Behavior constructor 0x1809900 initializes the two opaque values to zero;
@@ -21,7 +21,7 @@ import struct
 
 
 CHANGE_LEVEL_WITH_FADE_KEY = 0x4D84A062
-NATIVE_ELF_SHA256 = "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321"
+NATIVE_ELF_SHA256 = "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed"
 _SCENE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z")
 
 

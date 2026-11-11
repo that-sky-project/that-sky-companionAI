@@ -48,8 +48,8 @@ class SceneMigration:
 def migrate_legacy_scene(body,*,target_resource_tag,anonymous_bool_0167,
                          rail_f64_values=None,preserve_legacy_review_only=False,
                          verified_source_sha=OLD_SHA,verified_target_sha=NEW_SHA,
-                         verified_target_build=421589):
-    if verified_source_sha!=OLD_SHA or verified_target_sha!=NEW_SHA or verified_target_build!=421589:
+                         verified_target_build=421629):
+    if verified_source_sha!=OLD_SHA or verified_target_sha!=NEW_SHA or verified_target_build!=421629:
         raise ValueError('migration_version_or_schema_unverified')
     if type(target_resource_tag)is not int or not 0<=target_resource_tag<=65535:
         raise ValueError('migration_explicit_current_resource_tag_required')

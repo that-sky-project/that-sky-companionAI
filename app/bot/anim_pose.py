@@ -1,10 +1,10 @@
-"""0.16.7 Actor 动画字段：按线上礼包（/opt/sky-gift-api/current，v17a）的实际做法重建。
+"""0.16.8 Actor 动画字段：按线上礼包（/opt/sky-gift-api/current，v17a）的实际做法重建。
 
-线上流程：旧格式 Actor 上用 native_take_candle_anim_v1 改动画 → migrate_actor_body_0167 逐 token 转 0.16.7
-→ production_pose_lifecycle_0167 按时间表改当前姿态 code90。转换不改顺序，所以 0.16.7 里同一组字段：
-  当前动画：generation 0x21dd3e4(raw4) · key 0x21dd3f4(raw8) · 起点 0x21dd414(12 位) · mode 0x21dd48c(raw1)
-  历史动画：动画状态块 0x21de7c4 里姿态之后的 [bool][generation raw4][key raw8][起点 9 位]
-  当前姿态 code90：块 0x21de78c 内 0x17159e8（3 位）；“现在”的相位：同块内 0x1715998（12 位）
+线上流程：旧格式 Actor 上用 native_take_candle_anim_v1 改动画 → migrate_actor_body_0167 逐 token 转 0.16.8
+→ production_pose_lifecycle_0167 按时间表改当前姿态 code90。转换不改顺序，所以 0.16.8 里同一组字段：
+  当前动画：generation 0x21ddbe0(raw4) · key 0x21ddbf0(raw8) · 起点 0x21ddc10(12 位) · mode 0x21ddc88(raw1)
+  历史动画：动画状态块 0x21defc0 里姿态之后的 [bool][generation raw4][key raw8][起点 9 位]
+  当前姿态 code90：块 0x21def88 内 0x1715ed0（3 位）；“现在”的相位：同块内 0x1715e80（12 位）
 动画 key = FNV-1a64(动画名)。起点与“现在”同为 [0,3) 秒的 12 位相位码；历史起点是 9 位（=12 位 >> 3）。
 """
 import struct
@@ -17,17 +17,17 @@ from qfsky.long0167.actor_codec.actor_wire_0167 import inspect_actor_wire
 from qfsky.long0167.actor_codec.actor_wire_schema_0167 import PUBLIC_ELF_SHA256 as SHA
 from qfsky.long0167.actor_codec.bit_stream import BitWriter
 
-CURRENT, ANIM_BLOCK = "0x21de78c", "0x21de7c4"
-POSE90, CLOCK, POSE_END = "0x17159e8", "0x1715998", "0x17165ac"
-GEN, KEY, START, MODE = "0x21dd3e4", "0x21dd3f4", "0x21dd414", "0x21dd48c"
+CURRENT, ANIM_BLOCK = "0x21def88", "0x21defc0"
+POSE90, CLOCK, POSE_END = "0x1715ed0", "0x1715e80", "0x1716a94"
+GEN, KEY, START, MODE = "0x21ddbe0", "0x21ddbf0", "0x21ddc10", "0x21ddc88"
 # 朝向（2026-10-30 用路人 0x4f 的 351 个移动帧拟合）：heading = atan2(dx, dz)，0° 朝 +z
-YAW1, YAW2, FWD = "0x21dc9e0", "0x21dca38", "0x21dcb54"
-# 速度：0x21dca9c 三个 8 位 = 127 + 0.9·v（x, y, z，单位/秒）；客户端靠它播走路腿部动作
-VEL = "0x21dca9c"
+YAW1, YAW2, FWD = "0x21dd1dc", "0x21dd234", "0x21dd350"
+# 速度：0x21dd298 三个 8 位 = 127 + 0.9·v（x, y, z，单位/秒）；客户端靠它播走路腿部动作
+VEL = "0x21dd298"
 VEL_SCALE = 0.9
 # 坐椅子（2026-10-30 抓真人坐遇境桌边 4 次）：坐着 = 当前动画 GoSit2 + mode 2（保持），
-# 在座位上 0x21dd024=1，座位号 0x21dd05c（13 位），角色状态 0x21de148 由 2 变 15，入座瞬间 0x21dd034=1
-SEATED, SIT_ENTER, SEAT_ID, AVATAR_STATE = "0x21dd024", "0x21dd034", "0x21dd05c", "0x21de148"
+# 在座位上 0x21dd820=1，座位号 0x21dd858（13 位），角色状态 0x21df140 由 2 变 15，入座瞬间 0x21dd830=1
+SEATED, SIT_ENTER, SEAT_ID, AVATAR_STATE = "0x21dd820", "0x21dd830", "0x21dd858", "0x21df140"
 
 # 线上策略：资源帧 1196..1260，pack_fps 30，播放速率 0.4 → 64/30/0.4 秒；之后 0.9 秒 gate
 TAKE_CANDLE_SECONDS = 64 / 30 / 0.4
@@ -88,8 +88,8 @@ def _locate(o):
             raise ValueError("anim_pose_count_shape")
         if positions:
             loc[name] = tok(positions[0], "bits", width)
-    # 坐标两份：开头 0x21dc858 的 float×3；动画状态块开头 [raw1][地图ID raw4] 之后的 float×3
-    o0 = tok(bounds["0x21dc858"][0], "raw", 4)
+    # 坐标两份：开头 0x21dd054 的 float×3；动画状态块开头 [raw1][地图ID raw4] 之后的 float×3
+    o0 = tok(bounds["0x21dd054"][0], "raw", 4)
     loc.update(ox=o0, oy=o0 + 1, oz=o0 + 2)
     b = next(k for k, s in enumerate(starts) if s >= blk)
     if not (o._tokens[b].kind == "raw" and o._tokens[b].extent == 1 and o._tokens[b + 1].extent == 4
@@ -105,7 +105,7 @@ def _locate(o):
     count = o._tokens[b + 6]
     if count.kind != "bits" or count.extent != 3 or count.value != counts["history_pose_records"]:
         raise ValueError("anim_history_count_shape")
-    end = only("0x21de800")
+    end = only("0x21deffc")
     ends = [p for p in bounds.get(POSE_END, ()) if blk < p < end]
     if len(ends) != count.value:
         raise ValueError("anim_history_pose_count_shape")
@@ -113,7 +113,7 @@ def _locate(o):
     if [(t.kind, t.extent) for t in o._tokens[i:i + 3]] != [("raw", 4), ("raw", 8), ("bits", 9)]:
         raise ValueError("anim_history_shape")
     loc.update(h_gen=i, h_key=i + 1, h_start=i + 2)
-    # 朝向：0x21dc9e0 / 0x21dca38 首个 6 位 = 偏航角；0x21dcb54 三个 5 位 = 前向单位向量 (x, y, z)
+    # 朝向：0x21dd1dc / 0x21dd234 首个 6 位 = 偏航角；0x21dd350 三个 5 位 = 前向单位向量 (x, y, z)
     loc.update(yaw1=tok(only(YAW1), "bits", 6), yaw2=tok(only(YAW2), "bits", 6))
     f0 = tok(only(FWD), "bits", 5)
     loc.update(fx=f0, fy=f0 + 1, fz=f0 + 2)
@@ -164,7 +164,7 @@ def field_info(body):
                         "encoding": "float32_le" if name in FLOATS else "uint_le" if token.kind == "raw" else "uint_bits",
                         "minimum": -10000 if name in FLOATS else 0,
                         "maximum": 10000 if name in FLOATS else FIELD_MAXIMUM.get(name, (1 << width) - 1)}
-    return {"profile": "netease-android-0.16.7-421589", "counts": dict(o._counts), "fields": fields}
+    return {"profile": "netease-android-0.16.8-421629", "counts": dict(o._counts), "fields": fields}
 
 
 def read_origin(body):
@@ -265,7 +265,7 @@ def write(body, **fields):
 
 
 # 姿态块里随走路节律摆动的字段（成对的 f7c/080、6184/6288 疑似左右脚），两份姿态块各一组
-POSE_LABELS = ("0x1715c8c", "0x1715d78", "0x1715e78", "0x1715f7c", "0x1716080", "0x1716184", "0x1716288")
+POSE_LABELS = ("0x1716174", "0x1716260", "0x1716360", "0x1716464", "0x1716568", "0x171666c", "0x1716770")
 
 
 def _label_tokens(o):
@@ -286,7 +286,7 @@ def _label_tokens(o):
 def _scoped_label_tokens(o):
     """Stable (label, current/history, index-within-segment) token addresses."""
     bounds = dict(o._boundaries)
-    cur, history, end = bounds[CURRENT], bounds[ANIM_BLOCK], bounds["0x21de800"]
+    cur, history, end = bounds[CURRENT], bounds[ANIM_BLOCK], bounds["0x21deffc"]
     starts, counters, out = _starts(o), {}, {}
     for (label, _occ), ids in _label_tokens(o).items():
         pos = starts[ids[0]]
@@ -312,7 +312,7 @@ def pose_fields(body, *, scoped=False):
 
 
 _POSE_WARNED = set()
-_POSE_WIDTHS = {label: 6 if label == "0x1715c8c" else 5 if label in ("0x1715f7c", "0x1716080") else 8
+_POSE_WIDTHS = {label: 6 if label == "0x1716174" else 5 if label in ("0x1716464", "0x1716568") else 8
                 for label in POSE_LABELS}
 
 
@@ -420,7 +420,7 @@ def write_pose_fields(body, values, *, legacy_pose_counts=None):
 
 
 def rotate_pose(values, delta_deg):
-    """姿态向量按世界坐标存（路人站着时 0x1715e78 的 x ≈ 127 + 11·sin(朝向)），
+    """姿态向量按世界坐标存（路人站着时 0x1716360 的 x ≈ 127 + 11·sin(朝向)），
     所以换朝向要把每组 (x, y, z) 的水平分量绕 y 轴转 delta 度（heading 定义同 heading_to）。"""
     import math
     if not delta_deg:
@@ -431,7 +431,7 @@ def rotate_pose(values, delta_deg):
         if len(vals) != 3:
             out[key] = vals
             continue
-        bits = {"0x1715c8c": 6, "0x1715f7c": 5, "0x1716080": 5}.get(key.split("|")[0], 8)
+        bits = {"0x1716174": 6, "0x1716464": 5, "0x1716568": 5}.get(key.split("|")[0], 8)
         mid, top = (1 << (bits - 1)) - 1, (1 << bits) - 1      # 8 位中点 127、6 位 31、5 位 15
         x, y, z = vals[0] - mid, vals[1], vals[2] - mid
         nx, nz = x * c + z * s, -x * s + z * c
@@ -543,9 +543,9 @@ class SitEvent:
 
 
 # 双人互动邀请（2026-10-30 抓主人对小光发起背背/牵手）：发起方 Actor 里
-#   0x21dec98 = 邀请类型（关系能力 id：2 牵手、3 拥抱、40 背背…），0x21decb0 = 邀请对象的 slot（raw1）
-OFFER_TYPE, OFFER_TARGET = "0x21dec98", "0x21decb0"
-CANDLE_TARGET = "0x21dcf34"   # 举蜡烛对着谁（目标 slot，raw1；不举为 0）
+#   0x21df494 = 邀请类型（关系能力 id：2 牵手、3 拥抱、40 背背…），0x21df4ac = 邀请对象的 slot（raw1）
+OFFER_TYPE, OFFER_TARGET = "0x21df494", "0x21df4ac"
+CANDLE_TARGET = "0x21dd730"   # 举蜡烛对着谁（目标 slot，raw1；不举为 0）
 
 
 def social_state(body):

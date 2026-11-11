@@ -56,7 +56,7 @@ def prepare_scene_baseline(record,cache,*,account_uuid,scene,resource_revision):
     This validates a cached snapshot, not that the snapshot is live/fresh now.
     """
     profile=validate_record(record,cache,scene=scene,resource_revision=resource_revision,
-                            account_uuid=account_uuid,apk_build=421589)
+                            account_uuid=account_uuid,apk_build=421629)
     full=LevelRecord(struct.unpack_from('<H',cache,0)[0],cache[2],
         struct.unpack_from('<I',cache,4)[0],cache[8],
         struct.unpack_from('<H',cache,10)[0],struct.unpack_from('<H',cache,12)[0],profile.blob)

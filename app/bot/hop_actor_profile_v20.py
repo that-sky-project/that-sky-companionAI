@@ -11,7 +11,7 @@ import math
 import re
 from bisect import bisect_left
 
-CODEC_SHA256 = '0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321'
+CODEC_SHA256 = '0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed'
 CAPTURE_PINS = (
     '4f5f754f09061066f2c90855a196ed2ba4c8d3caf6d599a79a163fd6f9ca791c',
     '11180f2f9d8b41f78e31d0cc67574cc2ed000a15d9851f30316c4c6a6b786479',
@@ -138,12 +138,12 @@ def _source_identity(body, observation, anim_pose):
     starts = anim_pose._starts(observation)
     masked = bytearray(body)
     for label, position in observation._boundaries:
-        if label not in ('0x1715998', '0x21dc8cc', '0x21de7c4'):
+        if label not in ('0x1715e80', '0x21dd0c8', '0x21defc0'):
             continue
         i = bisect_left(starts, position)
         _need(i < len(starts), 'source_dynamic_field_missing')
         token = observation._tokens[i]
-        clock = label == '0x1715998'
+        clock = label == '0x1715e80'
         _need((token.kind == 'bits' and token.extent == 12) if clock else
               (token.kind == 'raw' and token.extent == 1), 'source_dynamic_field_shape')
         for bit in range(starts[i], starts[i] + (12 if clock else 8)):
@@ -179,16 +179,16 @@ def _verified_write(body, values, anim_pose, before, loc):
     return patched, len(changed)
 
 
-# Observed widths are fixed to the verified 0.16.7 codec. Only current POSE
+# Observed widths are fixed to the verified 0.16.8 codec. Only current POSE
 # control fields are selected; same-label history fields are deliberately excluded.
-_RAW_AERIAL_WIDTHS={'0x21dcc10':1,'0x21dd4cc':5,'0x1f80070':8,'0x1715a60':3,'0x1715a88':3}
+_RAW_AERIAL_WIDTHS={'0x21dd40c':1,'0x21ddcc8':5,'0x1f80844':8,'0x1715f48':3,'0x1715f70':3}
 def _aerial_locations(o,a):
     starts=a._starts(o);bounds=dict(o._boundaries);out={}
     for label,width in _RAW_AERIAL_WIDTHS.items():
-        positions=[pos for lab,pos in o._boundaries if lab==label and (label not in ('0x1715a60','0x1715a88') or bounds[a.CURRENT]<=pos<bounds[a.ANIM_BLOCK])]
+        positions=[pos for lab,pos in o._boundaries if lab==label and (label not in ('0x1715f48','0x1715f70') or bounds[a.CURRENT]<=pos<bounds[a.ANIM_BLOCK])]
         _need(len(positions)==1,'aerial_raw_label_scope')
         index=bisect_left(starts,positions[0]);token=o._tokens[index]
-        _need(starts[index]==(((positions[0]+7)//8)*8 if label=='0x1f80070' else positions[0]) and ((token.kind=='bits' and token.extent==width) or (label=='0x1f80070' and token.kind=='raw' and token.extent==1)),'aerial_raw_shape')
+        _need(starts[index]==(((positions[0]+7)//8)*8 if label=='0x1f80844' else positions[0]) and ((token.kind=='bits' and token.extent==width) or (label=='0x1f80844' and token.kind=='raw' and token.extent==1)),'aerial_raw_shape')
         out[label]=(index,width)
     return out
 
@@ -366,14 +366,14 @@ class HopActorEncoder:
             raw,pose,code90=copy.deepcopy(baseline)
             if approach and phase=='approach':
                 _need(self.walk_clip is not None and type(self.walk_force) is dict,'drop_walk_renderer_required')
-                _need(self.walk_force=={'0x21dcc10':1,'0x21dd4cc':31,'0x1715a60':0,'0x1715a88':0},'walk_force_evidence_mismatch')
+                _need(self.walk_force=={'0x21dd40c':1,'0x21ddcc8':31,'0x1715f48':0,'0x1715f70':0},'walk_force_evidence_mismatch')
                 replay=a.normalize_pose_values(self.walk_clip.at(sample.total_step*motion._proof.dt),legacy_pose_counts=(1,1))
                 pose={k:v for k,v in a.rotate_pose(replay,heading-self.walk_clip.heading).items() if '|current|' in k}
                 _need(bool(pose),'drop_walk_current_pose_required');raw.update(self.walk_force)
                 # Ground renderer carries no action key; do not start the fall key.
                 values.update(zip(('key','gen','start'),owned_stamp))
             elif aerial=='flap_v22' and not grounded_phase:
-                raw.update({'0x21dcc10':0,'0x21dd4cc':31,'0x1f80070':8,'0x1715a60':0,'0x1715a88':0})
+                raw.update({'0x21dd40c':0,'0x21ddcc8':31,'0x1f80844':8,'0x1715f48':0,'0x1715f70':0})
                 code90=1 if self.native_state_name!='FlapPV2' else 0
             overlay=(raw,pose,code90)
         patched, changed = _verified_write(body, values, a, before, loc)

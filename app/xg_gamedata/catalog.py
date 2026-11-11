@@ -298,7 +298,7 @@ def build(apk: Path, account_id: str, data: Path, scene_inputs: str | None,
     profiles = read_json(Path(xg.PROFILES_JSON), {}) or {}
     if not isinstance(profiles.get("maps"), dict):
         raise GameDataError("本机连接配置缺失/损坏：%s" % xg.PROFILES_JSON, "profiles_config")
-    revision = profiles.get("resource_revision") or "V75885"
+    revision = profiles.get("resource_revision") or "V76318"
     progress.emit("找这个号的遇境真录…", done=1)
     if donor_name:
         donor = _read_donor(xg, donor_name, expected_uuid=uuid)

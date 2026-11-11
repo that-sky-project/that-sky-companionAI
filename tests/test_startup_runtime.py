@@ -23,7 +23,7 @@ def function(path,name,namespace):
 class PlatformValidationTests(unittest.TestCase):
     def functions(self):
         for part in ('qfsky','escort-v31-server/qfsky'):
-            namespace={'BUILD':421589,'current_join':SimpleNamespace(mode=lambda:'current'),
+            namespace={'BUILD':421629,'current_join':SimpleNamespace(mode=lambda:'current'),
                        'uuid_raw':lambda s:uuid.UUID(s).bytes,'netcfg':SimpleNamespace(enabled=lambda:False),
                        'os':SimpleNamespace(environ={'QFLY_LOCAL_NETWORK_MODE':'enabled'})}
             yield function(ROOT/'app'/part/'connection0167.py','_validate_account',namespace)
@@ -37,25 +37,25 @@ class PlatformValidationTests(unittest.TestCase):
         for validate in self.functions():
             for platform in ('ios','android'):
                 row=self.account(platform);before=copy.deepcopy(row)
-                validate(row,421589);self.assertEqual(row,before)
+                validate(row,421629);self.assertEqual(row,before)
 
     def test_unknown_platform_and_channel_still_rejected(self):
         for validate in self.functions():
             for fields in ({'platform':'pc'},{'platform':''},{'channel':'other'}):
-                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421589)
+                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421629)
 
     def test_build_and_ownership_and_session_still_checked(self):
         for validate in self.functions():
             with self.assertRaises(ValueError):validate(self.account('ios'),999999)
             for fields in ({'renew':{}},{'renew':{'broker_account_id':'other'}},{'user_uuid':'bad'},{'session':'bad'},{'session2':''}):
-                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421589)
+                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421629)
 
     def test_network_offline_and_proxy_guard_still_checked(self):
         for validate in self.functions():
             for fields in ({'proxy_id':'other'},{'proxy_mode':'auto'},{'proxy_mode':'manual'}):
-                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421589)
+                with self.assertRaises(ValueError):validate({**self.account('ios'),**fields},421629)
             validate.__globals__['os'].environ['QFLY_LOCAL_NETWORK_MODE']='offline'
-            with self.assertRaises(ValueError):validate(self.account('ios'),421589)
+            with self.assertRaises(ValueError):validate(self.account('ios'),421629)
 
 
 class StartupFailureTests(unittest.TestCase):
@@ -75,11 +75,11 @@ class StartupFailureTests(unittest.TestCase):
         return 'Traceback (most recent call last):\n  File "fixture.py", line 1\nValueError: '+message+'\n'
 
     def test_legacy_mixed_log_reports_current_platform_not_old_version(self):
-        self.runner.write_text(self.write_trace('仅支持当前 0.16.7 / 421589 模式')+self.write_trace('当前已验证入口为网易安卓渠道'),encoding='utf-8')
+        self.runner.write_text(self.write_trace('仅支持当前 0.16.8 / 421629 模式')+self.write_trace('当前已验证入口为网易安卓渠道'),encoding='utf-8')
         self.assertEqual(self.failure()['code'],'unsupported_account_platform')
 
     def test_new_attempt_reads_only_own_runner_bytes(self):
-        old=self.write_trace('仅支持当前 0.16.7 / 421589 模式');new=self.write_trace('session_expired')
+        old=self.write_trace('仅支持当前 0.16.8 / 421629 模式');new=self.write_trace('session_expired')
         self.runner.write_text(old+new,encoding='utf-8');self.write_attempt(runner_log_offset=len(old.encode()))
         self.assertEqual(self.failure()['code'],'login_expired')
 
@@ -93,13 +93,13 @@ class StartupFailureTests(unittest.TestCase):
         self.assertEqual(self.failure()['code'],'account_capture_missing')
 
     def test_unchanged_runner_file_adds_no_stale_failure(self):
-        old=self.write_trace('仅支持当前 0.16.7 / 421589 模式')
+        old=self.write_trace('仅支持当前 0.16.8 / 421629 模式')
         self.runner.write_text(old,encoding='utf-8');self.write_attempt(runner_log_offset=len(old.encode()))
         self.assertEqual(self.failure()['code'],'startup_failed')
 
     def test_old_attempt_or_other_account_does_not_leak(self):
         self.write_attempt(account='different');self.assertIsNone(self.failure())
-        self.write_attempt();self.runner.write_text(self.write_trace('仅支持当前 0.16.7 / 421589 模式'),encoding='utf-8')
+        self.write_attempt();self.runner.write_text(self.write_trace('仅支持当前 0.16.8 / 421629 模式'),encoding='utf-8')
         os.utime(self.runner,(1,1));self.assertEqual(self.failure()['code'],'startup_failed')
 
     def test_good_launch_is_not_an_error_even_with_old_trace(self):

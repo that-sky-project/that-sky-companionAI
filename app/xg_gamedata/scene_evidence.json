@@ -1,6 +1,6 @@
 {
- "apk_archive_directory_sha256": "b26db74613f606fd60b942ff58f00d0c41b12a6d83303228a1143d683adefb14",
- "apk_build": 421589,
+ "apk_archive_directory_sha256": "b3bab17209ddacc225daa2eef932eefc6230ebaf7102331da523b7d95fc87555",
+ "apk_build": 421629,
  "baseline_semantics": "real native constructor, NOT loaded map state",
  "baseline_sha256": "9050b49846b8a99e9a6498a17a0ebffb010fbfc7072bb3c00e13410a48e09642",
  "cache_size": 8208,
@@ -985,14 +985,14 @@
  ],
  "level_hash_source": "ordered TGCL types with pinned native alias mapping; no external PatchLevels asserted",
  "native_record_size": 25536,
- "native_sha256": "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321",
- "note": "版本钉住证据：只有哈希/计数/名称，没有 scene/cache/native 载荷。运行时用于核对 APK 派生值；scene/cache 仍由用户 APK 现场模拟生成。",
- "provenance_resource_revision_note": "APK V75506; not asserted equal to all runtime V75885 resources",
+ "native_sha256": "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed",
+ "note": "版本钉住证据：只有哈希/计数/名称，没有 scene/cache/native 载荷。运行时用于核对 APK 派生值；scene/cache 仍由用户 APK 现场模拟生成。；T27 升级到 0.16.8/421629。",
+ "provenance_resource_revision_note": "APK V76318; runtime capture must use V76318",
  "registry_absent_but_t17_known": [
   "AvatarTransformIntoAudienceBarnAnimal"
  ],
  "registry_sha256_of_source": "f093cb2a46efe5006cc7ec4146e77beea011cdeca11cb844fcdc34de2a5d16f1",
- "resource_revision": "apk-v75506-421589",
+ "resource_revision": "apk-v76318-421629",
  "rpc_hash16": 49307,
  "rpc_hash32": 1725474371,
  "rpc_hash_source": "3216 native descriptors,212 inherited RPC types sorted strcmp",
@@ -1018,7 +1018,8 @@
     25536
    ],
    "object_count": 261,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3463762797
   },
   "AR_WheatField": {
    "finite_group_counts": {
@@ -1041,7 +1042,8 @@
     25536
    ],
    "object_count": 151,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 112616686
   },
   "CandleSpace": {
    "finite_group_counts": {
@@ -1052,11 +1054,11 @@
    "label": "遇境",
    "map_id": 3526133726,
    "member": "assets/Data/Levels/CandleSpace/Objects.level.bin",
-   "member_bytes": 1583890,
-   "member_sha256": "c7e03d8eea90617bc1bdf23774253bea07c6002aabbc091790fa17b42af63c8c",
+   "member_bytes": 1584163,
+   "member_sha256": "9eef98b1ab519b5c34545093a213fa16731569bbbbb96e716b72225c101cb069",
    "native_record_comparison": true,
    "netversion_u16": [
-    36851,
+    63789,
     49307,
     23536,
     0,
@@ -1064,7 +1066,8 @@
     25536
    ],
    "object_count": 12545,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3526133726
   },
   "CandleSpaceEnd": {
    "finite_group_counts": {
@@ -1089,7 +1092,8 @@
    "object_count": 2301,
    "type_alias_applications": {
     "LensFlair": 8
-   }
+   },
+   "catalog_level_id": 2251284635
   },
   "Dawn": {
    "finite_group_counts": {
@@ -1114,7 +1118,8 @@
    "object_count": 14651,
    "type_alias_applications": {
     "LensFlair": 3
-   }
+   },
+   "catalog_level_id": 1649439303
   },
   "DawnCave": {
    "finite_group_counts": {
@@ -1137,7 +1142,8 @@
     25536
    ],
    "object_count": 3921,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 748712866
   },
   "Dawn_TrialsAir": {
    "finite_group_counts": {
@@ -1160,7 +1166,8 @@
     25536
    ],
    "object_count": 1614,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2050064391
   },
   "Dawn_TrialsEarth": {
    "finite_group_counts": {
@@ -1183,7 +1190,8 @@
     25536
    ],
    "object_count": 3567,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1887730855
   },
   "Dawn_TrialsFire": {
    "finite_group_counts": {
@@ -1206,7 +1214,8 @@
     25536
    ],
    "object_count": 1596,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1241316521
   },
   "Dawn_TrialsWater": {
    "finite_group_counts": {
@@ -1231,7 +1240,8 @@
    "object_count": 1361,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3884142720
   },
   "DayEnd": {
    "finite_group_counts": {
@@ -1256,7 +1266,8 @@
    "object_count": 1942,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1190972738
   },
   "DayHubCave": {
    "finite_group_counts": {
@@ -1279,7 +1290,8 @@
     25536
    ],
    "object_count": 10593,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2394719185
   },
   "Dusk": {
    "finite_group_counts": {
@@ -1302,7 +1314,8 @@
     25536
    ],
    "object_count": 3114,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1147491976
   },
   "DuskEnd": {
    "finite_group_counts": {
@@ -1325,7 +1338,8 @@
     25536
    ],
    "object_count": 1384,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 4158956653
   },
   "DuskEnd_Past": {
    "finite_group_counts": {
@@ -1348,7 +1362,8 @@
     25536
    ],
    "object_count": 3641,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 371156238
   },
   "DuskGraveyard": {
    "finite_group_counts": {
@@ -1373,7 +1388,8 @@
    "object_count": 4127,
    "type_alias_applications": {
     "LensFlair": 2
-   }
+   },
+   "catalog_level_id": 864432821
   },
   "DuskMid": {
    "finite_group_counts": {
@@ -1398,7 +1414,8 @@
    "object_count": 4131,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1597085778
   },
   "DuskMid_Past": {
    "finite_group_counts": {
@@ -1421,7 +1438,8 @@
     25536
    ],
    "object_count": 6256,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1561318939
   },
   "DuskMid_PastMarket": {
    "finite_group_counts": {
@@ -1444,7 +1462,8 @@
     25536
    ],
    "object_count": 7577,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 961583455
   },
   "DuskOasis": {
    "finite_group_counts": {
@@ -1469,7 +1488,8 @@
    "object_count": 8592,
    "type_alias_applications": {
     "LensFlair": 10
-   }
+   },
+   "catalog_level_id": 170656205
   },
   "DuskStart": {
    "finite_group_counts": {
@@ -1494,7 +1514,8 @@
    "object_count": 3026,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 817373972
   },
   "Dusk_CrabField": {
    "finite_group_counts": {
@@ -1517,7 +1538,8 @@
     25536
    ],
    "object_count": 4005,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2650921869
   },
   "Dusk_HiddenTemple": {
    "finite_group_counts": {
@@ -1540,7 +1562,8 @@
     25536
    ],
    "object_count": 2168,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1152668600
   },
   "Dusk_PearlIsland": {
    "finite_group_counts": {
@@ -1563,7 +1586,8 @@
     25536
    ],
    "object_count": 6852,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 607516458
   },
   "Dusk_PearlSea": {
    "finite_group_counts": {
@@ -1574,11 +1598,11 @@
    "label": "珍珠海域",
    "map_id": 1058995818,
    "member": "assets/Data/Levels/Dusk_PearlSea/Objects.level.bin",
-   "member_bytes": 1290612,
-   "member_sha256": "40d67fa5e3d4af0b20082c85bfe811fb8f74c9048b9798dedc95f25eefbe4a08",
+   "member_bytes": 1290568,
+   "member_sha256": "9485675e675814ef736c742dd49a7b68f127e80e788ecd6cdadacc2dee451cd4",
    "native_record_comparison": false,
    "netversion_u16": [
-    40550,
+    48196,
     49307,
     23536,
     0,
@@ -1586,7 +1610,8 @@
     25536
    ],
    "object_count": 11772,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1058995818
   },
   "Dusk_Triangle": {
    "finite_group_counts": {
@@ -1611,7 +1636,8 @@
    "object_count": 10548,
    "type_alias_applications": {
     "LensFlair": 5
-   }
+   },
+   "catalog_level_id": 4070111637
   },
   "Dusk_TriangleEnd": {
    "finite_group_counts": {
@@ -1636,7 +1662,8 @@
    "object_count": 989,
    "type_alias_applications": {
     "LensFlair": 3
-   }
+   },
+   "catalog_level_id": 3516048122
   },
   "Event_Arr_ExhaleInhale": {
    "finite_group_counts": {
@@ -1661,7 +1688,8 @@
    "object_count": 1202,
    "type_alias_applications": {
     "LensFlair": 5
-   }
+   },
+   "catalog_level_id": 2779731386
   },
   "Event_Arr_EyesOfAChild": {
    "finite_group_counts": {
@@ -1686,7 +1714,8 @@
    "object_count": 1094,
    "type_alias_applications": {
     "LensFlair": 12
-   }
+   },
+   "catalog_level_id": 47024056
   },
   "Event_Arr_Runaway": {
    "finite_group_counts": {
@@ -1711,7 +1740,8 @@
    "object_count": 1876,
    "type_alias_applications": {
     "LensFlair": 6
-   }
+   },
+   "catalog_level_id": 4011385311
   },
   "Event_Arr_SoftInside": {
    "finite_group_counts": {
@@ -1736,7 +1766,8 @@
    "object_count": 1951,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1661095040
   },
   "Event_Arr_TheSeed": {
    "finite_group_counts": {
@@ -1761,7 +1792,8 @@
    "object_count": 2017,
    "type_alias_applications": {
     "LensFlair": 6
-   }
+   },
+   "catalog_level_id": 2093785354
   },
   "Event_Arr_Warrior": {
    "finite_group_counts": {
@@ -1786,7 +1818,8 @@
    "object_count": 1909,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3530028462
   },
   "Event_Cinema": {
    "finite_group_counts": {
@@ -1811,7 +1844,8 @@
    "object_count": 12305,
    "type_alias_applications": {
     "LensFlair": 5
-   }
+   },
+   "catalog_level_id": 417578099
   },
   "Event_DaysOfMischief": {
    "finite_group_counts": {
@@ -1834,7 +1868,8 @@
     25536
    ],
    "object_count": 19208,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3082753918
   },
   "Event_DaysOfMischief_Escape": {
    "finite_group_counts": {
@@ -1857,7 +1892,8 @@
     25536
    ],
    "object_count": 1276,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2418094228
   },
   "Event_DaysOfMoonlight_HugeMoon": {
    "finite_group_counts": {
@@ -1880,7 +1916,8 @@
     25536
    ],
    "object_count": 290,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3452301396
   },
   "Event_HidenSeek_SnowVillage": {
    "finite_group_counts": {
@@ -1903,7 +1940,8 @@
     25536
    ],
    "object_count": 1691,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3530471012
   },
   "Event_Personality": {
    "finite_group_counts": {
@@ -1928,7 +1966,8 @@
    "object_count": 7744,
    "type_alias_applications": {
     "LensFlair": 11
-   }
+   },
+   "catalog_level_id": 2920756220
   },
   "Event_WerewolfGame": {
    "finite_group_counts": {
@@ -1951,7 +1990,8 @@
     25536
    ],
    "object_count": 300,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1737684623
   },
   "MainStreet": {
    "finite_group_counts": {
@@ -1962,11 +2002,11 @@
    "label": "小镇",
    "map_id": 1509719447,
    "member": "assets/Data/Levels/MainStreet/Objects.level.bin",
-   "member_bytes": 3637972,
-   "member_sha256": "0b6e212a30040aac319750d05fdf6429feb810d151396ac78a51c2790f209bbf",
+   "member_bytes": 3638245,
+   "member_sha256": "0f075ca491827fcd506ad3b4acfe916cbf1ddbfa9f52fe0afc97e394c0f6cc1d",
    "native_record_comparison": true,
    "netversion_u16": [
-    1568,
+    31696,
     49307,
     23536,
     0,
@@ -1976,7 +2016,8 @@
    "object_count": 30336,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1509719447
   },
   "MainStreetFlyingIntro": {
    "finite_group_counts": {
@@ -2001,7 +2042,8 @@
    "object_count": 1751,
    "type_alias_applications": {
     "LensFlair": 5
-   }
+   },
+   "catalog_level_id": 1761965310
   },
   "MainStreet_Apartment": {
    "finite_group_counts": {
@@ -2024,7 +2066,8 @@
     25536
    ],
    "object_count": 2080,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3905084854
   },
   "MainStreet_Cafe": {
    "finite_group_counts": {
@@ -2047,7 +2090,8 @@
     25536
    ],
    "object_count": 4547,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1444818677
   },
   "MainStreet_Cafe_Wonderland": {
    "finite_group_counts": {
@@ -2070,7 +2114,8 @@
     25536
    ],
    "object_count": 7219,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1104763408
   },
   "MainStreet_ConcertHall": {
    "finite_group_counts": {
@@ -2093,7 +2138,8 @@
     25536
    ],
    "object_count": 8148,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1559613961
   },
   "MainStreet_FunArmada": {
    "finite_group_counts": {
@@ -2116,7 +2162,8 @@
     25536
    ],
    "object_count": 8349,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3743646255
   },
   "MainStreet_ShopOutfits": {
    "finite_group_counts": {
@@ -2127,11 +2174,11 @@
    "label": "服装店",
    "map_id": 1563891948,
    "member": "assets/Data/Levels/MainStreet_ShopOutfits/Objects.level.bin",
-   "member_bytes": 1296765,
-   "member_sha256": "f12ae0e8812234458995eee20de362ba557954b49e988918e2f1015f84d35882",
+   "member_bytes": 1298115,
+   "member_sha256": "18c7f08e97fbb65968aa2593f8df840136c7f43ed927c0f7d54e8bd2d2934a2b",
    "native_record_comparison": false,
    "netversion_u16": [
-    63793,
+    21372,
     49307,
     23536,
     0,
@@ -2139,7 +2186,8 @@
     25536
    ],
    "object_count": 8914,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1563891948
   },
   "MainStreet_ShopProps": {
    "finite_group_counts": {
@@ -2162,7 +2210,8 @@
     25536
    ],
    "object_count": 2845,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 372393162
   },
   "MainStreet_ShopSpells": {
    "finite_group_counts": {
@@ -2187,7 +2236,8 @@
    "object_count": 2208,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 4044469303
   },
   "MainStreet_Soundbath": {
    "finite_group_counts": {
@@ -2210,7 +2260,8 @@
     25536
    ],
    "object_count": 2323,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3368878998
   },
   "MainStreet_StorySpace": {
    "finite_group_counts": {
@@ -2233,7 +2284,8 @@
     25536
    ],
    "object_count": 449,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1936276829
   },
   "Nest_Night_GO_Town": {
    "finite_group_counts": {
@@ -2256,7 +2308,8 @@
     25536
    ],
    "object_count": 1269,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1274288158
   },
   "Night": {
    "finite_group_counts": {
@@ -2279,7 +2332,8 @@
     25536
    ],
    "object_count": 7492,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2358907137
   },
   "Night2": {
    "finite_group_counts": {
@@ -2302,7 +2356,8 @@
     25536
    ],
    "object_count": 4194,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2307461961
   },
   "NightArchive": {
    "finite_group_counts": {
@@ -2325,7 +2380,8 @@
     25536
    ],
    "object_count": 6715,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2518601
   },
   "NightDesert": {
    "finite_group_counts": {
@@ -2350,7 +2406,8 @@
    "object_count": 10319,
    "type_alias_applications": {
     "LensFlair": 3
-   }
+   },
+   "catalog_level_id": 2060214456
   },
   "NightDesert_Beach": {
    "finite_group_counts": {
@@ -2375,7 +2432,8 @@
    "object_count": 5907,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3051518728
   },
   "NightDesert_Planets": {
    "finite_group_counts": {
@@ -2398,7 +2456,8 @@
     25536
    ],
    "object_count": 1168,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2824771136
   },
   "NightEnd": {
    "finite_group_counts": {
@@ -2421,7 +2480,8 @@
     25536
    ],
    "object_count": 1205,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2267185542
   },
   "Night_GO_City": {
    "finite_group_counts": {
@@ -2444,7 +2504,8 @@
     25536
    ],
    "object_count": 4662,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2458626594
   },
   "Night_GO_Farm": {
    "finite_group_counts": {
@@ -2467,7 +2528,8 @@
     25536
    ],
    "object_count": 4048,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2611321369
   },
   "Night_GO_Field": {
    "finite_group_counts": {
@@ -2490,7 +2552,8 @@
     25536
    ],
    "object_count": 2556,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1665365959
   },
   "Night_GO_Gallery": {
    "finite_group_counts": {
@@ -2513,7 +2576,8 @@
     25536
    ],
    "object_count": 7275,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 98108829
   },
   "Night_GO_Island": {
    "finite_group_counts": {
@@ -2536,7 +2600,8 @@
     25536
    ],
    "object_count": 1818,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 996052172
   },
   "Night_GO_Town": {
    "finite_group_counts": {
@@ -2559,7 +2624,8 @@
     25536
    ],
    "object_count": 6019,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3092325157
   },
   "Night_GO_Tree": {
    "finite_group_counts": {
@@ -2582,7 +2648,8 @@
     25536
    ],
    "object_count": 5194,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 4023907509
   },
   "Night_IPHallway": {
    "finite_group_counts": {
@@ -2605,7 +2672,8 @@
     25536
    ],
    "object_count": 1209,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 530831471
   },
   "Night_InfiniteDesert": {
    "finite_group_counts": {
@@ -2630,7 +2698,8 @@
    "object_count": 1771,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 214074919
   },
   "Night_JarCave": {
    "finite_group_counts": {
@@ -2653,7 +2722,8 @@
     25536
    ],
    "object_count": 713,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3258961934
   },
   "Night_Jumble": {
    "finite_group_counts": {
@@ -2676,7 +2746,8 @@
     25536
    ],
    "object_count": 7476,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 4182564783
   },
   "Night_PaintedWorld": {
    "finite_group_counts": {
@@ -2701,7 +2772,8 @@
    "object_count": 15859,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1694829989
   },
   "Night_Shelter": {
    "finite_group_counts": {
@@ -2726,7 +2798,8 @@
    "object_count": 7812,
    "type_alias_applications": {
     "LensFlair": 29
-   }
+   },
+   "catalog_level_id": 2899790755
   },
   "Night_StoryBook": {
    "finite_group_counts": {
@@ -2749,7 +2822,8 @@
     25536
    ],
    "object_count": 1728,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3803142938
   },
   "Night_ValleyForest": {
    "finite_group_counts": {
@@ -2772,7 +2846,8 @@
     25536
    ],
    "object_count": 5672,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1801452336
   },
   "Night_ValleyHouse": {
    "finite_group_counts": {
@@ -2797,7 +2872,8 @@
    "object_count": 2329,
    "type_alias_applications": {
     "LensFlair": 4
-   }
+   },
+   "catalog_level_id": 217257707
   },
   "Night_ValleyHouseSky": {
    "finite_group_counts": {
@@ -2820,7 +2896,8 @@
     25536
    ],
    "object_count": 1267,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1185708672
   },
   "Night_Workshop": {
    "finite_group_counts": {
@@ -2843,7 +2920,8 @@
     25536
    ],
    "object_count": 4582,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3203226771
   },
   "Nintendo_CandleSpace": {
    "finite_group_counts": {
@@ -2866,7 +2944,8 @@
     25536
    ],
    "object_count": 1466,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2199862534
   },
   "OrbitEnd": {
    "finite_group_counts": {
@@ -2891,7 +2970,8 @@
    "object_count": 1539,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 567986524
   },
   "OrbitMid": {
    "finite_group_counts": {
@@ -2916,7 +2996,8 @@
    "object_count": 2586,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3437135515
   },
   "Prairie_ButterflyFields": {
    "finite_group_counts": {
@@ -2941,7 +3022,8 @@
    "object_count": 9054,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 2477345666
   },
   "Prairie_Cave": {
    "finite_group_counts": {
@@ -2966,7 +3048,8 @@
    "object_count": 6265,
    "type_alias_applications": {
     "LensFlair": 3
-   }
+   },
+   "catalog_level_id": 3244931597
   },
   "Prairie_Island": {
    "finite_group_counts": {
@@ -2989,7 +3072,8 @@
     25536
    ],
    "object_count": 20798,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3057325709
   },
   "Prairie_NestAndKeeper": {
    "finite_group_counts": {
@@ -3014,7 +3098,8 @@
    "object_count": 4788,
    "type_alias_applications": {
     "LensFlair": 2
-   }
+   },
+   "catalog_level_id": 312004957
   },
   "Prairie_Village": {
    "finite_group_counts": {
@@ -3039,7 +3124,8 @@
    "object_count": 14159,
    "type_alias_applications": {
     "LensFlair": 2
-   }
+   },
+   "catalog_level_id": 2350532176
   },
   "Prairie_WildLifePark": {
    "finite_group_counts": {
@@ -3050,11 +3136,11 @@
    "label": "云峰",
    "map_id": 3429122502,
    "member": "assets/Data/Levels/Prairie_WildLifePark/Objects.level.bin",
-   "member_bytes": 2000665,
-   "member_sha256": "89b4d3d8797c88e962a716ce15fb087fe0d21f2aa739a131956a24a178740a4a",
+   "member_bytes": 2013194,
+   "member_sha256": "e6bee2b0ebc2c406ef3e35f4db75d7deb27bda905afe6d81ac38b7e422f58bc2",
    "native_record_comparison": false,
    "netversion_u16": [
-    49588,
+    30884,
     49307,
     23536,
     0,
@@ -3062,7 +3148,8 @@
     25536
    ],
    "object_count": 16024,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3429122502
   },
   "Rain": {
    "finite_group_counts": {
@@ -3087,7 +3174,8 @@
    "object_count": 8066,
    "type_alias_applications": {
     "LensFlair": 2
-   }
+   },
+   "catalog_level_id": 164626931
   },
   "RainEnd": {
    "finite_group_counts": {
@@ -3110,7 +3198,8 @@
     25536
    ],
    "object_count": 2959,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 128844448
   },
   "RainForest": {
    "finite_group_counts": {
@@ -3133,7 +3222,8 @@
     25536
    ],
    "object_count": 9703,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2839585646
   },
   "RainMid": {
    "finite_group_counts": {
@@ -3156,7 +3246,8 @@
     25536
    ],
    "object_count": 8864,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 2159642775
   },
   "RainShelter": {
    "finite_group_counts": {
@@ -3181,7 +3272,8 @@
    "object_count": 12751,
    "type_alias_applications": {
     "LensFlair": 5
-   }
+   },
+   "catalog_level_id": 2720691892
   },
   "Rain_BaseCamp": {
    "finite_group_counts": {
@@ -3206,7 +3298,8 @@
    "object_count": 4186,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3317260872
   },
   "Rain_BlueBirdTheater": {
    "finite_group_counts": {
@@ -3231,7 +3324,8 @@
    "object_count": 4527,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3730271824
   },
   "Rain_Cave": {
    "finite_group_counts": {
@@ -3254,7 +3348,8 @@
     25536
    ],
    "object_count": 5750,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 4133595729
   },
   "Season24Void1": {
    "finite_group_counts": {
@@ -3279,7 +3374,8 @@
    "object_count": 5890,
    "type_alias_applications": {
     "LensFlair": 3
-   }
+   },
+   "catalog_level_id": 3667302771
   },
   "Skyway": {
    "finite_group_counts": {
@@ -3304,7 +3400,8 @@
    "object_count": 11809,
    "type_alias_applications": {
     "LensFlair": 2
-   }
+   },
+   "catalog_level_id": 2081768701
   },
   "Storm": {
    "finite_group_counts": {
@@ -3329,7 +3426,8 @@
    "object_count": 3288,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1705189686
   },
   "StormEnd": {
    "finite_group_counts": {
@@ -3354,7 +3452,8 @@
    "object_count": 1953,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 3479786579
   },
   "StormEvent_VoidSpace": {
    "finite_group_counts": {
@@ -3379,7 +3478,8 @@
    "object_count": 663,
    "type_alias_applications": {
     "LensFlair": 4
-   }
+   },
+   "catalog_level_id": 3928396665
   },
   "StormStart": {
    "finite_group_counts": {
@@ -3402,7 +3502,8 @@
     25536
    ],
    "object_count": 3474,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3110721718
   },
   "Sunset": {
    "finite_group_counts": {
@@ -3427,7 +3528,8 @@
    "object_count": 7597,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 1638008359
   },
   "SunsetColosseum": {
    "finite_group_counts": {
@@ -3452,7 +3554,8 @@
    "object_count": 18389,
    "type_alias_applications": {
     "LensFlair": 13
-   }
+   },
+   "catalog_level_id": 263580627
   },
   "SunsetEnd": {
    "finite_group_counts": {
@@ -3477,7 +3580,8 @@
    "object_count": 2141,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 2360310676
   },
   "SunsetEnd2": {
    "finite_group_counts": {
@@ -3502,7 +3606,8 @@
    "object_count": 2933,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 507487826
   },
   "SunsetRace": {
    "finite_group_counts": {
@@ -3527,7 +3632,8 @@
    "object_count": 2113,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 571720490
   },
   "SunsetVillage": {
    "finite_group_counts": {
@@ -3550,7 +3656,8 @@
     25536
    ],
    "object_count": 12967,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1759178769
   },
   "SunsetVillage_MusicShop": {
    "finite_group_counts": {
@@ -3573,7 +3680,8 @@
     25536
    ],
    "object_count": 4467,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1323747701
   },
   "Sunset_Citadel": {
    "finite_group_counts": {
@@ -3598,7 +3706,8 @@
    "object_count": 6314,
    "type_alias_applications": {
     "LensFlair": 1
-   }
+   },
+   "catalog_level_id": 2179549040
   },
   "Sunset_FlyRace": {
    "finite_group_counts": {
@@ -3621,7 +3730,8 @@
     25536
    ],
    "object_count": 2053,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1844499196
   },
   "Sunset_Theater": {
    "finite_group_counts": {
@@ -3644,7 +3754,8 @@
     25536
    ],
    "object_count": 10746,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1612139937
   },
   "Sunset_YetiPark": {
    "finite_group_counts": {
@@ -3669,7 +3780,8 @@
    "object_count": 5160,
    "type_alias_applications": {
     "LensFlair": 8
-   }
+   },
+   "catalog_level_id": 649101397
   },
   "TGCOffice": {
    "finite_group_counts": {
@@ -3694,7 +3806,8 @@
    "object_count": 9858,
    "type_alias_applications": {
     "LensFlair": 4
-   }
+   },
+   "catalog_level_id": 295816905
   },
   "UndergroundOffice": {
    "finite_group_counts": {
@@ -3717,7 +3830,8 @@
     25536
    ],
    "object_count": 1139,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 3493360294
   },
   "VoidSharedSpace": {
    "finite_group_counts": {
@@ -3740,7 +3854,8 @@
     25536
    ],
    "object_count": 101,
-   "type_alias_applications": {}
+   "type_alias_applications": {},
+   "catalog_level_id": 1482972144
   }
  },
  "schema": "xg-scene-inputs-evidence-v1",
@@ -3765,5 +3880,5 @@
   "LensFlair": "LensFlare"
  },
  "unknown_classes": [],
- "version_name": "0.16.7"
+ "version_name": "0.16.8"
 }

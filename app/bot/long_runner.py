@@ -1,4 +1,4 @@
-"""光遇 0.16.7 当前地图长连接常驻运行器（claudework 测试副本）。
+"""光遇 0.16.8 当前地图长连接常驻运行器（claudework 测试副本）。
 
 直接复用 r5 的 qfsky.connection0167.run_connection，不经网页；连接意外结束时按退避自动重连。
 用法：long_runner.py --account <账号ID> --map <map_id> [--hours 1] [--max-retries 5]
@@ -39,7 +39,7 @@ os.environ.update({
     "QFLY_DATA_DIR": str(xg_paths.RUNTIME_DATA),
     "QFLY_JOIN_MODE": "current",
     "QFLY_JOIN_CONFIG": str(RT / "private/connection0167_profiles.local.json"),
-    "QFLY_RESOURCE_REVISION": "V75885",
+    "QFLY_RESOURCE_REVISION": "V76318",
     "QFLY_SINGLE_DEVICE_MODE": "1",
     "QFLY_MPAY_DEVICE_ATTRS_FILE": str(RT / "runtime-data/registered-device.local.json"),
     "QFLY_SCHEDULER_ENABLED": "0",

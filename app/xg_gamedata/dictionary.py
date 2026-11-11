@@ -5,7 +5,7 @@
 ========
 `qfsky/type2_dictionary0167.load_type2_decoder` 用它解压下行 ``compression kind 2``
 的 zstd 帧。文件是 **Zstd trained dictionary**：2 MiB、dictID=0x46f7ab50、
-sha256 固定。国服 0.16.7 / 421589 的 APK 里就在
+sha256 固定。0.16.8 / 421629 与 0.16.7 / 421589 的 APK 里都是同一份，就在
 ``assets/Data/Resources/CompressDictionary.zst``，不是抓包私有数据，也不含
 账号/设备身份。
 
@@ -45,7 +45,7 @@ def validate(raw: bytes, *, expected_sha: str = SHA256, expected_size: int = SIZ
         raise GameDataError("压缩字典 dictID 不对", "dictionary_id")
     digest = hashlib.sha256(raw).hexdigest()
     if expected_sha and digest != expected_sha:
-        raise GameDataError("压缩字典 sha256 不对（不是国服 0.16.7 / 421589 的那份）",
+        raise GameDataError("压缩字典 sha256 不对（不是国服 0.16.8 / 421629 的那份）",
                             "dictionary_sha256")
     return {"size": len(raw), "sha256": digest, "dict_id": expected_id,
             "magic": raw[:4].hex()}
@@ -63,7 +63,7 @@ def _read_member(apk: Path) -> tuple[str, bytes]:
                 if len(candidates) != 1:
                     raise GameDataError(
                         "安装包里找不到唯一的 CompressDictionary.zst（找到 %d 个）。"
-                        "请用完整的国服 0.16.7 / 421589 base.apk。" % len(candidates),
+                        "请用完整的国服 0.16.8 / 421629 base.apk。" % len(candidates),
                         "dictionary_missing")
                 member = candidates[0]
             return member, zf.read(member)

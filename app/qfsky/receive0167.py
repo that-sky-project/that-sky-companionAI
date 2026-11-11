@@ -1,4 +1,4 @@
-"""Build 421589 receive-only codec recovered from ARM64 static instructions.
+"""Build 421629 receive-only codec recovered from ARM64 static instructions.
 
 Input is already RC4-decrypted ENet payload, NOT a client six-byte frame.
 No network, device reads or credential logging. Parsed objects contain private
@@ -13,7 +13,7 @@ import struct
 import uuid
 from typing import Callable
 
-APK_BUILD = 421589
+APK_BUILD = 421629
 MAX_ENET_PAYLOAD = 0x2720
 MAX_DECOMPRESSED = 0x2F20
 MAX_BODY = 0x2700

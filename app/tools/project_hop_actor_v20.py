@@ -5,22 +5,22 @@ import json
 from bisect import bisect_left
 
 # These are observed native labels, not claims about jumping semantics.
-RAW_LABELS = ('0x21dcc10', '0x21dd4cc', '0x17159e8', '0x1715a60',
-              '0x1715a88', '0x1f80070', '0x21de800', '0x21dd47c',
-              '0x17159c0', '0x1715a10', '0x1715a38')
+RAW_LABELS = ('0x21dd40c', '0x21ddcc8', '0x1715ed0', '0x1715f48',
+              '0x1715f70', '0x1f80844', '0x21deffc', '0x21ddc78',
+              '0x1715ea8', '0x1715ef8', '0x1715f20')
 NUMERIC_FIELDS = ('gen', 'start', 'mode', 'code90', 'clock', 'h_gen', 'h_start',
                   'yaw1', 'yaw2', 'yaw3', 'fx', 'fy', 'fz', 'vx', 'vy', 'vz',
                   'seated', 'sit_enter', 'avatar_state')
 
-# Exactly the pinned 0.16.7 POSE schema, not a prefix-based export of Actor data.
+# Exactly the pinned 0.16.8 POSE schema, not a prefix-based export of Actor data.
 # Flatten each record in this order; tuple = (label, bit width, components).
 POSE_LAYOUT = (
-    ('0x1715998', 12, 1), ('0x17159c0', 3, 1), ('0x17159e8', 3, 1),
-    ('0x1715a10', 3, 1), ('0x1715a38', 3, 1), ('0x1715a60', 3, 1),
-    ('0x1715a88', 3, 1), ('0x1715b90', 12, 3), ('0x1715c8c', 6, 3),
-    ('0x1715d78', 8, 3), ('0x1715e78', 8, 3), ('0x1715f7c', 5, 3),
-    ('0x1716080', 5, 3), ('0x1716184', 8, 3), ('0x1716288', 8, 3),
-    ('0x171657c', 10, 1), ('0x17165ac', 1, 1),
+    ('0x1715e80', 12, 1), ('0x1715ea8', 3, 1), ('0x1715ed0', 3, 1),
+    ('0x1715ef8', 3, 1), ('0x1715f20', 3, 1), ('0x1715f48', 3, 1),
+    ('0x1715f70', 3, 1), ('0x1716078', 12, 3), ('0x1716174', 6, 3),
+    ('0x1716260', 8, 3), ('0x1716360', 8, 3), ('0x1716464', 5, 3),
+    ('0x1716568', 5, 3), ('0x171666c', 8, 3), ('0x1716770', 8, 3),
+    ('0x1716a64', 10, 1), ('0x1716a94', 1, 1),
 )
 POSE_LAYOUT_SHA256 = hashlib.sha256(
     json.dumps(POSE_LAYOUT, separators=(',', ':')).encode('ascii')).hexdigest()
@@ -32,7 +32,7 @@ def _project_pose(observation, starts, boundaries, current, history):
     if counts is None:
         return {'coverage': 'unavailable', 'reason': 'codec_pose_metadata_absent'}
     counts = dict(counts)
-    ends = [p for label, p in boundaries if label == '0x21de800']
+    ends = [p for label, p in boundaries if label == '0x21deffc']
     if len(ends) != 1 or not current < history < ends[0]:
         raise ValueError('pose_projection_segment_bounds')
     result = {'coverage': 'complete', 'layout_sha256': POSE_LAYOUT_SHA256,

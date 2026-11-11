@@ -47,7 +47,7 @@ _UUID = re.compile('[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}|[0-9a-f
 _NAME = re.compile('[A-Za-z0-9_-]+')
 _ACCOUNT_ID = re.compile('[A-Za-z0-9_-]+')
 _REQUIRED_FILES = ('cache.bin', 'scene.bin', 'placement.json', 'scene-provenance.json')
-_HIDDEN = '0x21dee4c'
+_HIDDEN = '0x21df648'
 
 
 def _install_paths():
@@ -157,7 +157,7 @@ def _prepare_env():
     try:
         revision = _config()['resource_revision']
     except Exception:
-        revision = 'V75885'
+        revision = 'V76318'
     os.environ.setdefault('QFLY_RESOURCE_REVISION', revision)
 
 

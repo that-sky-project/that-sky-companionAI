@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOM_SCHEMA = "cn0167-room-status-v1"
 PLAYER_SCHEMA = "cn0167-player-status-v1"
-PROFILE = "netease-android-0.16.7-421589"
+PROFILE = "netease-android-0.16.8-421629"
 MAX_AGE = 5.0
 MAX_STATE_BYTES = 256 * 1024
 SLOTS = ("body", "wing", "hair", "mask", "neck", "feet", "horn", "face", "prop", "hat")

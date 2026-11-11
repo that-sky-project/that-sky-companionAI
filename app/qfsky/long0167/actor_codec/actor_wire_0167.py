@@ -1,4 +1,4 @@
-"""Offline 0.16.7 Actor structural reader and zero-padding reencoder.
+"""Offline 0.16.8 Actor structural reader and zero-padding reencoder.
 
 Ordinary mode2 entity indices and quantized bit codes stay opaque. This does
 not construct gameplay state, initialize an Actor, attest provenance, resolve
@@ -42,7 +42,7 @@ class ActorWireObservation:
         _verify_profile(self.profile_sha256)
         if type(expected) is not int or not 0 <= expected <= 0xffffffff:
             raise ValueError('actor_invalid_expected_u32')
-        positions = [p for label, p in self._boundaries if label == '0x21dc8ec']
+        positions = [p for label, p in self._boundaries if label == '0x21dd0e8']
         if positions != [376] or type(self._wire_bytes) is not bytes or len(self._wire_bytes) < 51:
             raise ValueError('actor_prefix_u32_unverified')
         return struct.unpack_from('<I', self._wire_bytes, 47)[0] == expected
@@ -50,7 +50,7 @@ class ActorWireObservation:
     def metadata(self):
         """Only structural counts; never identity, labels, pose or raw bytes."""
         return {'actor_layout_checked': True,
-                'profile': 'netease-android-0.16.7-421589',
+                'profile': 'netease-android-0.16.8-421629',
                 'native_capacity_verified': False,
                 'source_masks_fully_validated': False,
                 'actor_bytes': len(self._wire_bytes),
@@ -121,7 +121,7 @@ class _Walk:
         if kind == 'raw':
             return self.raw(args[0])
         if kind == 'float':
-            return self.raw_float(*args, origin=label == '0x21dc858')
+            return self.raw_float(*args, origin=label == '0x21dd054')
         if kind == 'bool':
             return self.boolean()
         if kind == 'range':
@@ -144,11 +144,11 @@ class _Walk:
     def helper(self, address):
         if address in FIXED_HELPERS:
             self.plan(FIXED_HELPERS[address])
-        elif address == '0x21dccb8':
+        elif address == '0x21dd4b4':
             n = self.count('pose_records', 4)
             for _ in range(n):
                 self.plan(POSE)  # 221 packed bits, no raw alignment.
-        elif address == '0x21df36c':
+        elif address == '0x21dfb68':
             self.history()
         elif address == '0x1f5e92c':
             self.strings()
@@ -158,7 +158,7 @@ class _Walk:
             for _ in range(48):
                 self.boolean()  # Opaque received bits; source gates do NOT always force false.
             self.raw(4)
-        elif address == '0x21de25c':
+        elif address == '0x21dea58':
             self.multipass_arrays()
         else:
             raise ValueError('actor_unknown_schema_helper')
@@ -258,30 +258,30 @@ class _Walk:
 
     def main(self):
         optional, n_timed, n_entity = False, 0, 0
-        timed_byte = ('0x21ded14', 'raw', 1)
+        timed_byte = ('0x21df510', 'raw', 1)
         for item in MAIN:
             label = item[0]
-            if label in ('0x21de9ac', '0x21de9e4') and not optional:
+            if label in ('0x21df1a8', '0x21df1e0') and not optional:
                 continue
-            if label == '0x21ded08':
+            if label == '0x21df504':
                 # One raw8/raw1 PAIR per record, never two column-wise loops.
                 for _ in range(n_timed):
                     self.operation(item)
                     self.operation(timed_byte)
                 continue
-            if label == '0x21ded14':
+            if label == '0x21df510':
                 continue  # consumed with its preceding raw8; zero count does nothing
-            if label == '0x21dee0c':
+            if label == '0x21df608':
                 for _ in range(n_entity):
                     self.operation(item)
                 continue
             value = self.operation(item)
-            if label == '0x21de994':
+            if label == '0x21df190':
                 optional = value
-            elif label == '0x21decd8':
+            elif label == '0x21df4d4':
                 n_timed = value
                 self.counts.append(('timed_raw9_records', value))
-            elif label == '0x21dedec':
+            elif label == '0x21df5e8':
                 n_entity = value
                 self.counts.append(('entity_records', value))
 

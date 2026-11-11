@@ -1,6 +1,6 @@
 """Static Mesh constructor path candidates, not a runtime resource-cache resolver.
 
-CN 0.16.7/421589: constructor 0x1e882d4/0x1e88384 clears bytes
+CN 0.16.8/421629: same mesh path layout as 0.16.7 (constructor addresses documented for 0.16.7; 0.16.8 code addresses not re-derived)
 0x98..0xa7. Path builder 0x1e85e1c appends the suffixes below for
 literal, bare .fbx sources. Other source forms deliberately remain unresolved.
 No asset reads, Lua execution, collision construction, or live integration.
@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import re
 
-PROFILE = 'netease-android-0.16.7-421589'
+PROFILE = 'netease-android-0.16.8-421629'
 SUFFIX_FIELDS = (
     ('stripGeometry', '_StripGeo'), ('stripAnimation', '_StripAnim'),
     ('uncompressedAnim', '_UncompAnim'), ('additive', '_Add'),

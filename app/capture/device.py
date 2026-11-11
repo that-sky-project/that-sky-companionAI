@@ -214,7 +214,7 @@ def game_version(adb, serial):
     return m.group(1) if m else None
 
 
-def current_scene(adb, serial, pid, revision="V75885"):
+def current_scene(adb, serial, pid, revision="V76318"):
     """返回 (scene, level_id) 或 (None, None)。"""
     code, out, _ = adb_run(adb, "logcat", "-d", "-v", "threadtime", "--pid=" + str(pid),
                            serial=serial, timeout=20)
@@ -253,9 +253,9 @@ def check_device(adb_path=None):
         return out
     out["version_code"] = game_version(adb, game["serial"])
     out["scene"], _ = current_scene(adb, game["serial"], game["pid"])
-    if out["version_code"] and out["version_code"] != "421589":
-        out["message"] = ("MuMu 里装的光遇版本是 %s，小光只适配 0.16.7 / 421589。"
-                          "换成这个版本的安装包再装一次。" % out["version_code"])
+    if out["version_code"] and out["version_code"] not in ("421589", "421629"):
+        out["message"] = ("MuMu 里装的光遇版本是 %s，小光只适配 0.16.8 / 421629（也识别 0.16.7 / 421589）。"
+                          "换成 0.16.8 的安装包再装一次。" % out["version_code"])
         return out
     out["ok"] = True
     out["message"] = "MuMu、adb、Root、游戏都正常。"

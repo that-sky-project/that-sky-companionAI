@@ -1,9 +1,9 @@
 """接受双人互动后小光自己 Actor 要进入的状态。三类（2026-10-31 两部真机互做牵手/拥抱/背背/熊抱抓包，gamemsg-1031-0345，接受方 0x9e）：
 
-  once  拥抱/熊抱/击掌…（一次性）：0x21de994=1 + [0x21de9ac 对象 slot][0x21de9e4 三个 float 0]，0x21dd024=1，
+  once  拥抱/熊抱/击掌…（一次性）：0x21df190=1 + [0x21df1a8 对象 slot][0x21df1e0 三个 float 0]，0x21dd820=1，
         约 0.5 秒后结构消失、mode 7，双方客户端各自播 Give/Take 动画。接受方会挪到离对方 0.3~0.4 米处。
-  hold  牵手（持续）：0x21de934 = 带路方 slot、0x21de95c = 1，一直保持到松手；接受方跟在带路方身边 0.3~1.7 米。
-  carry 背背/公主抱（持续）：0x21dde4c = 背人方 slot，mode(0x21dd48c)=6；接受方上报的坐标与背人方完全重合，
+  hold  牵手（持续）：0x21df130 = 带路方 slot、0x21df158 = 1，一直保持到松手；接受方跟在带路方身边 0.3~1.7 米。
+  carry 背背/公主抱（持续）：0x21de648 = 背人方 slot，mode(0x21ddc88)=6；接受方上报的坐标与背人方完全重合，
         一直跟着走；下来时清掉、写落地坐标并发 AvatarTeleportRpc（见 social_accept.teleport_game）。
 邀请方自己身上没有持续的关系字段，结束由接受方决定（松手/跳下）。
 
@@ -25,11 +25,11 @@ CAP = str(xg_paths.CAPTURES / "gamemsg-1031-0345.jsonl")
 SLOT = 0x9E
 # kind -> (前一帧时间, 进入状态那一帧时间, 移植的字段, 写对象 slot 的字段)
 SPECS = {
-    "hold": (17.95, 18.1, ("0x21de934", "0x21de95c"), "0x21de934"),
-    "carry": (36.0, 36.3, ("0x21dde4c", "0x21dd48c"), "0x21dde4c"),
+    "hold": (17.95, 18.1, ("0x21df130", "0x21df158"), "0x21df130"),
+    "carry": (36.0, 36.3, ("0x21de648", "0x21ddc88"), "0x21de648"),
 }
 SPEC_MINUTE = "03:51"
-HUG_FIELDS = ("0x21de994", "0x21de9ac", "0x21de9e4")
+HUG_FIELDS = ("0x21df190", "0x21df1a8", "0x21df1e0")
 HOLD_SECONDS = 1.2          # 一次性互动：“互动对象”结构保持的时间
 
 KIND = {2: "hold", 40: "carry", 41: "carry", 63: "carry", 64: "carry"}   # 其余类型都是一次性
@@ -87,7 +87,7 @@ def build(base, partner_slot, kind="once"):
     if kind == "once":
         d = json.loads(HUG_FILE.read_text())
         out = _transplant(base, bytes.fromhex(d["before"]), bytes.fromhex(d["at"]), HUG_FIELDS)
-        out = _set_slot(out, "0x21de9ac", partner_slot, zero_floats="0x21de9e4")
+        out = _set_slot(out, "0x21df1a8", partner_slot, zero_floats="0x21df1e0")
         return anim_pose.write(out, seated=1)
     before, at, fields, slot_label = SPECS[kind]
     t = _templates()[kind]
@@ -98,17 +98,17 @@ def build(base, partner_slot, kind="once"):
     return out
 
 
-CARRY_FORCE = {"0x21dd4cc": 31, "0x1f80070": 1, "0x17159e8": 0, "0x1715a60": 0, "0x1715a88": 0}
+CARRY_FORCE = {"0x21ddcc8": 31, "0x1f80844": 1, "0x1715ed0": 0, "0x1715f48": 0, "0x1715f70": 0}
 
 
-# 走路中（2026-10-31 对照主号 gamemsg-1031-0358 走路帧）：0x21dcc10=1，0x21dd4cc=31，姿态块码 7/0/0（站着码 7/7/7、权重 0）。
+# 走路中（2026-10-31 对照主号 gamemsg-1031-0358 走路帧）：0x21dd40c=1，0x21ddcc8=31，姿态块码 7/0/0（站着码 7/7/7、权重 0）。
 # 不写的话别人客户端当成“站着被平移”，不播走路动画：飘着走、没有上下颠、脚乱翻。
-WALK_FORCE = {"0x21dcc10": 1, "0x21dd4cc": 31, "0x1715a60": 0, "0x1715a88": 0}   # 0x21dd4cc = 走路动画权重（站 0，走 31）
+WALK_FORCE = {"0x21dd40c": 1, "0x21ddcc8": 31, "0x1715f48": 0, "0x1715f70": 0}   # 0x21ddcc8 = 走路动画权重（站 0，走 31）
 
 
 # 站着（2026-10-31 对照四张站稳录的图）：录图时角色在跑/转身的话，种子里就带着跑动状态，
 # 别人看到小光原地跑步。每帧先把这些改回站立值，走路、互动、动作再在上面覆盖。
-STAND_FORCE = {"0x21dcc10": 0, "0x21dd4cc": 0, "0x17159e8": 7, "0x1715a60": 7, "0x1715a88": 7, "0x1f80070": 0}
+STAND_FORCE = {"0x21dd40c": 0, "0x21ddcc8": 0, "0x1715ed0": 7, "0x1715f48": 7, "0x1715f70": 7, "0x1f80844": 0}
 STAND_FIELDS = {"mode": 0, "code90": 7, "fy": 15, "vx": 127, "vy": 127, "vz": 127}
 
 
@@ -170,10 +170,10 @@ def set_groups(body, groups):
     return out
 
 
-FEET = ("0x1716184", "0x1716288")
+FEET = ("0x171666c", "0x1716770")
 
 
-BODY = "0x1715e78"                  # 身体（站直时 y 140..150）
+BODY = "0x1716360"                  # 身体（站直时 y 140..150）
 
 
 def _feet_down(body):
@@ -220,12 +220,12 @@ def force(body, values):
 
 
 def force_carry(body):
-    """被背时每帧写：挂接权重 31、0x1f80070=1、姿态块码 0（两份副本都写）、mode 6。"""
+    """被背时每帧写：挂接权重 31、0x1f80844=1、姿态块码 0（两份副本都写）、mode 6。"""
     return anim_pose.write(force(body, CARRY_FORCE), mode=6)
 
 
 def partner_of(body, kind="once"):
     """读回对象 slot（校验用）；没有这个结构返回 None。"""
-    label = {"once": "0x21de9ac", "hold": "0x21de934", "carry": "0x21dde4c"}[kind]
+    label = {"once": "0x21df1a8", "hold": "0x21df130", "carry": "0x21de648"}[kind]
     toks, labs = candle_pose.tokens(body), candle_pose.labels(body)
     return next((bytes(t.value)[0] for t, l in zip(toks, labs) if l == label and t.kind == "raw"), None)

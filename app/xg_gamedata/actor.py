@@ -12,11 +12,11 @@ from pathlib import Path
 
 from .common import GameDataError
 
-BOUNDARY_MAIN_MAP = "0x21dc8ec"
-BOUNDARY_ORIGIN = "0x21dc858"
-BOUNDARY_HISTORY = "0x21de7c4"
-BOUNDARY_VELOCITY = "0x21dca9c"
-BOUNDARY_LEVEL_STATE = "0x21dee4c"
+BOUNDARY_MAIN_MAP = "0x21dd0e8"
+BOUNDARY_ORIGIN = "0x21dd054"
+BOUNDARY_HISTORY = "0x21defc0"
+BOUNDARY_VELOCITY = "0x21dd298"
+BOUNDARY_LEVEL_STATE = "0x21df648"
 
 
 def _codec():
@@ -58,14 +58,14 @@ def level_state(raw: bytes, native_sha: str) -> dict:
     i = _index_for(obs, BOUNDARY_LEVEL_STATE, "raw", 2)
     tokens = obs._tokens[i:i + 3]
     if [t.extent for t in tokens] != [2, 4, 4]:
-        raise GameDataError("0x21dee4c 头形状不是 raw2/raw4/raw4", "actor_header_shape")
+        raise GameDataError("0x21df648 头形状不是 raw2/raw4/raw4", "actor_header_shape")
     return {"raw2": tokens[0].value, "level_id": struct.unpack("<I", tokens[1].value)[0],
             "resource_tag": struct.unpack("<I", tokens[2].value)[0],
             "bit_offset": _starts(obs)[i]}
 
 
 def project(source: bytes, map_id: int, position, tag: int, native_sha: str) -> tuple[bytes, dict]:
-    """源 actor -> 目标图 actor；只改 map_id/起点/速度/0x21dee4c 头。"""
+    """源 actor -> 目标图 actor；只改 map_id/起点/速度/0x21df648 头。"""
     if type(map_id) is not int or not 0 < map_id < 2 ** 32:
         raise GameDataError("目标 map_id 不合法", "actor_map_id")
     if not isinstance(position, (list, tuple)) or len(position) != 3:
@@ -77,7 +77,7 @@ def project(source: bytes, map_id: int, position, tag: int, native_sha: str) -> 
         obs = aw.inspect_actor_wire(source, verified_profile_sha256=native_sha,
                                     check_zero_padding=True, require_canonical_writer=True)
     except Exception as exc:
-        raise GameDataError("源 actor 不是 canonical 0.16.7 actor：%s" % exc, "actor_source")
+        raise GameDataError("源 actor 不是 canonical 0.16.8 actor：%s" % exc, "actor_source")
     T = list(obs._tokens)
     R = type(T[0])
     main = _index_for(obs, BOUNDARY_MAIN_MAP, "raw", 4)
@@ -110,7 +110,7 @@ def project(source: bytes, map_id: int, position, tag: int, native_sha: str) -> 
         raise GameDataError("actor 的 map_id 前缀没改对", "actor_prefix")
     after = level_state(out, native_sha)
     if (after["raw2"], after["level_id"], after["resource_tag"]) != (b"\0\0", map_id, tag):
-        raise GameDataError("actor 0x21dee4c 头没改对", "actor_header")
+        raise GameDataError("actor 0x21df648 头没改对", "actor_header")
     return out, after
 
 

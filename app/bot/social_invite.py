@@ -16,7 +16,7 @@ from social_catalog import ACTION_CODES, catalog, resolve_action
 from qfsky.long0167.actor_codec.actor_wire_0167 import inspect_actor_wire
 from qfsky.long0167.actor_codec.actor_wire_schema_0167 import MAIN, PUBLIC_ELF_SHA256
 
-PROFILE_SHA256 = "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321"
+PROFILE_SHA256 = "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed"
 TYPE_LABEL, TARGET_LABEL = _pose.OFFER_TYPE, _pose.OFFER_TARGET
 SOCIAL_ACCEPT_KEY = 0x603E65DF
 RELEASE_KEYS = MappingProxyType({0x5BCC196F: "hold", 0x32D2F05A: "carry"})
@@ -74,7 +74,7 @@ def inspect_offer(body):
 
 def field_info(body):
     observation = _observation(body)
-    return {"profile": "netease-android-0.16.7-421589", "counts": dict(observation._counts),
+    return {"profile": "netease-android-0.16.8-421629", "counts": dict(observation._counts),
             "fields": {label: {"token_index": index, "bit_offset": bit, "bit_width": width}
                        for label, (index, bit, width) in _locations(observation).items()}}
 

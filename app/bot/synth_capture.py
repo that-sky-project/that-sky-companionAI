@@ -30,9 +30,9 @@ from qfsky.long0167.actor_codec.actor_wire_0167 import inspect_actor_wire, reenc
 from qfsky.join0167_profile import NATIVE_SHA256, account_binding  # noqa: E402
 PROFILES = xg_paths.CURRENT_PROFILES
 # 号本身：两号各自恒定且不同的 9 组 + 新号恒定、老号录制间有变化的 7 组（装扮/解锁会随时间变）
-IDENTITY = ["0x1f80cd8|1", "0x1f80ce4|1", "0x21dd11c|1", "0x21dd8dc|1", "0x21dd924|1", "0x21dd948|1",
-            "0x21dea98|1", "0x21dec48|1", "0x21defa4|1",
-            "0x1f8009c|1", "0x1f80d68|1", "0x1f80d7c|1", "0x21dd8ec|1", "0x21de8b4|1", "0x21de8e8|1", "0x21dea24|1"]
+IDENTITY = ["0x1f814ac|1", "0x1f814b8|1", "0x21dd918|1", "0x21de0d8|1", "0x21de120|1", "0x21de144|1",
+            "0x21df294|1", "0x21df444|1", "0x21df7a0|1",
+            "0x1f80870|1", "0x1f8153c|1", "0x1f81550|1", "0x21de0e8|1", "0x21df0b0|1", "0x21df0e4|1", "0x21df220|1"]
 
 
 def _index(o):

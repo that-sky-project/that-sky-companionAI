@@ -1,4 +1,4 @@
-"""Build-421589 minimal initial-connection parameters; pure local, no transport.
+"""Build-421629 minimal initial-connection parameters; pure local, no transport.
 Static derivation is not a successful custom-service JoinGame. Existing live
 connection counters/tickets must NEVER be copied into a fresh connection.
 """
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from .join0167_profile import BUILD, NATIVE_SHA256, account_binding, uuid_raw
 from .join0167_codec import uint, octets
 
-TICKET_DOMAIN=b"sky-cn-421589-fresh-initial-ticket-v1\0"
+TICKET_DOMAIN=b"sky-cn-421629-fresh-initial-ticket-v1\0"
 
 
 def peer_key(uid):

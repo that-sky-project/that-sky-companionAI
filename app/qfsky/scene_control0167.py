@@ -1,4 +1,4 @@
-"""Build-421589 scene confirmation, not a general gameplay command encoder.
+"""Build-421629 scene confirmation, not a general gameplay command encoder.
 
 Native evidence: header 1f7dd2c, dispatch 1f9c774/1f9b330, payload
 1f7dfdc, response 1f9a69c/1f9a530. Header byte 1 is the active

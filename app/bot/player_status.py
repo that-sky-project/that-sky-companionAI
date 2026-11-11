@@ -1,4 +1,4 @@
-"""Read-only CN 0.16.7 mode2 Actor status; no transport, logging or mutation.
+"""Read-only CN 0.16.8 mode2 Actor status; no transport, logging or mutation.
 
 Outfit indices are from the pinned CN ELF table at 0x39aaa38, resolved through
 R_AARCH64_RELATIVE and matched to the native serializers' shared object layout.
@@ -18,7 +18,7 @@ from qfsky.long0167.actor_codec.actor_wire_schema_0167 import (
 )
 
 SCHEMA_VERSION = "cn0167-player-status-v1"
-PROFILE = "netease-android-0.16.7-421589"
+PROFILE = "netease-android-0.16.8-421629"
 OUTFIT_SLOTS = ("body", "wing", "hair", "mask", "neck", "feet", "horn", "face", "prop", "hat")
 
 
@@ -84,7 +84,7 @@ class _Cursor:
 
 
 def _outfit(view):
-    cursor = _Cursor(view, "0x21dec48", "0x21dec58")
+    cursor = _Cursor(view, "0x21df444", "0x21df454")
     slots = []
     for index, slot in enumerate(OUTFIT_SLOTS):
         field_id = cursor.uint(4)
@@ -123,7 +123,7 @@ def _social(view):
 
 def _energy(view):
     fields = {}
-    for label, kind, *args in FIXED_HELPERS["0x21dd0c8"]:
+    for label, kind, *args in FIXED_HELPERS["0x21dd8c4"]:
         if kind == "float":
             value = struct.unpack("<f", view.token(view.index(label), "raw", 4))[0]
             if not math.isfinite(value):
@@ -135,12 +135,12 @@ def _energy(view):
             maximum = args[1] if kind == "range" else (1 << width) - 1
             code = view.integer(label, "bits", width, maximum)
             fields[label] = {"code": code, "bit_width": width}
-    return {"tier_code": fields["0x21dd11c"]["code"], "fields": fields,
+    return {"tier_code": fields["0x21dd918"]["code"], "fields": fields,
             "semantic_scope": "native_energy_group_raw_codes_not_ui_percentages"}
 
 
 def _world(view):
-    cursor = _Cursor(view, "0x21dee4c", "0x21dee70")
+    cursor = _Cursor(view, "0x21df648", "0x21df66c")
     bst_id, level_id, level_hash = cursor.uint(2), cursor.uint(4), cursor.uint(4)
     join_only = bool(cursor.bits(1))
     count = cursor.bits(9, 256)

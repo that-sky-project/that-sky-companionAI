@@ -38,8 +38,8 @@ class Cases(unittest.TestCase):
     def test_version_never_tracks_store_release(self):
         with patch.object(version,'_huawei_fetch',side_effect=AssertionError('Must not fetch store')):
             version._cached=('9.99.99.999999',time.time())
-            self.assertEqual(version.cn_version(),'0.16.7.421589')
-            self.assertEqual(version.cn_build(),421589)
+            self.assertEqual(version.cn_version(),'0.16.8.421629')
+            self.assertEqual(version.cn_build(),421629)
 
     def test_labels_survive_service_alias_refresh(self):
         prefs.save('fixture-a','  大号  ')
@@ -94,7 +94,7 @@ class Cases(unittest.TestCase):
 
     def test_startup_error_version_classification_and_no_log_leak(self):
         self.attempt();runtime.GO_LOG.write_text('{"step":"lease","status":"stopped"}\n',encoding='utf-8')
-        (paths.LEASE_DIR/'candidate-runner.out').write_text('SECRET_SESSION\nValueError: 仅支持当前 0.16.7 / 421589 模式',encoding='utf-8')
+        (paths.LEASE_DIR/'candidate-runner.out').write_text('SECRET_SESSION\nValueError: 仅支持当前 0.16.8 / 421629 模式',encoding='utf-8')
         result=runtime.startup_failure()
         self.assertEqual(result['code'],'protocol_version_mismatch');self.assertNotIn('SECRET',json.dumps(result))
 

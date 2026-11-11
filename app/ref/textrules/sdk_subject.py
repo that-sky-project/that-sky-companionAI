@@ -1,4 +1,4 @@
-"""Prepare a UTF-8 subject for the 0.16.7 CN SDK's compiled rules, offline.
+"""Prepare a UTF-8 subject for the 0.16.8 CN SDK's compiled rules, offline.
 
 Derived from the Java call sites of the paired DEX, not from probing other players.
 The three optional normalizations below default to true in this SDK but can be

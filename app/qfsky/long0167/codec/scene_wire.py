@@ -1,6 +1,6 @@
 """Offline normal-path Scene wire inspection with explicit build selection.
 
-0.16.7 is a static-only candidate. Its anonymous one-bit addition follows
+0.16.8 is a static-only candidate. Its anonymous one-bit addition follows
 the raw16 UUID field; no business meaning or online compatibility is claimed.
 The original build and old SHA gate retain their existing layout.
 
@@ -24,7 +24,11 @@ from .bit_stream import BitReader, BitWriter
 
 PUBLIC_ELF_SHA256 = 'c5a7c9756f97b76562e7e28d86cbe4a58763c1295cd0c01f316f9e49d76fc9f8'
 PUBLIC_ELF_SHA256_0167 = '0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321'
-_PROFILE_HASHES = frozenset((PUBLIC_ELF_SHA256, PUBLIC_ELF_SHA256_0167))
+PUBLIC_ELF_SHA256_0168 = '0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed'
+# 0.16.7 与 0.16.8 的 Scene 布局相同（都带 home_owner_uuid 后的匿名 bool）；
+# 两个 profile 都按“new”处理，但各自保留自己的 native sha 门禁。
+_NEW_PROFILE_HASHES = frozenset((PUBLIC_ELF_SHA256_0167, PUBLIC_ELF_SHA256_0168))
+_PROFILE_HASHES = frozenset((PUBLIC_ELF_SHA256,)) | _NEW_PROFILE_HASHES
 _UNSET_ANONYMOUS_BOOL = object()
 MAX_SCENE_WIRE_BYTES = 0x2000
 
@@ -268,7 +272,7 @@ def inspect_scene_wire(body, *, verified_profile_sha256, check_zero_padding=Fals
     w.raw(16)
     home_owner_end_token_index = len(w.tokens)
     anonymous_bool_0167 = None
-    if verified_profile_sha256 == PUBLIC_ELF_SHA256_0167:
+    if verified_profile_sha256 in _NEW_PROFILE_HASHES:
         w.boundary('anonymous_bool_0167')
         anonymous_bool_0167 = w.boolean()
     w.boundary('switches')
@@ -328,8 +332,8 @@ def reencode_scene_wire(observation, *, verified_profile_sha256=None,
         raise ValueError('scene_profile_unverified')
     tokens = list(observation._tokens)
     insertion = observation._home_owner_end_token_index
-    source_new = source_profile == PUBLIC_ELF_SHA256_0167
-    target_new = target_profile == PUBLIC_ELF_SHA256_0167
+    source_new = source_profile in _NEW_PROFILE_HASHES
+    target_new = target_profile in _NEW_PROFILE_HASHES
     if source_new:
         if type(observation._anonymous_bool_0167) is not bool:
             raise ValueError('scene_missing_anonymous_bool_0167')

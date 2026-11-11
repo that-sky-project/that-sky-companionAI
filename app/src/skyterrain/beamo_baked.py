@@ -1,6 +1,6 @@
 """Neutral LOD0 side-attribute expansion for an explicitly supplied Mesh submesh0.
 
-Evidence: research/native/authority-beamo-baked-dataflow-review.json (CN0.16.7).
+Evidence: research/native/authority-beamo-baked-dataflow-review.json (CN0.16.8).
 This does not choose resources, interpret opaque bytes, or produce geometry.
 Legacy reader keys mentioning color/uv are only compatibility field names.
 """

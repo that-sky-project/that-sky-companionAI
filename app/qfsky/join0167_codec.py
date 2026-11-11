@@ -1,4 +1,4 @@
-"""Build 421589 JoinGame serializer recovered from ARM64 static instructions.
+"""Build 421629 JoinGame serializer recovered from ARM64 static instructions.
 
 Pure local codec: no sockets, no default session, no map/hash fallback. A successful
 round trip proves codec consistency, NOT server acceptance. Native packet/runtime
@@ -12,7 +12,7 @@ import os
 import struct
 from pathlib import Path
 
-BUILD = 421589
+BUILD = 421629
 MAX_OTHERS = 7
 MAX_BLOB = 0x2000
 
@@ -164,7 +164,7 @@ def decode(data, *, frame=False, require_build=BUILD):
 def encode(value, *, frame=False):
     w = Writer()
     if value['build'] != BUILD:
-        raise ValueError('codec is specific to build 421589')
+        raise ValueError('codec is specific to build 421629')
     nv = value['netversion']
     if not isinstance(nv, (list, tuple)) or len(nv) != 6:
         raise ValueError('explicit six-element NetVersion is required')

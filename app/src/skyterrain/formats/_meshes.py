@@ -9,7 +9,7 @@ from ._types import DEFAULT_LIMITS, FormatError, UnsupportedVersionError, Missin
 from ._binary import Cursor, load_input, checked_count, readonly, validate_positions, validate_indices, bounds
 from ._lz4 import decompress_lz4_block
 
-# Raw header variants observed in CN 0.16.7, not an unrestricted low-bit mask.
+# Raw header variants observed in CN 0.16.7/0.16.8, not an unrestricted low-bit mask.
 # The high 16 bits are retained without inventing their semantics.
 _LAYOUT_VERSIONS = {60:60, 61:61, 0x0001003c:60, 0x0002003d:61}
 SUPPORTED_MESHES_VERSIONS = tuple(_LAYOUT_VERSIONS)

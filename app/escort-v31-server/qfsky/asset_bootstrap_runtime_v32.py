@@ -96,7 +96,7 @@ def _source(account_uuid):
         return prepare_current_capture(root, record_dir,
             expected_account_uuid=account_uuid, expected_scene=entry['scene'],
             expected_resource_revision=revision, expected_level_id=HOME,
-            expected_netversion=netversion, apk_build=421589).inputs
+            expected_netversion=netversion, apk_build=421629).inputs
     cap = entry.get('current_capture') or {}
     own = (cap.get('by_account') or {}).get(account_uuid)
     if isinstance(own, dict):
@@ -106,14 +106,14 @@ def _source(account_uuid):
     return prepare_current_capture(root, cap['record_dir'],
         expected_account_uuid=account_uuid, expected_scene=entry['scene'],
         expected_resource_revision=revision, expected_level_id=HOME,
-        expected_netversion=cap['netversion_u16'], apk_build=421589).inputs
+        expected_netversion=cap['netversion_u16'], apk_build=421629).inputs
 
 
-def load_asset_trial(account_uuid, map_id, *, build=421589):
+def load_asset_trial(account_uuid, map_id, *, build=421629):
     """Return None only when disabled/unlisted. Invalid enabled inputs fail."""
     if os.environ.get('QFSKY_ASSET_BOOTSTRAP_TRIAL') != '1' or map_id != NIGHT_ARCHIVE:
         return None
-    if type(map_id) is not int or type(build) is not int or build != 421589:
+    if type(map_id) is not int or type(build) is not int or build != 421629:
         raise ValueError('asset_trial_build_or_map')
     from qfsky.map_long0167 import asset_bootstrap_v32 as adapter
     name = os.environ.get(MANIFEST_ENV, '')

@@ -17,7 +17,7 @@ from .handshake0167_transport import ProbeTransport,ProbeTransportError
 from .type2_dictionary0167 import load_type2_decoder
 from .skyapi import SkyClient,SkyApiError
 
-BUILD=421589
+BUILD=421629
 TICKET_URL='https://live-as-sky-merge.game.163.com/account/find_previous_or_empty'
 PUBLIC_FIELDS={'phase','running','map_id','scene','duration','elapsed_seconds','reply_count',
  'scene_request_count','ignored_scene_requests','http_status','enter_game_valid','registration_transport_acked',
@@ -40,7 +40,7 @@ class Prepared:
     current_inputs:object=field(default=None,repr=False)
 
 def _validate_account(account,build):
-    if build!=BUILD or current_join.mode()!='current':raise ValueError('仅支持当前 0.16.7 / 421589 模式')
+    if build!=BUILD or current_join.mode()!='current':raise ValueError('仅支持当前 0.16.8 / 421629 模式')
     if not isinstance(account,dict) or not account.get('id'):
         raise ValueError('缺少账号归属信息')
     # /session authorizes the tenant server-side. This public broker reference
@@ -234,7 +234,7 @@ def run_connection(prepared,duration,cancel,emit):
         if pushed:
             response={'data':pushed}  # claudework：服务器 WS move 推的票（被牵着过图/回遇境）
         elif is_long:
-            # The supplied build-421589 Home runtime explicitly requests flags=0.
+            # The supplied build-421629 Home runtime explicitly requests flags=0.
             response=client._post_once('/account/find_previous_or_empty',{
                 'server_version':442,'client_version':5127,'force_empty':False,'net_flags':0,
                 'net_exclusive_flags':0,'level_hash':prepared.profile.record['netversion_u16'][0],

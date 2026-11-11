@@ -36,7 +36,7 @@ def _vector(value):
 def _surface_candidates(adapter):
     """Yield (surface, offset) pairs reachable from the current adapter.
 
-    Supported live object graphs (0.16.7 release tree):
+    Supported live object graphs (0.16.8 release tree):
 
     * ``BoundWorkerBackend._ground_surface`` (direct backend)
     * ``BoundedPilotRuntime.backend._ground_surface``

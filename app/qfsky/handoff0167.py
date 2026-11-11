@@ -1,4 +1,4 @@
-"""Pure build421589 Home MoveGame protocol; no transport, file or account I/O.
+"""Pure build421629 Home MoveGame protocol; no transport, file or account I/O.
 
 Call only after authenticating the old/current peer and decrypting its packet.
 This module cannot authenticate a UDP source, authorize a Scene, send a reply,
@@ -17,10 +17,10 @@ from .join0167_profile import (
 from .handshake0167_fields import advance_message_sequence, peer_key as uid_peer_key
 from .receive0167 import ServerMessage
 
-BUILD = 421589
+BUILD = 421629
 HOME_SCENE = 'CandleSpace'
 HOME_LEVEL = 3526133726
-HOME_RESOURCE = 'V75885'
+HOME_RESOURCE = 'V76318'
 HOME_NETVERSION = (36851, 49307, 23536, 0, 0, 25536)
 RESERVATION_SENTINEL = 0xffffffff
 

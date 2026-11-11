@@ -1,4 +1,4 @@
-"""Read-only, build-specific account-bound Sky cache capture (421589 only).
+"""Read-only, build-specific account-bound Sky cache capture (421629 only).
 
 Requires an explicitly selected adb/device, matching local .so, running official
 client, root read access and operator-supplied scene/resource revision. Never starts
@@ -27,10 +27,10 @@ def atomic_bytes(path, data):
     os.replace(tmp, p)
     return p
 
-TEXT_RVA = 0x1fa014c
-TEXT_PROOF = bytes.fromhex('286c01d00990905208e94b791f01096a200100544840424a6940434a04080079')
-GAME_SLOT = 0x4b6f6c0
-GAME_VTABLE = 0x36a3980
+TEXT_RVA = 0x1fa0920
+TEXT_PROOF = bytes.fromhex('286c01d00990905208694c791f01096a200100544840424a6940434a04080079')
+GAME_SLOT = 0x4b6f6f0  # 0.16.8 page 0x4b6f000 + 0x6f0（0.16.7 +0x6c0，+0x30）
+GAME_VTABLE = 0x36a3990  # 0.16.8 ctor 写入 adrp 0x36a3000 + 0x990
 PACKAGE = 'com.netease.sky'
 
 # exec-out 不回传远端退出码，su/sh 的报错文本会以“正常 stdout + 返回码 0”回来。
@@ -219,7 +219,7 @@ def validated_context(a):
     if not re.fullmatch(r'\d+',pid): raise ValueError('expected exactly one running official game process')
     d.pid=int(pid)
     package=d.call(['shell','dumpsys package '+PACKAGE]).decode('utf-8','replace')
-    if not re.search(r'\bversionCode=421589\b',package): raise ValueError('installed package build is not421589')
+    if not re.search(r'\bversionCode=421629\b',package): raise ValueError('installed package build is not421629')
     del package
     d.maps=parse_maps(d.call(['shell',f"su -c 'cat /proc/{d.pid}/maps'"]).decode())
     paths={m['path'] for m in d.maps if m['path'].endswith('/libBootloader.so')}

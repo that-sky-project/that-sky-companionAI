@@ -469,16 +469,16 @@ class RoomTracker:
             if (token.kind, token.extent) != (kind, width):
                 raise ValueError("attachment_token_shape")
             return int.from_bytes(token.value, "little") if kind == "raw" else token.value
-        for label, kind, width, name in (("0x21dde4c", "raw", 1, "carrier_slot"),
-                ("0x21de934", "raw", 1, "leader_slot"), ("0x21de95c", "bits", 2, "hold_state")):
+        for label, kind, width, name in (("0x21de648", "raw", 1, "carrier_slot"),
+                ("0x21df130", "raw", 1, "leader_slot"), ("0x21df158", "bits", 2, "hold_state")):
             values[name] = field(label, kind, width)
         # Animation failure must not turn valid carry/hold data into detachment.
         try:
             loc = anim_pose._locate(observed)
             animation = {name:anim_pose._val(name, observed._tokens[loc[name]]) if name in loc else None
                          for name in ("mode", "code90", "gen", "key", "start", "h_gen", "h_key", "h_start")}
-            animation["once_present"] = bool(field("0x21de994", "bits", 1))
-            animation["once_target"] = field("0x21de9ac", "raw", 1) if animation["once_present"] else None
+            animation["once_present"] = bool(field("0x21df190", "bits", 1))
+            animation["once_target"] = field("0x21df1a8", "raw", 1) if animation["once_present"] else None
             values["animation"] = animation
         except Exception:
             values["animation"] = None
@@ -4480,7 +4480,7 @@ class _LazyWalkMap:
 _SmoothWalkMap = _LazyWalkMap()
 
 
-OUTFIT_GROUP = "0x21dec48|1"         # Actor 装扮块（同服务器 get_outfit：各部位，再 height scale voice attitude refreshVersion seed）
+OUTFIT_GROUP = "0x21df444|1"         # Actor 装扮块（同服务器 get_outfit：各部位，再 height scale voice attitude refreshVersion seed）
 ATTITUDE_FROM_END = 2                # 站姿 = 装扮块倒数第 3 个 token（bits4）；倒数第 4 个是 voice（2026-11-01 用 seed 定位）
 VOICE_FROM_END = 3                   # T23-7：叫声 = 装扮块倒数第 4 个 token（bits4，0..15）
 VOICE_COUNTER_DELAY = 0.45           # T23-7：真人切换时 voice 先变、外观计数约 0.37–0.54 s 后才 +1，这里取 0.45 s
@@ -4495,7 +4495,7 @@ OUTFIT_TAIL_TOKENS = 6               # 块尾：height bits8、scale bits8、voi
 OUTFIT_GROUP_TOKENS = len(OUTFIT_ACTOR_SLOTS) * OUTFIT_RECORD_TOKENS + OUTFIT_TAIL_TOKENS   # 66
 
 
-OUTFIT_COUNTER = "0x21dec68|1"       # 装扮块外的 raw4：外观变了就 +1（哥哥换站姿时 6→7 与 attitude 同一帧）
+OUTFIT_COUNTER = "0x21df464|1"       # 装扮块外的 raw4：外观变了就 +1（哥哥换站姿时 6→7 与 attitude 同一帧）
 CONTROL_DIR = Path(__file__).resolve().parent.parent / "control"   # control/attitude、control/outfit.json、control/outfit_counter
 
 

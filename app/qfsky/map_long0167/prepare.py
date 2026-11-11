@@ -17,8 +17,8 @@ class PreparedCapture:
             'preparation_ready':True,'server_application_verified':False}
 
 def _prepare_current_capture(capture_root,record_dir,*,expected_account_uuid,expected_scene,
-        expected_resource_revision,expected_level_id,expected_netversion,apk_build=421589):
-    if type(apk_build)is not int or apk_build!=421589:raise ValueError('map_capture_build_mismatch')
+        expected_resource_revision,expected_level_id,expected_netversion,apk_build=421629):
+    if type(apk_build)is not int or apk_build!=421629:raise ValueError('map_capture_build_mismatch')
     inputs=load_current_capture(capture_root,record_dir,
         expected_account_binding=account_binding(expected_account_uuid),expected_scene=expected_scene,
         expected_resource_revision=expected_resource_revision,expected_level_id=expected_level_id,
@@ -29,7 +29,7 @@ def _prepare_current_capture(capture_root,record_dir,*,expected_account_uuid,exp
     spawn,matrix,flag=scope.join_fields
     binding,scene,level,nv=scope.scene_observation
     record={'schema':1,'kind':'sky-native-level-cache','classification':'private-current-account-session-state',
-        'apk_build':421589,'native_sha256':NATIVE_SHA256,'scene':scene,'resource_revision':expected_resource_revision,
+        'apk_build':421629,'native_sha256':NATIVE_SHA256,'scene':scene,'resource_revision':expected_resource_revision,
         'level_id':level,'netversion_u16':list(nv),'cache':{'sha256':hashlib.sha256(inputs.cache_bytes()).hexdigest()},
         'account_binding':{'algorithm':BINDING_ALGORITHM,'source':'native-join-builder-uid16',
                            'value':inputs._context.account_binding_hash},
@@ -49,7 +49,7 @@ class PreparationError(ValueError):
     def __init__(self,code):self.code=code;super().__init__(code)
 
 def prepare_current_capture(capture_root,record_dir,*,expected_account_uuid,expected_scene,
-        expected_resource_revision,expected_level_id,expected_netversion,apk_build=421589):
+        expected_resource_revision,expected_level_id,expected_netversion,apk_build=421629):
     try:
         return _prepare_current_capture(capture_root,record_dir,expected_account_uuid=expected_account_uuid,
             expected_scene=expected_scene,expected_resource_revision=expected_resource_revision,

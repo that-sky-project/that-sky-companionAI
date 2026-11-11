@@ -116,7 +116,7 @@ def _copy_fake_record(dest: Path, scene: str):
     if not record.is_file():
         record.write_text(json.dumps({
             "schema": 1, "kind": "sky-current-scene-actor-pair", "scene": scene,
-            "apk_build": 421589, "account_binding": {"value": "0" * 64},
+            "apk_build": 421629, "account_binding": {"value": "0" * 64},
         }, ensure_ascii=False), encoding="utf-8")
     return dest
 
@@ -191,7 +191,7 @@ def run(once=False):
     write_status(status)
     cfg, cap, gd = _cfg()
     fake = bool(_fake_record_dir())
-    revision = str(cap.get("resource_revision") or "V75885")
+    revision = str(cap.get("resource_revision") or "V76318")
     serial = pid = None
     adb = None
     mumu_dir = None

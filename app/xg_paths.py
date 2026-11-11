@@ -21,7 +21,7 @@
 ========
 SKY_AI_ROOT   代码/运行根（服务器默认 <server-data-root>）
 XG_DATA_DIR   用户数据根（默认 = ROOT）
-XG_GAME_VERSION  游戏数据版本目录名（默认 0.16.7-421589）
+XG_GAME_VERSION  游戏数据版本目录名（默认 0.16.8-421629；旧数据可显式设 0.16.7-421589）
 XG_PYTHON     跑子进程用的解释器（默认 ROOT/.venv/bin/python，没有就用 sys.executable）
 XG_NODE       Node 可执行文件（默认 PATH 里的 node）
 XG_RELEASE    覆盖 RELEASE
@@ -66,7 +66,7 @@ ASSET_RELEASE = RUNTIME / "terrain-experimental-20261104/release-v20-hop-trial"
 LEASE_DIR = RUNTIME / "terrain-experimental-20261104/online-asset-catalog-32maps-v32c"
 STABLE_DATA = DATA / "stable"
 
-GAME_VERSION = os.environ.get("XG_GAME_VERSION", "0.16.7-421589")
+GAME_VERSION = os.environ.get("XG_GAME_VERSION", "0.16.8-421629")
 GAME_DIR = DATA / "game" / GAME_VERSION
 NAMES = GAME_DIR / "names"
 TERRAIN = GAME_DIR / "terrain"

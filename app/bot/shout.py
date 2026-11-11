@@ -2,12 +2,12 @@
 
 真人抓包结论（analysis2 + work2/analysis/shout_summary.json）：
   * 短叫 ShoutS：key 变 ShoutS、generation +1、start 重置、mode 0，
-    0x21dd444(raw1)=1 约 0.4 s，0x1f80044(raw1)=1（类型码只维持一两帧）；
-  * 中叫 ShoutM：同上，动画约 2.1 s，0x21dd444=1 约 0.8 s，0x1f80044=3；
+    0x21ddc40(raw1)=1 约 0.4 s，0x1f80818(raw1)=1（类型码只维持一两帧）；
+  * 中叫 ShoutM：同上，动画约 2.1 s，0x21ddc40=1 约 0.8 s，0x1f80818=3；
   * 大叫：先 ShoutCharge（约 1.2 s，mode 0，flag/type 都为 0）再 ShoutL
-    （generation 在 Charge 基础上再 +2、start 重置、0x21dd444=1 约 0.9 s、
-    0x1f80044=2；ShoutL 动画本身约 3.6 s）。
-  叫完把 0x21dd444 / 0x1f80044 恢复成叫之前的原值；动画 key 留在最后一次
+    （generation 在 Charge 基础上再 +2、start 重置、0x21ddc40=1 约 0.9 s、
+    0x1f80818=2；ShoutL 动画本身约 3.6 s）。
+  叫完把 0x21ddc40 / 0x1f80818 恢复成叫之前的原值；动画 key 留在最后一次
   （真人也这样，直到下一个动画事件把它换掉）。
 
 接口与 anim_pose.AnimEvent 一致：post(body, now) / stamp() / seconds。
@@ -50,8 +50,8 @@ def send_spawn_shout(epoch, own_slot, kind):
     map_long_engine.OUTBOX.append(Frame(14, game, True))
     return game
 
-FLAG = "0x21dd444"          # raw1：叫声触发/持续标志（叫的那段 =1）
-TYPE = "0x1f80044"          # raw1：叫声类型/强度（短 1、大 2、中 3）
+FLAG = "0x21ddc40"          # raw1：叫声触发/持续标志（叫的那段 =1）
+TYPE = "0x1f80818"          # raw1：叫声类型/强度（短 1、大 2、中 3）
 FLAG_TOKEN = (FLAG, "raw", 1)
 TYPE_TOKEN = (TYPE, "raw", 1)
 
@@ -63,10 +63,10 @@ SHOUT_CHARGE = anim_pose.anim_key("ShoutCharge")
 # 真人中位数（analysis2/SHOUT_NOTES.md；work2 复核后写进 REPORT）
 DURATION = {"short": 0.42, "medium": 2.10, "long": 3.60}
 CHARGE_SECONDS = 1.20
-# 抓包里 0x21dd444=1 只覆盖“叫声触发窗口”，不是整段动画：
+# 抓包里 0x21ddc40=1 只覆盖“叫声触发窗口”，不是整段动画：
 # 短叫约 0.2–0.5 s，中叫约 0.8 s，大叫约 0.9 s（ShoutL 动画本身 3.6 s）。
 FLAG_SECONDS = {"short": 0.42, "medium": 0.80, "long": 0.90}
-# 0x1f80044 的类型码在叫的那一帧写入，下一帧就回 0（抓包 6–10 Hz，约 0.1–0.2 s）。
+# 0x1f80818 的类型码在叫的那一帧写入，下一帧就回 0（抓包 6–10 Hz，约 0.1–0.2 s）。
 TYPE_SECONDS = 0.16
 KIND_KEY = {"short": SHOUT_S, "medium": SHOUT_M, "long": SHOUT_L}
 KIND_TYPE = {"short": 1, "medium": 3, "long": 2}

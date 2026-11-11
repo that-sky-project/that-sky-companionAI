@@ -13,7 +13,7 @@ import re
 
 MASK = 0xffffffff
 TYPE_FIELD = 23536
-BUILD = 421589
+BUILD = 421629
 
 NET_RE = re.compile(r"\bNetVersion\s*:\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,"
                     r"\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]")
@@ -42,7 +42,7 @@ def log_observations(lines, *, resource_revision: str, scene=None):
         if any(x > 65535 for x in fields):
             raise ValueError("NetVersion 字段超过 uint16")
         if fields[2] != TYPE_FIELD or fields[3:5] != [0, 0]:
-            raise ValueError("NetVersion 不是 421589 构造出来的形状")
+            raise ValueError("NetVersion 不是 421629 构造出来的形状")
         sm = SCENE_RE.search(line)
         mapped_scene = sm.group(1) if sm else scene
         rows.append({"schema": 1, "apk_build": BUILD, "resource_revision": resource_revision,

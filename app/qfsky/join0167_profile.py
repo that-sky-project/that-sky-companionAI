@@ -1,4 +1,4 @@
-"""Strict private, account-bound cache loader for APK build 421589.
+"""Strict private, account-bound cache loader for APK build 421629.
 This prepares a statically recovered JoinGame; it does not establish an online
 session. No old-template fallback, no network, no automatic account rebinding.
 """
@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from .join0167_codec import encode, octets, uint
 
-BUILD = 421589
-NATIVE_SHA256 = '0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321'
+BUILD = 421629
+NATIVE_SHA256 = '0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed'
 ACCOUNT_DOMAIN = b'sky-cn-421589-level-cache-account-v1\x00'
 BINDING_ALGORITHM = 'sha256-domain-sky-cn-421589-level-cache-account-v1'
 
@@ -59,7 +59,7 @@ class LoadedProfile:
 
 def validate_record(record, cache, *, scene, resource_revision, account_uuid, apk_build=BUILD):
     if apk_build != BUILD or record.get('apk_build') != BUILD:
-        raise ValueError('cache profile is not for APK build 421589')
+        raise ValueError('cache profile is not for APK build 421629')
     if record.get('schema') != 1 or record.get('kind') != 'sky-native-level-cache':
         raise ValueError('unrecognized cache profile schema')
     if record.get('scene') != scene or record.get('resource_revision') != resource_revision:

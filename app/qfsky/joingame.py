@@ -48,7 +48,7 @@ def template_level_hash(tpl: bytes) -> int:
 # levelId 在 JoinGame 里出现两次：@0x87 与包尾最后 4B（官方样本 6/6 两处一致）。
 # NetVersion must come from a complete observed tuple, never a version-number guess.
 
-# 历史 4526B 模板，实际内嵌 build=381089；结构不兼容 421589，禁止默认复用。
+# 历史 4526B 模板，实际内嵌 build=381089；结构不兼容 421629，禁止默认复用。
 CN_TEMPLATE_ZLIB_B64 = 'eJzT8VPzZ2agFOj+3Xx3i67S9c+ZcKH/MICudjnjG+GFF1gZ4r42mmyIBokcSGa4165ziYGhwR7TaNLFjggwAA0HijB+7Xl1+GvNLcdBwlD48Z/yoB4FIxa8+f///v76///+/v7+fpQxyhhljDJGNoN/oIvkUTAKhgVwGATMUTAKhj34//f7/fv35UeZNGIObqCgwPD/PxtxahsZOIGkgR4YWhmAhkgAEEO6lw=='
 
 _CACHED_CN: bytes | None = None
@@ -56,7 +56,7 @@ _CACHED_CN: bytes | None = None
 
 def get_cn_template(*, legacy: bool = False) -> bytes:
     if not legacy:
-        raise ValueError("内嵌模板实际 build=381089，仅允许显式 legacy=True；不能冒充0.16.7")
+        raise ValueError("内嵌模板实际 build=381089，仅允许显式 legacy=True；不能冒充0.16.8")
     global _CACHED_CN
     if _CACHED_CN is None:
         raw = base64.b64decode(CN_TEMPLATE_ZLIB_B64)

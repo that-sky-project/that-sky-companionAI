@@ -35,7 +35,7 @@ os.environ.update({"QFLY_DATA_DIR": str(RT / "runtime-data"), "QFLY_LOCAL_NETWOR
 sys.path.insert(0, str(SERVER))
 
 from qfsky import friends, lookup, outfit, skycode, skyws  # noqa: E402
-from qfsky.skyapi import CN_BUILD_ACCESS_KEY, SkyApiError, SkyClient, cn_user_agent  # noqa: E402
+from qfsky.skyapi import SkyApiError, SkyClient, cn_user_agent  # noqa: E402
 import gift_query  # noqa: E402  礼包查询（只读 friend_info，同目录模块）
 import memory as memory_mod  # noqa: E402  长期记忆
 import personas  # noqa: E402  可切换人设
@@ -1002,7 +1002,7 @@ class Companion:
         if self.dry_run:
             log("would_rename", friend=uid[:8], name=name)
         else:
-            self.client.post(SET_FRIEND_NAME, {"friend": uid, "name": name})   # 0.16.7 新接口（旧的一直 500）
+            self.client.post(SET_FRIEND_NAME, {"friend": uid, "name": name})   # 0.16.8 新接口（旧的一直 500）
         self.pending_remarks.pop(uid, None)
         self.names[uid] = name
         self.memory.renamed(uid, old, self.name_of(uid), by)
@@ -2623,8 +2623,9 @@ def _run_chat(args, llm, account, cancel):
             log("session_reloaded")
         if cancel.is_set():
             return
+        from qfsky import fp as _fp
         ws = ChatWs(uid=bot.client.uid, session=bot.client.session, ua=ua,
-                    access_key=CN_BUILD_ACCESS_KEY, on_event=on_event)
+                    access_key=_fp.build_access_key(), on_event=on_event)
         if ws.connect():
             log("ws_open")
             backoff = 5

@@ -20,7 +20,7 @@ from .common import (APK_BUILD, GameDataError, Progress, atomic_write, canonical
 HOME = 3526133726
 REQUIRED = ("record.json", "actor.bin", "scene.bin", "cache.bin", "capture_evidence.json")
 BINDING_ALGORITHM = "sha256-domain-sky-cn-421589-level-cache-account-v1"
-DEFAULT_REVISION = "V75885"
+DEFAULT_REVISION = "V76318"
 # 与服务器 runtime/private/connection0167_profiles.local.json 同形：
 # 配置在 DATA/runtime/private/ 下，字典在 DATA/runtime/protocol_results/... 下。
 DICTIONARY_REL = "../protocol_results/handshake/resources/CompressDictionary.zst"
@@ -195,12 +195,13 @@ def _validate_record(folder: Path) -> dict:
     record = read_json(folder / "record.json", None)
     if not isinstance(record, dict):
         raise GameDataError("record.json 读不出来：%s" % (folder / "record.json"), "capture_record")
-    if record.get("apk_build") != APK_BUILD:
-        raise GameDataError("录制不是 0.16.7/421589（apk_build=%r）。" % record.get("apk_build"),
+    from qfsky.version_profile import profile_for_build
+    profile = profile_for_build(record.get("apk_build"))
+    if profile is None:
+        raise GameDataError("录制不是支持的 0.16.8/421629（apk_build=%r）。" % record.get("apk_build"),
                             "capture_build")
-    from .apk import NATIVE_SHA256
-    if record.get("native_sha256") != NATIVE_SHA256:
-        raise GameDataError("录制里的 native_sha256 不是国服 0.16.7/421589。", "capture_native")
+    if record.get("native_sha256") != profile["native_sha256"]:
+        raise GameDataError("录制里的 native_sha256 不是国服 0.16.8/421629。", "capture_native")
     if not isinstance(record.get("level_id"), int) or not 0 < record["level_id"] < 2 ** 32:
         raise GameDataError("录制里的 level_id 不合法。", "capture_level")
     if not isinstance(record.get("scene"), str) or not re.fullmatch(r"[A-Za-z0-9_]{1,96}", record["scene"]):
@@ -220,7 +221,7 @@ def _validate_record(folder: Path) -> dict:
     if not isinstance(binding, str) or not re.fullmatch(r"[0-9a-f]{64}", binding):
         raise GameDataError("录制里没有 account_binding，无法认号。", "capture_binding_missing")
     if (record.get("account_binding") or {}).get("algorithm") not in (None, BINDING_ALGORITHM):
-        raise GameDataError("录制的账号绑定算法不是 0.16.7 的约定。", "capture_binding_algorithm")
+        raise GameDataError("录制的账号绑定算法不是 421589 域约定。", "capture_binding_algorithm")
     return record
 
 

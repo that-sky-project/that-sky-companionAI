@@ -13,11 +13,13 @@ from pathlib import Path
 
 from .common import (APK_BUILD, APK_PACKAGE, APK_VERSION, GameDataError, Progress,
                      atomic_json, final, human_size, long_path, sha256_file)
+from qfsky.version_profile import PROFILES as VERSION_PROFILES
 import xg_exec
 
-# 国服 0.16.7 / 421589 的资产身份（与 W2/W3 的 version_profile 一致）
-NATIVE_SHA256 = "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321"
-APK_DIRECTORY_SHA256 = "b26db74613f606fd60b942ff58f00d0c41b12a6d83303228a1143d683adefb14"
+# 国服 0.16.8 / 421629 与 0.16.7 / 421589 的资产身份。
+# 旧值保留只用于识别旧 APK；生成数据仍以 0.16.8 为准。
+NATIVE_SHA256 = VERSION_PROFILES[APK_BUILD]["native_sha256"]
+APK_DIRECTORY_SHA256 = VERSION_PROFILES[APK_BUILD]["apk_directory_sha256"]
 NATIVE_MEMBER = "lib/arm64-v8a/libBootloader.so"
 SCENE_MEMBER = "assets/Data/Levels/CandleSpace/Objects.level.bin"
 
@@ -72,19 +74,29 @@ def inspect_apk(apk: Path, progress: Progress | None = None) -> dict:
     whole_sha = sha256_file(apk)
 
     problems = []
-    if native_sha != NATIVE_SHA256:
-        problems.append("libBootloader.so 的 SHA-256 不对（不是国服 0.16.7 / 421589）")
-    if directory_sha != APK_DIRECTORY_SHA256:
-        problems.append("APK 目录身份（文件名/大小/CRC）不对（不是这份国服 0.16.7 / 421589）")
+    matched = None
+    for build, profile in VERSION_PROFILES.items():
+        if native_sha == profile["native_sha256"] and directory_sha == profile["apk_directory_sha256"]:
+            matched = (build, profile)
+            break
+    if matched is None:
+        if native_sha not in {p["native_sha256"] for p in VERSION_PROFILES.values()}:
+            problems.append("libBootloader.so 的 SHA-256 不对（不是国服 0.16.8 / 421629）")
+        if directory_sha not in {p["apk_directory_sha256"] for p in VERSION_PROFILES.values()}:
+            problems.append("APK 目录身份（文件名/大小/CRC）不对（不是这份国服 0.16.8 / 421629）")
+        if not problems:
+            problems.append("libBootloader.so 与 APK 目录身份不是同一个版本档位")
     if problems:
-        raise GameDataError("；".join(problems) + "。只接受国服 0.16.7 / 421589 的安装包。",
+        raise GameDataError("；".join(problems) + "。只接受国服 0.16.8 / 421629 的安装包。",
                             "apk_identity_mismatch")
+    build, profile = matched
     return {
         "ok": True,
         "path": str(apk),
         "package": APK_PACKAGE,
-        "version": APK_VERSION,
-        "build": APK_BUILD,
+        "version": profile["version"],
+        "version_code": build,
+        "build": build,
         "sha256": whole_sha,
         "bytes": apk.stat().st_size,
         "bytes_human": human_size(apk.stat().st_size),
@@ -209,7 +221,7 @@ def pull_apk(adb: str, serial: str | None, data_dir: Path) -> dict:
     paths = _parse_pm_path(out)
     if not paths:
         raise GameDataError(
-            "MuMu 里没有安装光遇（%s）。请先在 MuMu 里装好国服 0.16.7/421589。" % APK_PACKAGE,
+            "MuMu 里没有安装光遇（%s）。请先在 MuMu 里装好国服 0.16.8/421629。" % APK_PACKAGE,
             "game_not_installed")
     dest = Path(data_dir) / "game" / "apk"
     dest.mkdir(parents=True, exist_ok=True)

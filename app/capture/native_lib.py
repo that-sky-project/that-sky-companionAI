@@ -56,7 +56,7 @@ def _candidate_apks(apk_path=None):
 
 
 def ensure_native_library(apk_path=None, dest=None, expected_sha256=None, force=False):
-    """确保 DATA/runtime/native/libBootloader.so 存在且是 421589 的那份。
+    """确保 DATA/runtime/native/libBootloader.so 存在且是 421629 的那份。
 
     返回 {"ok":True,"path":...,"sha256":...}；失败抛 ValueError（中文由 errors.explain 转）。
     """
@@ -83,7 +83,7 @@ def ensure_native_library(apk_path=None, dest=None, expected_sha256=None, force=
             continue
         got = hashlib.sha256(body).hexdigest()
         if got != expected:
-            last = (f"{apk.name} 里的 {LIB_NAME} 不是 0.16.7 / 421589 的版本"
+            last = (f"{apk.name} 里的 {LIB_NAME} 不是 0.16.8 / 421629 的版本"
                     f"（sha256={got[:12]}…），换对版本的安装包")
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +108,7 @@ def copy_from_dir(src_dir, dest=None, expected_sha256=None):
         raise ValueError(f"{src_dir} 里没有 lib/arm64-v8a/{LIB_NAME}")
     got = sha256_file(src)
     if got != expected:
-        raise ValueError("这个 libBootloader.so 不是 0.16.7 / 421589 的版本")
+        raise ValueError("这个 libBootloader.so 不是 0.16.8 / 421629 的版本")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
     return {"ok": True, "path": str(dest), "sha256": got, "source": str(src)}

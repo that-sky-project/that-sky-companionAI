@@ -1,4 +1,4 @@
-"""Strict .mesh v0x20 geometry reader, verified against CN 0.16.7 fixtures.
+"""Strict .mesh v0x20 geometry reader, verified against CN 0.16.8 fixtures (layout unchanged from 0.16.7).
 Byte-layout reference: SkyVEx mesh_parser.py (MIT), commit b38609d2367a23d667514e9ef24947c43f987b97.
 This implementation adds bounded reads/counts and preserves uninterpreted records.
 """

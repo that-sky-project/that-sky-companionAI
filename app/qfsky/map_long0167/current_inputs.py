@@ -25,7 +25,7 @@ class CurrentContext:
     resource_revision:str
     level_id:int
     native_sha256:str=NATIVE_SHA256
-    apk_build:int=421589
+    apk_build:int=421629
 
 @dataclass(frozen=True,repr=False)
 class CurrentInputs:
@@ -52,7 +52,7 @@ def capture_current_inputs(read_memory,context_provider,*,expected_account_bindi
                            expected_scene,expected_resource_revision,expected_netversion):
     """One attempt; reject torn data/map changes. Caller controls any retry.
 
-    Static chain (421589): Game+7ec0=N; N+30=Level; Level+9a10=current
+    Static chain (421629): Game+7ec0=N; N+30=Level; Level+9a10=current
     levelId; N+99b78=NV; N+40=cache_object; cache_object+c is 0x2010 bytes.
     Own Actor writer=N+48, raw_len=N+54, raw_body=N+58, tick=N+2480.
     Caller verifies the actual mapped native build and pointer chain first.
@@ -66,7 +66,7 @@ def capture_current_inputs(read_memory,context_provider,*,expected_account_bindi
         raise ValueError('current_input_expected_nv')
     def context():
         c=context_provider()
-        if type(c)is not CurrentContext or c.native_sha256!=NATIVE_SHA256 or c.apk_build!=421589:
+        if type(c)is not CurrentContext or c.native_sha256!=NATIVE_SHA256 or c.apk_build!=421629:
             raise ValueError('current_input_version_scope')
         if(c.scene!=expected_scene or c.resource_revision!=expected_resource_revision or
            type(c.account_binding_hash)is not str or

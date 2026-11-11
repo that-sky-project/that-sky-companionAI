@@ -30,13 +30,13 @@ KIND = 'asset-bootstrap-experimental'
 MANIFEST_SCHEMA = 'sky-asset-bootstrap-trial-v32'
 SCENE = 'NightArchive'
 MAP_ID = 2518601
-RESOURCE_REVISION = 'apk-v75506-421589'
+RESOURCE_REVISION = 'apk-v76318-421629'
 NV = (36184, 49307, 23536, 0, 0, 25536)
 SOURCE_SHA = '97473401054708cbd401f8883766a837a2003cb4203d49a1795f820a107d2ed2'
 ACTOR_SHA = '99916c60de406810e07c78e693a1e0726d73475c809c36af26b8cd3c510d7219'
-PLACEMENT_SHA = 'c9d5b0d297cea8555739b5662fd107f91d937eaf617bdeb75c6dd621ee848a8d'
+PLACEMENT_SHA = '6bbca3fd972d013ec8a25e1a0744dd38e11a083b1b7e96642bcbfa199d9d6f2e'
 MEMBER_SHA = 'd5ee907701715ab751696a4fe8211c14b80c9de78e30a60e1007dff9daad997c'
-APK_DIRECTORY_SHA = 'b26db74613f606fd60b942ff58f00d0c41b12a6d83303228a1143d683adefb14'
+APK_DIRECTORY_SHA = 'b3bab17209ddacc225daa2eef932eefc6230ebaf7102331da523b7d95fc87555'
 SOURCE_METADATA_SHA = '0e81fe7d2e7ef41dd4c8297ba9ba1966399b6eebec74c0e393cb9515c7ec2686'
 _PHASES = {
     'sky-asset-scene-candidate-v32': (
@@ -109,7 +109,7 @@ def _gate(raw, now_utc=None):
     now = datetime.now(timezone.utc) if now_utc is None else _utc(now_utc)
     if now >= _utc(m.get('deadline_utc')):
         _fail('trial_deadline')
-    if (type(m.get('apk_build')) is not int or m['apk_build'] != 421589 or
+    if (type(m.get('apk_build')) is not int or m['apk_build'] != 421629 or
             m.get('native_sha256') != NATIVE_SHA256 or
             type(m.get('level_id')) is not int or m['level_id'] != MAP_ID or
             m.get('resource_revision') != RESOURCE_REVISION or
@@ -170,7 +170,7 @@ def _source(source, meta, binding, manifest):
         _fail('stored_same_account_source_required')
     c = source._context
     if (type(c.world_generation) is not StoredCaptureScope or c.net_module_address != 0 or
-            c.apk_build != 421589 or c.native_sha256 != NATIVE_SHA256 or
+            c.apk_build != 421629 or c.native_sha256 != NATIVE_SHA256 or
             type(c.account_binding_hash) is not str or
             not hmac.compare_digest(c.account_binding_hash, binding)):
         _fail('source_account_or_stored_scope')
@@ -238,10 +238,10 @@ def _preserved_actor(source, target, source_obs, target_obs, position):
         if index is None or (source_obs._tokens[index].kind, source_obs._tokens[index].extent) != (kind, extent):
             _fail('actor_field_shape')
         return index
-    main_map = at('0x21dc8ec', 'raw', 4)
-    origin = at('0x21dc858', 'raw', 4)
-    history = at('0x21de7c4', 'raw', 1)
-    velocity = at('0x21dca9c', 'bits', 8)
+    main_map = at('0x21dd0e8', 'raw', 4)
+    origin = at('0x21dd054', 'raw', 4)
+    history = at('0x21defc0', 'raw', 1)
+    velocity = at('0x21dd298', 'bits', 8)
     changes = {main_map: struct.pack('<I', MAP_ID), history+1: struct.pack('<I', MAP_ID)}
     for i, value in enumerate(position):
         changes[origin+i] = struct.pack('<f', value)
@@ -249,8 +249,8 @@ def _preserved_actor(source, target, source_obs, target_obs, position):
     for i in range(3):
         changes[velocity+i] = 127
     mask = bytearray(len(source))
-    # 2026-11-07 好友传送：0x21dee4c 关卡状态头（raw2, level, resource tag）可改成本图值，或保持源值。
-    level_state = at('0x21dee4c', 'raw', 2)
+    # 2026-11-07 好友传送：0x21df648 关卡状态头（raw2, level, resource tag）可改成本图值，或保持源值。
+    level_state = at('0x21df648', 'raw', 2)
     optional = {level_state: bytes(2), level_state+1: struct.pack('<I', MAP_ID),
                 level_state+2: struct.pack('<I', NV[0])}
     for i, (before, after) in enumerate(zip(source_obs._tokens, target_obs._tokens)):
@@ -333,7 +333,7 @@ def _scene_proof(p, m, observed, cache, wire):
             any(type(x) is not str or not x for x in p['missing_scene_inputs'])):
         _fail('scene_partial_gaps_required')
     prov = p.get('provenance', {})
-    if (prov.get('native_sha256') != NATIVE_SHA256 or prov.get('apk_build') != 421589 or
+    if (prov.get('native_sha256') != NATIVE_SHA256 or prov.get('apk_build') != 421629 or
             prov.get('scene_member_sha256') != MEMBER_SHA or
             prov.get('apk_archive_directory_sha256') != APK_DIRECTORY_SHA or
             prov.get('scene_member') != 'assets/Data/Levels/NightArchive/Objects.level.bin' or
@@ -349,7 +349,7 @@ class AssetBootstrapContext:
     level_id: int
     manifest_sha256: str
     native_sha256: str = NATIVE_SHA256
-    apk_build: int = 421589
+    apk_build: int = 421629
     source_kind: str = 'saved_same_bot_capture_not_live_current'
 
 
@@ -395,7 +395,7 @@ def _validate(inputs, binding, scene, resource_revision, level_id, netversion, n
             type(level_id) is not int or level_id != MAP_ID or
             type(netversion) not in (tuple, list) or any(type(v) is not int for v in netversion) or tuple(netversion) != NV or
             c.scene != scene or c.resource_revision != resource_revision or c.level_id != level_id or
-            c.native_sha256 != NATIVE_SHA256 or c.apk_build != 421589 or c.manifest_sha256 != _sha(inputs._manifest) or
+            c.native_sha256 != NATIVE_SHA256 or c.apk_build != 421629 or c.manifest_sha256 != _sha(inputs._manifest) or
             c.source_kind != 'saved_same_bot_capture_not_live_current' or
             not hmac.compare_digest(c.account_binding_hash, binding)):
         _fail('account_or_map_scope')
@@ -474,7 +474,7 @@ def _profile_record(inputs):
     if not all(math.isfinite(x) for x in struct.unpack('<20f', spawn+matrix)):
         _fail('join_player_fields_finite')
     record = {'schema': 1, 'kind': KIND, 'classification': KIND,
-        'apk_build': 421589, 'native_sha256': NATIVE_SHA256, 'scene': SCENE,
+        'apk_build': 421629, 'native_sha256': NATIVE_SHA256, 'scene': SCENE,
         'resource_revision': RESOURCE_REVISION, 'level_id': MAP_ID, 'netversion_u16': list(NV),
         'cache': {'sha256': _sha(inputs._cache)}, 'actor_sha256': _sha(inputs._actor),
         'source_actor_sha256': SOURCE_SHA, 'source_capture_record_sha256': inputs._source._context.world_generation.record_sha256,

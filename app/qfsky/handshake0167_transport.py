@@ -1,4 +1,4 @@
-"""Bounded single-connection transport for an explicitly requested 421589 probe.
+"""Bounded single-connection transport for an explicitly requested 421629 probe.
 No historical burst or gameplay messages. RC4 resets per reassembled ENet packet.
 """
 import os

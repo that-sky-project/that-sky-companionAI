@@ -73,7 +73,7 @@ def migrate(pump, target, *, guard, commit_guard, make_engine, before_install, a
     original_map, original_epoch = source._map, source._epoch
     epoch, counter = next_counter(source._epoch), next_counter(slot.counter)
     p = target.profile.player_fields
-    fields = dict(build=421589, netversion=target.profile.record['netversion_u16'],
+    fields = dict(build=421629, netversion=target.profile.record['netversion_u16'],
                   level_flag=p['level_flag'], level_id=target.map_id,
                   matrix=p['matrix'], tail_flag=False)
     body = register0167_codec.encode(field00=epoch, **fields)

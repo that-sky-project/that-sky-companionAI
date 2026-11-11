@@ -1,9 +1,9 @@
 """Offline current-native snapshot writer; no sockets or game operations.
 
-Current build421589 independently checked equivalents: update33cba94,
+Current build421629 independently checked equivalents: update33cba94,
 frame33cc1d4, XOR/RLE33cafbc, acknowledgment33cc438. The older addresses
 below are retained provenance, not the current APK addresses. See the
-managed CURRENT_WRAPPER_REVIEW_421589.md for the instruction evidence.
+managed CURRENT_WRAPPER_REVIEW_421629.md for the instruction evidence.
 
 Recovered original functions: init32f97d4, update32f9bc0, frame32fa300,
 XOR/RLE32f90e8, acknowledgment32fa564. This module treats a caller's already

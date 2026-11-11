@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
-"""APK 0.16.7 / 421589 的 native 库身份与账号绑定算法（只读）。"""
+"""APK 0.16.8 / 421629 的 native 库身份与账号绑定算法（只读）。
+
+账号绑定域故意保持 421589：STAGING-NOTES 第 2 条要求所有历史录制/目录的
+account_binding 继续匹配；域字符串不是 APK 版本号，不能跟着 build 改。
+"""
 from __future__ import annotations
 
 import hashlib
 import re
 
-BUILD = 421589
-NATIVE_SHA256 = "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321"
+BUILD = 421629
+NATIVE_SHA256 = "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed"
+# 兼容旧录制：域固定为 421589，不随 BUILD 变。
 ACCOUNT_DOMAIN = b"sky-cn-421589-level-cache-account-v1\x00"
 BINDING_ALGORITHM = "sha256-domain-sky-cn-421589-level-cache-account-v1"
 UUID_RE = re.compile(r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})")

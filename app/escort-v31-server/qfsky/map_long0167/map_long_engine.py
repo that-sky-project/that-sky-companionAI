@@ -174,7 +174,7 @@ def validate_inputs(inputs,*,account_uuid,scene,resource_revision,level_id,netve
     if type(inputs)is not CurrentInputs or type(inputs._context)is not CurrentContext:
         raise ValueError('map_long_current_inputs_required')
     c=inputs._context
-    if c.apk_build!=421589 or c.native_sha256!=NATIVE_SHA256:
+    if c.apk_build!=421629 or c.native_sha256!=NATIVE_SHA256:
         raise ValueError('map_long_current_build_required')
     if(type(scene)is not str or not scene or type(resource_revision)is not str or not resource_revision or
        type(level_id)is not int or not 0<level_id<=0xffffffff):
@@ -274,7 +274,7 @@ class MapLongEngine:
         self._actor_origin=self._actor_started_at=self._last_extension=None;self._actor_sequence=0
         self._revision_base=0;self._local_idle_restored=local_idle is not None
         self._idle_binding=(account_binding(account_uuid),level_id,scene,resource_revision,
-            (421589,NATIVE_SHA256),tuple(netversion),hashlib.sha256(inputs.cache_bytes()).hexdigest(),
+            (421629,NATIVE_SHA256),tuple(netversion),hashlib.sha256(inputs.cache_bytes()).hexdigest(),
             hashlib.sha256(inputs.actor_bytes()).hexdigest())
         if local_idle is not None:
             self._actor_origin,self._revision_base=restore_idle(local_idle,

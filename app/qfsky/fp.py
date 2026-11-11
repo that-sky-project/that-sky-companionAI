@@ -259,12 +259,16 @@ def sky_ua(key: str, version_str: str) -> str:
     return "Sky/%s (%s)" % (version_str, ua_device(key))
 
 
-# ★★ 0.16.5 国服网关双闸门之一：x-sky-build-access-key 必须等于此常量 ★★
+# ★★ 国服网关双闸门之一：x-sky-build-access-key 每个构建号都会换 ★★
 # 值 = 官方 APK 编译期常量 com.tgc.sky.BuildConfig.SKY_BUILD_ACCESS_KEY。
-# 取证：真机 /data/data/com.netease.sky/app_ntp0/0.16.5_412659/.unzip/classes2.dex
-# 是 ntp0 加固 dex（伪造 magic/header_size/endian_tag/file_size），重建 0x70 头 +
-# 重算 SHA-1/Adler32 后用 androguard 读出该常量。空串 / "1" / 只取时间戳段一律 418。
-BUILD_ACCESS_KEY = os.environ.get("SKY_BUILD_ACCESS_KEY_NETEASE", "1743442606-baf4b7016afe3eae8d2a147051291ef9300db7082d26592dd57c4d92f1039eba").strip()
+# 0.16.8 的新值不写进公开仓库。运行时由 qfsky.build_key 解析：
+#   环境变量 SKY_BUILD_ACCESS_KEY_NETEASE
+#   → runtime/private/build_access_key
+#   → 私有登录服务下发后的本机缓存
+# 旧 0.16.7 默认值已删除；缺失时 build_access_key() 抛中文错误，绝不发空串硬闯。
+def build_access_key() -> str:
+    from .build_key import resolve
+    return resolve()
 
 
 def sky_cn_ua(key: str, version_str: str) -> str:

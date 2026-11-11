@@ -1,4 +1,4 @@
-"""Pure HandHoldLeadRpc codec, recovered from the local CN 0.16.7 ELF.
+"""Pure HandHoldLeadRpc codec, recovered from the local CN 0.16.8 ELF.
 
 Native producer 0x2513d00 writes current local PlayerId first, target second;
 serializer 0x253aa18 serializes exactly those two PlayerIds. Receiver 0x2537138

@@ -11,7 +11,7 @@ import math
 from pathlib import Path
 import struct
 
-PROFILE='netease-android-0.16.7-421589'
+PROFILE='netease-android-0.16.8-421629'
 HEADER=bytes.fromhex('1b4c7561520001040804080019930d0a1a0a')
 
 class ResourceTableError(ValueError):pass

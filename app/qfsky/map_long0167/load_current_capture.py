@@ -87,7 +87,7 @@ def load_current_capture(private_root, record_dir, *, expected_account_binding,
     if (type(record.get('schema')) is not int or record['schema'] != 1 or
         record.get('kind') != 'sky-current-scene-actor-pair' or
         record.get('classification') != 'private-current-account-session-state' or
-        type(record.get('apk_build')) is not int or record['apk_build'] != 421589 or
+        type(record.get('apk_build')) is not int or record['apk_build'] != 421629 or
         record.get('native_sha256') != core.NATIVE_SHA256):
         raise ValueError('stored_capture_current_native_required')
     binding = record.get('account_binding')

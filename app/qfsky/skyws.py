@@ -202,14 +202,15 @@ def keepalive_for(client, seconds: float | None = None):
 
     `seconds` 给了就原地保持这么久（简单用法：送心链跑完再退）。
     """
-    from .skyapi import CN_BUILD_ACCESS_KEY, cn_user_agent
+    from .skyapi import cn_user_agent
+    from . import fp
 
     ws = WsSession(
         uid=getattr(client, "uid", ""),
         session=getattr(client, "session", ""),
         ua=cn_user_agent(getattr(client, "client_version", "") or "",
                          getattr(client, "fp_key", "")),
-        access_key=CN_BUILD_ACCESS_KEY,
+        access_key=fp.build_access_key(),
     )
     if not ws.connect():
         return None

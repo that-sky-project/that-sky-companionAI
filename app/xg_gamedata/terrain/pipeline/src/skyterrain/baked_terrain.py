@@ -1,4 +1,4 @@
-"""CN 0.16.7 baked ordinary-terrain registration projection.
+"""CN 0.16.8 baked ordinary-terrain registration projection.
 
 This is a version-pinned static observation, NOT native avatar physics parity.
 GEO geometry stays render_only in the decoder. This layer cites the independent
@@ -10,11 +10,11 @@ import numpy as np
 from .assembly import Assembly, AssemblyLimits
 from .formats._types import MeshBundle, FormatError
 
-PROFILE = "netease-android-0.16.7-421589"
+PROFILE = "netease-android-0.16.8-421629"
 # Native reader keeps only low16 for version testing; this candidate accepts
 # only the four exact raw headers observed in the current APK, not arbitrary flags.
 RAW_VERSION_LAYOUTS = {60: 60, 61: 61, 0x0001003C: 60, 0x0002003D: 61}
-ELF_SHA256 = "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321"
+ELF_SHA256 = "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed"
 EVIDENCE = {
     "profile": PROFILE, "elf_sha256": ELF_SHA256,
     "report": "research/native/authority-native-terrain-registration-review.json",
