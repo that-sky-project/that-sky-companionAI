@@ -71,7 +71,11 @@ def _account(xg, account_id: str) -> dict:
 
 
 def _donor(xg, profiles: dict, uuid: str) -> dict:
-    """找这个号的遇境真录（优先 CandleSpace），返回目录/record/actor。"""
+    """找这个号的遇境真录（优先 CandleSpace），返回目录/record/actor。
+
+    catalog_sources 可能还是旧版本登记的 36851 条目；当前 APK 版本对不上时
+    不拿它当源，回退到 profiles 里本号的遇境录制。
+    """
     sources = read_json(Path(xg.RUNTIME_PRIVATE) / "catalog_sources.json", {}) or {}
     rows = []
     for map_id, entry in (profiles.get("maps") or {}).items():
@@ -81,7 +85,11 @@ def _donor(xg, profiles: dict, uuid: str) -> dict:
     source_row = sources.get(uuid)
     if isinstance(source_row, dict) and source_row.get("record_dir"):
         name = source_row["record_dir"]
-        return _read_donor(xg, name, expected_uuid=uuid, prefer_home=True)
+        try:
+            return _read_donor(xg, name, expected_uuid=uuid, prefer_home=True)
+        except GameDataError as exc:
+            if exc.code not in ("donor_version", "donor_not_home", "donor_missing"):
+                raise
     home_rows = [r for r in rows if str(r[0]) == str(HOME)]
     for map_id, entry, cap, own in home_rows:
         if isinstance(own, dict) and own.get("record_dir"):
@@ -90,7 +98,7 @@ def _donor(xg, profiles: dict, uuid: str) -> dict:
             return _read_donor(xg, cap["record_dir"], expected_uuid=uuid, prefer_home=True)
     # 没有遇境就明确让用户录一次
     raise GameDataError(
-        "这个号还没有遇境（CandleSpace）真录。先用 MuMu 录一次遇境，"
+        "这个号还没有当前版本（0.16.8）的遇境（CandleSpace）真录。先用 MuMu 录一次遇境，"
         "再跑 capture-register 登记。", "home_capture_missing")
 
 
@@ -101,10 +109,30 @@ def _read_donor(xg, name: str, expected_uuid: str, prefer_home: bool = True) -> 
     record = read_json(folder / "record.json", None)
     if not isinstance(record, dict):
         raise GameDataError("源录制不存在：%s" % folder, "donor_missing")
+    from qfsky.version_profile import profile_for_build
+    profile = profile_for_build(record.get("apk_build"))
+    if (profile is None or profile.get("legacy")
+            or record.get("apk_build") != APK_BUILD
+            or record.get("native_sha256") != profile.get("native_sha256")):
+        raise GameDataError(
+            "目录源不是当前 0.16.8/421629 的录制（apk_build=%r）。"
+            % record.get("apk_build"), "donor_version")
+    if record.get("resource_revision") != profile.get("resource_revision"):
+        raise GameDataError(
+            "目录源的 resource_revision 与当前版本档案不一致：%r。"
+            % record.get("resource_revision"), "donor_version")
     if record.get("level_id") != HOME or record.get("scene") != HOME_SCENE:
         raise GameDataError(
             "目录源必须是这个号的遇境真录（CandleSpace）；当前源是 %s/%s。"
             % (record.get("scene"), record.get("level_id")), "donor_not_home")
+    nv = record.get("netversion_u16")
+    if (not isinstance(nv, list) or len(nv) != 6
+            or any(type(v) is not int or not 0 <= v <= 65535 for v in nv)):
+        raise GameDataError("目录源的 netversion_u16 不合法。", "donor_version")
+    if nv[0] != profile.get("home_resource_tag"):
+        raise GameDataError(
+            "目录源的遇境 resource tag=%r 与当前版本档案 %r 不一致。"
+            % (nv[0], profile.get("home_resource_tag")), "donor_version")
     from qfsky.join0167_profile import account_binding
     if (record.get("account_binding") or {}).get("value") != account_binding(expected_uuid):
         raise GameDataError("源录制不是这个号的（账号绑定不一致）。", "donor_account")
@@ -113,7 +141,7 @@ def _read_donor(xg, name: str, expected_uuid: str, prefer_home: bool = True) -> 
     return {"record_dir": name, "folder": folder, "record": record,
             "record_sha256": sha256_bytes((folder / "record.json").read_bytes()),
             "actor": actor_raw, "actor_sha256": sha256_bytes(actor_raw),
-            "netversion_u16": list(record["netversion_u16"])}
+            "netversion_u16": list(nv)}
 
 
 def _scene_inputs(cache_dir: Path, pack: dict, apk, progress: Progress | None = None) -> dict:
@@ -148,6 +176,14 @@ def _scene_inputs(cache_dir: Path, pack: dict, apk, progress: Progress | None = 
                     or any(type(v) is not int or not 0 <= v <= 65535 for v in nv)
                     or nv[2:] != [23536, 0, 0, NATIVE_RECORD_SIZE]):
                 raise GameDataError("场景输入 netversion 不对：%s" % scene, "scene_inputs_netversion")
+            if scene == HOME_SCENE:
+                from qfsky.version_profile import profile_for_native_sha256
+                home = profile_for_native_sha256(NATIVE_SHA256)
+                if home is None or nv[0] != home["home_resource_tag"]:
+                    raise GameDataError(
+                        "遇境场景输入的 resource tag=%r 与 0.16.8 档案 %r 不一致。"
+                        % (nv[0], home and home.get("home_resource_tag")),
+                        "scene_inputs_netversion")
             wire = wire_path.read_bytes()
             cache = cache_path.read_bytes()
             native = native_path.read_bytes()
@@ -201,6 +237,44 @@ def _placement(pack: dict, scene: str, map_id: int, variant: str | None = None) 
             and all(isinstance(v, (int, float)) for v in pos)):
         raise GameDataError("落点包的 wire_position 不合法：%s" % scene, "placement_position")
     return row, canonical_json(row)
+
+
+def _placement_evidence(proof: dict, placement: dict, profile: dict) -> None:
+    """落点包的版本/源证据必须与本机 APK、场景证明三方一致；不一致就报中文错。
+
+    旧实现会把落点包的 source_member_sha256 反写进 scene-provenance，等于让
+    0.16.7 的落点包静默覆盖本次 0.16.8 APK 的现场证据；这里改成 fail-closed。
+    """
+    pprov = placement.get("provenance") or {}
+    prov = proof.get("provenance") or {}
+    scene = proof.get("scene")
+    build = profile["build"]
+    label = "%s/%s" % (profile["version"], build)
+    expected_member = "assets/Data/Levels/%s/Objects.level.bin" % scene
+    declared_build = pprov.get("apk_build")
+    if declared_build is not None and declared_build != build:
+        raise GameDataError(
+            "落点包 %s 的 placement 版本是 %r，不是当前 %s。" % (scene, declared_build, label),
+            "placement_version")
+    if (pprov.get("native_sha256") != profile["native_sha256"]
+            or pprov.get("apk_archive_directory_sha256") != profile["apk_directory_sha256"]):
+        raise GameDataError(
+            "落点包 %s 的 placement 源证据不是当前 %s（native=%s…，APK 目录=%s…）。"
+            "这份落点包与本次 APK 版本不一致，不能生成目录。"
+            % (scene, label, str(pprov.get("native_sha256"))[:12],
+               str(pprov.get("apk_archive_directory_sha256"))[:12]),
+            "placement_version")
+    if pprov.get("source_member") != expected_member:
+        raise GameDataError(
+            "落点包 %s 的 source_member 不是本场景成员：%r。"
+            % (scene, pprov.get("source_member")), "placement_source_member")
+    actual = prov.get("scene_member_sha256")
+    if actual != pprov.get("source_member_sha256"):
+        raise GameDataError(
+            "落点包 %s 的场景成员 SHA 与本机 APK 不一致（落点包=%s…，APK=%s…）。"
+            "这个 APK 不是 %s 档案，或场景文件被改过；请用完整国服安装包重新拉取。"
+            % (scene, str(pprov.get("source_member_sha256"))[:12], str(actual)[:12], label),
+            "placement_apk_mismatch")
 
 
 def _source_meta(donor: dict, actor_counts: dict) -> tuple[dict, bytes]:
@@ -298,13 +372,28 @@ def build(apk: Path, account_id: str, data: Path, scene_inputs: str | None,
     profiles = read_json(Path(xg.PROFILES_JSON), {}) or {}
     if not isinstance(profiles.get("maps"), dict):
         raise GameDataError("本机连接配置缺失/损坏：%s" % xg.PROFILES_JSON, "profiles_config")
-    revision = profiles.get("resource_revision") or "V76318"
+    from qfsky.version_profile import profile_for_build
+    profile = profile_for_build(profiles.get("apk_build"))
+    if (profile is None or profile.get("legacy")
+            or profiles.get("apk_build") != APK_BUILD):
+        raise GameDataError(
+            "本机连接配置还是旧版本（apk_build=%r）；先在向导里重新登记 0.16.8 遇境录制。"
+            % profiles.get("apk_build"), "profiles_stale")
+    if profiles.get("resource_revision") != profile["resource_revision"]:
+        raise GameDataError(
+            "本机连接配置的 resource_revision=%r 与 0.16.8 档案不一致。"
+            % profiles.get("resource_revision"), "profiles_stale")
+    revision = profile["resource_revision"]
     progress.emit("找这个号的遇境真录…", done=1)
     if donor_name:
         donor = _read_donor(xg, donor_name, expected_uuid=uuid)
     else:
         donor = _donor(xg, profiles, uuid)
-    pack = spawn_loader.load()
+    pack = spawn_loader.load(build=profile["build"])
+    spawn_loader.require_apk_evidence(
+        pack, native_sha256=apk_info["native_sha256"],
+        apk_archive_directory_sha256=apk_info["apk_archive_directory_sha256"],
+        build=profile["build"])
     cache_dir = Path(scene_inputs) if scene_inputs else game_dir(data) / "catalog-inputs"
     progress.emit("准备场景输入（%d 张，缺的从 APK 现场生成）…" % len(pack["placements"]),
                   done=0, total=len(pack["placements"]) + 10)
@@ -343,19 +432,9 @@ def build(apk: Path, account_id: str, data: Path, scene_inputs: str | None,
             proof = item["proof"]
             map_id = int(proof["map_id"])
             placement, placement_raw = _placement(pack, scene, map_id)
-            # 落点包是哥哥标注/证据的权威来源；个别老 placement 的
-            # source_member_sha256 与本次 APK 成员 sha 不同（历史遗留），
-            # 运行时校验要求 proof 与 placement 两处一致，这里以落点包为准。
-            pprov = placement.get("provenance") or {}
-            prov = dict(proof.get("provenance") or {})
-            if (pprov.get("source_member_sha256")
-                    and prov.get("scene_member_sha256") != pprov["source_member_sha256"]):
-                proof = json.loads(json.dumps(proof))
-                prov = proof.setdefault("provenance", {})
-                if pprov.get("source_member"):
-                    prov["scene_member"] = pprov["source_member"]
-                prov["scene_member_sha256"] = pprov["source_member_sha256"]
-                prov["scene_member_sha256_source"] = "spawn_pack_annotation_evidence"
+            # 落点包必须与本次 APK 的版本证据/场景成员一一对上；不再把落点包的
+            # 旧 source_member_sha256 反写进 scene-provenance。
+            _placement_evidence(proof, placement, profile)
             wire = item["wire"]
             cache = item["cache"]
             # 本号录过这张图：把 scene 的 switches 段起换成自己的录制，补 MPVar。
@@ -392,6 +471,7 @@ def build(apk: Path, account_id: str, data: Path, scene_inputs: str | None,
             }
             for name in sorted((pack.get("variants") or {}).get(scene) or {}):
                 vplacement, vplacement_raw = _placement(pack, scene, map_id, name)
+                _placement_evidence(proof, vplacement, profile)
                 vtag = tag
                 vactor, _ = actor.project(donor["actor"], map_id, vplacement["wire_position"],
                                           vtag, NATIVE_SHA256)

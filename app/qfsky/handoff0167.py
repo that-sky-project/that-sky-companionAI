@@ -16,12 +16,14 @@ from .join0167_profile import (
 )
 from .handshake0167_fields import advance_message_sequence, peer_key as uid_peer_key
 from .receive0167 import ServerMessage
+from .version_profile import home_netversion, profile_for_build
 
 BUILD = 421629
 HOME_SCENE = 'CandleSpace'
 HOME_LEVEL = 3526133726
-HOME_RESOURCE = 'V76318'
-HOME_NETVERSION = (36851, 49307, 23536, 0, 0, 25536)
+_HOME_PROFILE = profile_for_build(BUILD)
+HOME_RESOURCE = _HOME_PROFILE['resource_revision']
+HOME_NETVERSION = home_netversion(BUILD)
 RESERVATION_SENTINEL = 0xffffffff
 
 

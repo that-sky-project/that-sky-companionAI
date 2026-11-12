@@ -15,6 +15,30 @@ LIB_NAME = "libBootloader.so"
 APK_ENTRIES = ("lib/arm64-v8a/" + LIB_NAME, "lib/arm64/" + LIB_NAME)
 
 
+def _version_label(sha256):
+    """把一个 native sha 映射成可读版本；未知版本也如实显示摘要。"""
+    try:
+        from qfsky.version_profile import profile_for_native_sha256
+        profile = profile_for_native_sha256(sha256)
+    except Exception:
+        profile = None
+    if profile:
+        return "%s / %s" % (profile["version"], profile["build"])
+    return "未知版本"
+
+
+def _expected_label(sha256):
+    try:
+        from qfsky.version_profile import profile_for_native_sha256
+        profile = profile_for_native_sha256(sha256)
+    except Exception:
+        profile = None
+    if profile:
+        return "%s / %s" % (profile["version"], profile["build"])
+    return "sha256=%s…" % sha256[:12]
+
+
+
 def sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -69,34 +93,57 @@ def ensure_native_library(apk_path=None, dest=None, expected_sha256=None, force=
     apks = _candidate_apks(apk_path)
     if not apks:
         raise ValueError("还没选游戏安装包：先在向导第 3 步从 MuMu 拉 APK 或手动选文件")
-    last = None
+    # 去重但保持顺序；每个候选都要真正打开检查，不能只看最后一个失败。
+    unique = []
+    seen = set()
+    for apk in apks:
+        try:
+            key = str(apk.resolve())
+        except OSError:
+            key = str(apk)
+        if key not in seen:
+            seen.add(key)
+            unique.append(apk)
+    apks = unique
+    details = []
+    matched = None
     for apk in apks:
         try:
             with zipfile.ZipFile(apk) as zf:
                 name = next((n for n in APK_ENTRIES if n in zf.namelist()), None)
                 if not name:
-                    last = f"{apk.name} 里没有 lib/arm64-v8a/{LIB_NAME}"
+                    details.append("%s：里面没有 lib/arm64-v8a/%s" % (apk, LIB_NAME))
                     continue
                 body = zf.read(name)
         except (OSError, zipfile.BadZipFile) as exc:
-            last = f"{apk.name} 打不开：{type(exc).__name__}"
+            details.append("%s：打不开（%s）" % (apk, type(exc).__name__))
             continue
         got = hashlib.sha256(body).hexdigest()
+        label = _version_label(got)
+        details.append("%s：%s（sha256=%s…）" % (apk, label, got[:12]))
         if got != expected:
-            last = (f"{apk.name} 里的 {LIB_NAME} 不是 0.16.8 / 421629 的版本"
-                    f"（sha256={got[:12]}…），换对版本的安装包")
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix=".native-", dir=str(dest.parent))
-        try:
-            with os.fdopen(fd, "wb") as f:
-                f.write(body)
-            os.replace(tmp, dest)
-        finally:
-            if Path(tmp).exists():
-                Path(tmp).unlink()
-        return {"ok": True, "path": str(dest), "sha256": got, "source": str(apk)}
-    raise ValueError(last or "APK 里没有找到 libBootloader.so")
+        # 已找到匹配版本：立即用它（当前逻辑本来就是“边遍历边返回”，
+        # 非匹配候选只会继续，不会覆盖匹配项）。
+        matched = (apk, body, got)
+        break
+    if matched is None:
+        raise ValueError(
+            "候选 APK 里没有 %s 的 %s。逐个结果：\n%s\n"
+            "请把向导里的 APK 指向对应版本的完整 base.apk。"
+            % (_expected_label(expected), LIB_NAME,
+               "\n".join("- " + row for row in details)))
+    apk, body, got = matched
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".native-", dir=str(dest.parent))
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(body)
+        os.replace(tmp, dest)
+    finally:
+        if Path(tmp).exists():
+            Path(tmp).unlink()
+    return {"ok": True, "path": str(dest), "sha256": got, "source": str(apk)}
 
 
 def copy_from_dir(src_dir, dest=None, expected_sha256=None):

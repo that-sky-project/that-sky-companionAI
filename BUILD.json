@@ -1,7 +1,7 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.6",
-  "client_revision": "r10.2-terrainfix.6",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.9",
+  "client_revision": "r10.2-terrainfix.9",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
@@ -71,7 +71,7 @@
     "compact_960x640_checked": true,
     "packaged_window_tested": false
   },
-  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.4",
+  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.8",
   "terrain_generation_patch": {
     "revision": "terrainfix.1",
     "date": "2026-11-11",
@@ -191,5 +191,27 @@
     "private_server_code_in_archive": false,
     "user_credentials_in_archive": false,
     "readme_files_preserved_byte_for_byte": true
+  },
+  "terrainfix_9": {
+    "revision": "terrainfix.9",
+    "date": "2026-11-12",
+    "summary": "0.16.8 地图目录：按版本选落点包（spawn_pack_0168.json），修复构建目录自检 placement_user_source/level_start_source；APK 候选报错列出每个候选的版本",
+    "files_changed": [
+      "app/xg_gamedata/spawn_pack_0168.json",
+      "app/xg_gamedata/spawn_loader.py",
+      "app/xg_gamedata/catalog.py",
+      "app/launcher/wizard.py",
+      "app/capture/native_lib.py",
+      "app/tools/compare_spawn_packs_0168.py",
+      "tests/test_spawn_pack_0168.py",
+      "tests/test_native_lib_candidates.py"
+    ],
+    "real_capture_catalog_build_passed": {
+      "accounts": 2,
+      "maps": 115,
+      "variants": 1
+    },
+    "exe_host_rebuilt": false,
+    "previous_terrainfix_included": true
   }
 }

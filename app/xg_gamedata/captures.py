@@ -20,20 +20,9 @@ from .common import (APK_BUILD, GameDataError, Progress, atomic_write, canonical
 HOME = 3526133726
 REQUIRED = ("record.json", "actor.bin", "scene.bin", "cache.bin", "capture_evidence.json")
 BINDING_ALGORITHM = "sha256-domain-sky-cn-421589-level-cache-account-v1"
-DEFAULT_REVISION = "V76318"
 # 与服务器 runtime/private/connection0167_profiles.local.json 同形：
 # 配置在 DATA/runtime/private/ 下，字典在 DATA/runtime/protocol_results/... 下。
 DICTIONARY_REL = "../protocol_results/handshake/resources/CompressDictionary.zst"
-
-
-def _revision(xg) -> str:
-    cfg = xg.config() or {}
-    cap = cfg.get("capture") if isinstance(cfg.get("capture"), dict) else {}
-    for value in ((cap or {}).get("resource_revision"),
-                  ((cfg.get("gamedata") or {}) if isinstance(cfg.get("gamedata"), dict) else {}).get("resource_revision")):
-        if isinstance(value, str) and re.fullmatch(r"V[0-9]+", value):
-            return value
-    return DEFAULT_REVISION
 
 
 def _names_maps(names_dir) -> tuple[dict, dict]:
@@ -90,7 +79,9 @@ def _new_profile_doc(record: dict, revision: str, names_dir) -> dict:
 def _ensure_profile_doc(cfg: Path, record: dict, *, revision: str, names_dir) -> tuple[dict, bool]:
     """读登记表；不存在就从 names 的场景表 + 本次录制从零建一份。
 
-    已存在的表只补缺字段/缺 map，不覆盖已有录制与账号记录。
+    已存在的表只补缺字段/缺 map，不覆盖已有录制与账号记录；但顶层
+    apk_build / resource_revision 必须跟本次录制一致，否则旧版本值会让
+    current_join.config() 在加载新录制前就拒绝。
     """
     doc = read_json(cfg, None)
     created = False
@@ -104,9 +95,9 @@ def _ensure_profile_doc(cfg: Path, record: dict, *, revision: str, names_dir) ->
         raise GameDataError("本机连接配置缺失/损坏：%s（可先备份后删除，让向导重建）" % cfg,
                             "profiles_config")
     else:
-        if not isinstance(doc.get("apk_build"), int):
-            doc["apk_build"] = APK_BUILD
-        if not isinstance(doc.get("resource_revision"), str):
+        if doc.get("apk_build") != record.get("apk_build"):
+            doc["apk_build"] = record.get("apk_build")
+        if doc.get("resource_revision") != revision:
             doc["resource_revision"] = revision
         if not isinstance(doc.get("private_root"), str) or not doc["private_root"]:
             doc["private_root"] = "current_profiles"
@@ -142,6 +133,58 @@ def _upsert_capture(doc: dict, record: dict, record_dir: str, uuid: str) -> None
         cap["record_dir"] = record_dir
         cap["netversion_u16"] = list(record["netversion_u16"])
         cap["account"] = uuid
+
+
+def _backup_file(path: Path) -> str | None:
+    """把即将被改写的旧文件存一份同目录备份；没有旧文件就不建。"""
+    if not path.is_file():
+        return None
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    for index in range(100):
+        suffix = "" if index == 0 else "_%d" % index
+        target = path.with_name(path.name + ".bak-" + stamp + suffix)
+        if not target.exists():
+            atomic_write(target, path.read_bytes())
+            return str(target)
+    raise GameDataError("备份旧配置失败：%s" % path, "capture_backup")
+
+
+def _source_is_home(profiles_root: Path, row: dict) -> bool:
+    """catalog_sources 里的旧行是不是遇境源；读不到旧录制时按旧 tag 判断。"""
+    if not isinstance(row, dict):
+        return False
+    name = row.get("record_dir")
+    if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        old = read_json(Path(profiles_root) / name / "record.json", None)
+        if isinstance(old, dict):
+            return old.get("level_id") == HOME
+    nv = row.get("netversion_u16")
+    from qfsky.version_profile import PROFILES
+    old_home_tags = {row["home_resource_tag"] for row in PROFILES.values()}
+    return (isinstance(nv, list) and len(nv) == 6 and nv[0] in old_home_tags)
+
+
+def _updated_catalog_sources(path: Path, *, uuid: str, record: dict, record_dir: str,
+                             profiles_root: Path) -> bytes | None:
+    """返回更新后的 catalog_sources 字节；不需要更新/文件不存在时返回 None。"""
+    doc = read_json(path, None)
+    if doc is None:
+        return None
+    if not isinstance(doc, dict):
+        raise GameDataError("catalog_sources 读不出来（不是合法 JSON）：%s" % path,
+                            "catalog_sources")
+    row = doc.get(uuid)
+    if row is not None and not isinstance(row, dict):
+        raise GameDataError("catalog_sources 里 %s 的条目损坏：%s" % (uuid, path),
+                            "catalog_sources")
+    if row is not None and not _source_is_home(profiles_root, row):
+        return None
+    new = {"record_dir": record_dir,
+           "netversion_u16": list(record["netversion_u16"])}
+    if row == new:
+        return None
+    doc[uuid] = new
+    return canonical_json(doc)
 
 
 def _apk_hint(xg) -> str:
@@ -198,10 +241,15 @@ def _validate_record(folder: Path) -> dict:
     from qfsky.version_profile import profile_for_build
     profile = profile_for_build(record.get("apk_build"))
     if profile is None:
-        raise GameDataError("录制不是支持的 0.16.8/421629（apk_build=%r）。" % record.get("apk_build"),
-                            "capture_build")
+        raise GameDataError("录制不是支持的 0.16.7/421589 或 0.16.8/421629（apk_build=%r）。"
+                            % record.get("apk_build"), "capture_build")
     if record.get("native_sha256") != profile["native_sha256"]:
-        raise GameDataError("录制里的 native_sha256 不是国服 0.16.8/421629。", "capture_native")
+        raise GameDataError("录制里的 native_sha256 不是对应版本的国服客户端。", "capture_native")
+    if record.get("resource_revision") != profile["resource_revision"]:
+        raise GameDataError(
+            "录制里的 resource_revision=%r 与 %s 档案（%s）不一致。"
+            % (record.get("resource_revision"), profile["version"], profile["resource_revision"]),
+            "capture_revision")
     if not isinstance(record.get("level_id"), int) or not 0 < record["level_id"] < 2 ** 32:
         raise GameDataError("录制里的 level_id 不合法。", "capture_level")
     if not isinstance(record.get("scene"), str) or not re.fullmatch(r"[A-Za-z0-9_]{1,96}", record["scene"]):
@@ -274,6 +322,12 @@ def _load_capture(profiles_root: Path, name: str, *, uuid: str, record: dict,
 LOADER = _load_capture
 
 
+def _runtime_source(uuid: str):
+    """登记后确认运行时能按号取到遇境源；模块不存在时由调用方跳过。"""
+    from qfsky.asset_bootstrap_runtime_v32 import _source
+    return _source(uuid)
+
+
 def register(folder: Path, data: Path, progress: Progress) -> dict:
     xg = xg_paths()
     _install_paths(xg)
@@ -288,8 +342,10 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
 
     profiles_root = Path(xg.CURRENT_PROFILES)
     cfg = Path(xg.PROFILES_JSON)
+    sources_path = Path(xg.RUNTIME_PRIVATE) / "catalog_sources.json"
     profiles_root.mkdir(parents=True, exist_ok=True)
-    revision = _revision(xg)
+    # 新版录制自带 resource_revision / netversion；不能拿旧配置里的值当期望。
+    revision = record["resource_revision"]
 
     progress.emit("复制录制到 current_profiles…", done=2)
     name = _target_name(folder, record)
@@ -309,12 +365,30 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
             raise GameDataError("复制后校验失败：%s" % child, "capture_copy_verify")
 
     before = cfg.read_bytes() if cfg.exists() else None
+    before_sources = sources_path.read_bytes() if sources_path.exists() else None
+    backups = []
     try:
         doc, created = _ensure_profile_doc(cfg, record, revision=revision,
                                            names_dir=Path(xg.NAMES))
         revision = doc.get("resource_revision") or revision
         _upsert_capture(doc, record, name, uuid)
-        atomic_write(cfg, canonical_json(doc))
+        cfg_bytes = canonical_json(doc)
+        if before is not None and before != cfg_bytes:
+            backup = _backup_file(cfg)
+            if backup:
+                backups.append(backup)
+        atomic_write(cfg, cfg_bytes)
+
+        # 遇境目录源也换成新录制；旧 36851 条目只作为备份保留，不再参与期望值。
+        if record["level_id"] == HOME:
+            sources_bytes = _updated_catalog_sources(
+                sources_path, uuid=uuid, record=record, record_dir=name,
+                profiles_root=profiles_root)
+            if sources_bytes is not None:
+                backup = _backup_file(sources_path)
+                if backup:
+                    backups.append(backup)
+                atomic_write(sources_path, sources_bytes)
 
         progress.emit("实际加载验证…", done=3)
         _prepare_env(cfg, Path(xg.RUNTIME_DATA), revision)
@@ -332,11 +406,14 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
                                 % type(exc).__name__, "capture_load_failed")
         source_checked = None
         if record["level_id"] == HOME and getattr(LOADER, "__name__", "") == "_load_capture":
-            from qfsky.asset_bootstrap_runtime_v32 import _source
             try:
-                inputs = _source(uuid)
+                inputs = _runtime_source(uuid)
                 source_checked = {"ok": True, "account": uuid,
                                   "scene": getattr(inputs, "scene", record["scene"])}
+            except ImportError:
+                # 公开仓库没有可选运行时模块；登记本身不因此回滚。
+                source_checked = {"ok": False, "skipped": True,
+                                  "reason": "runtime_source_module_unavailable"}
             except Exception as exc:
                 raise GameDataError("遇境录制登记后，运行时仍取不到这个号的源（%s）。"
                                     % str(exc)[:160], "capture_source_failed")
@@ -356,10 +433,13 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
             "scene": record["scene"],
             "level_id": record["level_id"],
             "netversion_u16": record["netversion_u16"],
+            "apk_build": record["apk_build"],
+            "resource_revision": revision,
             "record_dir": name,
             "profiles_json": str(cfg),
             "current_profiles": str(profiles_root),
             "profiles_created": created,
+            "backups": backups,
             "maps": len(doc.get("maps") or {}),
             "dictionary": dict_row,
             "loaded": True,
@@ -367,6 +447,11 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
             "prepared_metadata": prepared.metadata(),
         }
     except Exception:
+        for backup in backups:
+            try:
+                Path(backup).unlink()
+            except OSError:
+                pass
         if before is None:
             try:
                 cfg.unlink()
@@ -374,6 +459,13 @@ def register(folder: Path, data: Path, progress: Progress) -> dict:
                 pass
         else:
             atomic_write(cfg, before)
+        if before_sources is None:
+            try:
+                sources_path.unlink()
+            except OSError:
+                pass
+        else:
+            atomic_write(sources_path, before_sources)
         raise
 
 

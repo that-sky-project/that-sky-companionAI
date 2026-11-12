@@ -52,10 +52,26 @@ function runningView(task, title) {
     note:'这是当前阶段的真实进度，进入下一阶段时会重新计数。'};
 }
 
+function staleDataNotice(summary) {
+  const item = step(summary, 'data');
+  const info = summary && summary.gameData ? summary.gameData : {};
+  const needed = item?.needs_rebuild === true || info.needs_rebuild === true;
+  if (!needed) return null;
+  const current = info.current_version || summary?.gameVersion || '';
+  const stale = Array.isArray(info.stale) ? info.stale : (item?.game_data_stale || []);
+  const names = stale.map(row => row.version || row.dir).filter(Boolean);
+  return {message:`游戏已更新到 ${current || '新版本'}，新版本需要重新生成游戏数据（名称表 + 地形）。`
+    + (names.length ? `旧版本的目录：${names.join('、')}。` : '')};
+}
 function taskView(envelope, summary, error='') {
   if (error) return {state:'error', title:'任务状态读取失败', message:error, detail:'请点“刷新进度”重试。', progress:null};
   const task = currentTask(envelope);
-  if (!task) return {state:'idle', title:'当前没有构建任务', message:'开始后会在这里显示进度、成功结果或失败原因。', progress:null};
+  if (!task) {
+    const stale = staleDataNotice(summary);
+    if (stale) return {state:'waiting', title:'新版本需要重新生成游戏数据', message:stale.message,
+      detail:'点“生成游戏数据”重新生成名称表与地形；账号登录会话不受游戏版本影响，不用重新登录。', progress:null};
+    return {state:'idle', title:'当前没有构建任务', message:'开始后会在这里显示进度、成功结果或失败原因。', progress:null};
+  }
   const label = task.label || (task.kind === 'catalog' ? '地图目录' : '游戏数据');
   if (task.running) return runningView(task, label + ' · 进行中');
   if (task.error || task.ok === false) return {state:'error', title:label + ' · 未完成', message:task.error || '任务失败或已停止，请重试。', detail:task.msg || '', progress:null};
@@ -68,8 +84,21 @@ function taskView(envelope, summary, error='') {
   return {state:'waiting', title:label + ' · 尚未确认成功', message:task.msg || '未取得成功结果，请刷新状态或重试。', progress:null};
 }
 
+function staleCaptureNotice(summary, cap) {
+  const stale = Array.isArray(cap?.stale) ? cap.stale
+    : (Array.isArray(summary?.capture?.stale) ? summary.capture.stale : []);
+  const recorded = Array.isArray(cap?.recorded) ? cap.recorded : [];
+  if (!stale.length || recorded.length) return null;
+  const currentVersion = cap?.current_version || summary?.gameVersion
+    || summary?.capture?.current_version || '';
+  const staleVersion = cap?.stale_version || stale[0]?.version
+    || summary?.capture?.stale_version || '';
+  return {stale, currentVersion, staleVersion,
+    message:`游戏已更新到 ${currentVersion || '新版本'}，之前的遇境录制是 ${staleVersion || '旧版本'} 的，需要用 MuMu 重新录一次遇境（只需遇境一张）。`};
+}
 function captureView(cap, summary, error='') {
   if (error) return {state:'error', title:'采集状态读取失败', message:error, progress:null};
+  const staleInfo = staleCaptureNotice(summary, cap);
   const ready = certifiedCatalog(summary);
   const registration = cap?.last_registered;
   const registered = !!registration && registration.scene === 'CandleSpace' && !!summary?.account
@@ -79,7 +108,11 @@ function captureView(cap, summary, error='') {
     return {state:'error', title:'遇境采集异常', message:cap.last_error || cap.message || '请检查 MuMu 和游戏状态。',
       detail:registered || ready ? '之前的遇境录制已登记；本次采集出错，不需要逐张跑图。' : '只需要采集遇境，不需要去其他地图。', progress:null};
   }
-  if (!collecting && (registered || ready)) {
+  if (staleInfo && !collecting) {
+    return {state:'error', title:'游戏已更新 · 需要重新录制遇境', message:staleInfo.message,
+      detail:'旧版本的遇境录制不会再被使用；重新录到当前版本后会自动登记，只需遇境一张。', progress:null};
+  }
+  if (!collecting && !staleInfo && (registered || ready)) {
     const active = !!cap?.worker_pid && !['idle','stopped'].includes(cap.state);
     return {state:'success', title:'遇境采集成功 · 已自动登记',
       message:'只需采集一次遇境，其他地图由程序生成，不需要逐张跑图。',
@@ -100,6 +133,9 @@ function captureView(cap, summary, error='') {
 
 function catalogView(summary, envelope, error='') {
   if (error) return {state:'error', title:'目录校验状态读取失败', message:error, detail:'请点“刷新进度”重试；不会将旧状态当作成功。', progress:null};
+  const staleInfo = staleCaptureNotice(summary, summary?.capture);
+  if (staleInfo) return {state:'waiting', title:'地图目录需要重新录制遇境后再构建', message:staleInfo.message,
+    detail:'旧版本录制不能用来构建地图目录；重新录制当前版本的遇境后，再点“构建地图目录”。', progress:null};
   const task = currentTask(envelope);
   const relevant = task?.kind === 'catalog' && matchesAccount(task, envelope, summary);
   if (relevant && task.running) return runningView(task, '正在构建本账号地图目录');

@@ -15,7 +15,6 @@ The outer Net14 sequence, signature and transport belong to the caller.
 Only authenticated current-peer Game14 is accepted for the persistent Scene
 writer. This helper does not authenticate the transport by itself. Only fixed metadata may be logged. No I/O or fixture runs here.
 """
-import hashlib
 import math
 import struct
 
@@ -25,10 +24,11 @@ from .scene_record import _check_record
 from .scene_header import serialize_cached_level_header
 from .scene_record import PUBLIC_ELF_SHA256
 from .delta_send import SnapshotSendState
+from qfsky.version_profile import home_resource_tag, profile_for_build
 
-_HOME_MAP = 3526133726
-_HOME_TAG = 36851
-_SCENE_SHA = '8a608f701e561f062fcfb43e5122927a22db84cd0e5fd04c364ab3162f0de0b0'
+_PROFILE = profile_for_build(421629)
+_HOME_MAP = _PROFILE['home_level_id']
+_HOME_TAG = home_resource_tag(421629)
 
 
 def _time(value):
@@ -44,15 +44,14 @@ class ColdSceneCandidate:
         scope.validate()
         if scope.map_id != _HOME_MAP:
             raise ValueError('cold_scene_requires_home')
-        if (type(scene_bytes) is not bytes or len(scene_bytes) != 4292
-                or hashlib.sha256(scene_bytes).hexdigest() != _SCENE_SHA):
+        if (type(scene_bytes) is not bytes or not 4 <= len(scene_bytes) <= 0x2000):
             raise ValueError('cold_scene_historical_body_changed')
         interval = _time(experimental_interval)
         if interval < 0.1 or interval > 1.0:
             raise ValueError('cold_scene_interval_invalid')
         # Native cold constructor values, not current loaded producer values.
         candidate = LevelRecord(0x63c0, 0, 0, 0, 5, 125, scene_bytes)
-        self._record = _check_record(candidate, expected_resource_tag=_HOME_TAG,
+        self._record = _check_record(candidate,
                                     verified_profile_sha256=PUBLIC_ELF_SHA256)
         self._scope = scope
         self._interval = interval
@@ -176,7 +175,6 @@ class ColdSceneCandidate:
         if adopts_record:
             try:
                 checked = _check_record(observation.record,
-                    expected_resource_tag=_HOME_TAG,
                     verified_profile_sha256=PUBLIC_ELF_SHA256)
             except ValueError:
                 self._cache_usable = False

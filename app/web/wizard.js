@@ -450,16 +450,21 @@
   // ---------------------------------------------------------------- 第 5 步（录制遇境）
   function renderCapture(c) {
     if (!c) return;
+    const stale = Array.isArray(c.stale) ? c.stale : [];
+    const running = !!(c.state && !["idle", "stopped", "stale"].includes(c.state));
     const label = { idle: "还没开始", starting: "正在启动", searching: "正在找 MuMu",
       ready: "就绪", waiting: "等进图", recording: "正在录", registering: "正在登记",
-      error: "出错", stopped: "已停止" }[c.state] || c.state || "—";
+      stale: "需要重新录制遇境", error: "出错", stopped: "已停止" }[c.state] || c.state || "—";
     $("wz-cap-state").textContent = label;
     const m = c.mumu || {};
     $("wz-cap-mumu").textContent = m.serial ? (m.serial + "（进程 " + m.pid + "，Root " + (m.root ? "有" : "没有") + "）") : "—";
     $("wz-cap-scene").textContent = c.scene ? ((c.scene_name || c.scene) + "（" + c.scene + "）") : "—";
-    $("wz-cap-recorded").textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、") : "—";
-    $("wz-cap-msg").textContent = c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || "—");
-    const running = !!(c.state && !["idle", "stopped"].includes(c.state));
+    $("wz-cap-recorded").textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、")
+      : (stale.length ? ("旧录制：" + stale.map((x) => x.version || "旧版本").join("、")) : "—");
+    const staleOnly = !running && stale.length && !(c.recorded && c.recorded.length);
+    const staleMsg = c.stale_notice || (staleOnly ? ("游戏已更新到 " + (c.current_version || "新版本") +
+      "，之前的遇境录制是 " + (stale[0].version || "旧版本") + " 的，需要用 MuMu 重新录一次遇境（只需遇境一张）。") : "");
+    $("wz-cap-msg").textContent = staleMsg || (c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || "—"));
     $("wz-cap-start").hidden = running;
     $("wz-cap-stop").hidden = !running;
     const capDet = c.last_error_detail || {};

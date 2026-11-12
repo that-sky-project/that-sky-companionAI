@@ -148,12 +148,17 @@ def _catalog_sha(path):
     return value
 
 
-def _catalog_ready(account, doc=None):
+def _catalog_ready(account, doc=None, profile=None):
     if not isinstance(account, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", account) is None:
         return False
     try:
         result = _catalog_result(account, doc)
         if not result:
+            return False
+        profile = profile or _current_game_profile()
+        current_hashes = {row.get("record_sha256")
+                          for row in _capture_inventory(profile)["current"]}
+        if not current_hashes:
             return False
         owner = next((row for row in _accounts() if str(row.get("id")) == account), {})
         if not owner.get("user_uuid") or result.get("uuid") != owner["user_uuid"]:
@@ -173,8 +178,20 @@ def _catalog_ready(account, doc=None):
 
         manifest_path = verified("manifest.json", result["manifest_sha256"])
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        # 旧版本录制生成的目录即使文件齐全也不算有效：源录制必须还是当前版本。
+        if manifest.get("source_capture_record_sha256") not in current_hashes:
+            return False
         entries, variants = manifest["entries"], manifest.get("variants") or {}
-        pack = json.loads((APP / "xg_gamedata" / "spawn_pack.json").read_text(encoding="utf-8"))
+        # 落点包按目录的版本档案选；旧代码固定读 spawn_pack.json（0.16.7 证据）。
+        from xg_gamedata import spawn_loader
+        from xg_gamedata.common import GameDataError
+        build = manifest.get("apk_build")
+        if type(build) is not int:
+            return False
+        try:
+            pack = spawn_loader.load(build=build)
+        except (GameDataError, OSError, ValueError, TypeError):
+            return False
         expected = {str(row["map_id"]): scene for scene, row in pack["placements"].items()}
         expected_variants = {(str(pack["placements"][scene]["map_id"]), name)
                              for scene, rows in (pack.get("variants") or {}).items() for name in rows}
@@ -222,6 +239,229 @@ def _apk_path():
         return str(found[0]) if found else ""
     except OSError:
         return ""
+
+
+# ---------------------------------------------------------------- 版本与录制
+def _profile_candidate(value):
+    """把 APK build / 版本字符串映射到现有版本档案（不写死版本号）。"""
+    from qfsky.version_profile import PROFILES, profile_for_build, profile_for_version
+    profile = None
+    if type(value) is int:
+        profile = profile_for_build(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            profile = profile_for_build(int(text))
+        if profile is None:
+            profile = profile_for_version(text)
+        if profile is None and "-" in text:
+            tail = text.rsplit("-", 1)[-1]
+            if tail.isdigit():
+                profile = profile_for_build(int(tail))
+    if profile is None:
+        return None
+    if "build" not in profile:
+        for build, row in PROFILES.items():
+            if (row.get("version") == profile.get("version")
+                    and row.get("game_version") == profile.get("game_version")):
+                profile = dict(profile)
+                profile["build"] = build
+                break
+    return dict(profile)
+
+
+def _current_game_profile():
+    """当前选择的游戏版本档案：优先 APK 校验结果，其次 MuMu 识别，最后现有默认档。"""
+    from qfsky.version_profile import CURRENT_BUILD
+    w = _wizard()
+    apk = w.get("apk") if isinstance(w.get("apk"), dict) else {}
+    check = apk.get("check") if isinstance(apk.get("check"), dict) else {}
+    saved = w.get("steps") if isinstance(w.get("steps"), dict) else {}
+    mumu = saved.get("mumu") if isinstance(saved.get("mumu"), dict) else {}
+    mumu_detail = mumu.get("detail") if isinstance(mumu.get("detail"), dict) else {}
+    cfg = _cfg()
+    gd = cfg.get("gamedata") if isinstance(cfg.get("gamedata"), dict) else {}
+    capture = cfg.get("capture") if isinstance(cfg.get("capture"), dict) else {}
+    candidates = [
+        check.get("version_code"), check.get("build"), check.get("version"),
+        apk.get("version_code"), apk.get("build"), apk.get("version"),
+        mumu_detail.get("version_code"), mumu_detail.get("build"),
+        gd.get("version_code"), gd.get("build"), gd.get("version"),
+        capture.get("version_code"), capture.get("build"),
+    ]
+    for value in candidates:
+        profile = _profile_candidate(value)
+        if profile and not profile.get("legacy"):
+            return profile
+    return _profile_candidate(CURRENT_BUILD)
+
+
+def _record_profile(record):
+    return _profile_candidate(record.get("apk_build")) if isinstance(record, dict) else None
+
+
+def _record_version(record, profile=None):
+    if profile:
+        return profile.get("version") or profile.get("game_version") or ""
+    for key in ("game_version", "version", "apk_version"):
+        value = record.get(key) if isinstance(record, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    build = record.get("apk_build") if isinstance(record, dict) else None
+    return ("未知版本（build=%s）" % build) if build is not None else "未知版本"
+
+
+def _record_is_current(record, profile):
+    if not isinstance(record, dict) or not profile:
+        return False
+    return (type(record.get("apk_build")) is int
+            and record["apk_build"] == profile.get("build")
+            and record.get("native_sha256") == profile.get("native_sha256")
+            and record.get("resource_revision") == profile.get("resource_revision"))
+
+
+def _account_binding(account):
+    if not account:
+        return ""
+    row = next((x for x in _accounts() if str(x.get("id")) == str(account)), None)
+    uuid = (row or {}).get("user_uuid")
+    if not uuid:
+        return ""
+    try:
+        from qfsky.join0167_profile import account_binding
+        return account_binding(uuid)
+    except Exception:
+        return ""
+
+
+def _record_entry(path, record, raw, profile):
+    binding = record.get("account_binding")
+    binding = binding.get("value") if isinstance(binding, dict) else ""
+    rp = _record_profile(record)
+    return {
+        "record_dir": path.name,
+        "scene": record.get("scene") if isinstance(record.get("scene"), str) else "",
+        "scene_name": record.get("scene_name") if isinstance(record.get("scene_name"), str) else "",
+        "apk_build": record.get("apk_build"),
+        "resource_revision": record.get("resource_revision"),
+        "native_sha256": record.get("native_sha256"),
+        "version": _record_version(record, rp),
+        "game_version": (rp or {}).get("game_version") or "",
+        "captured_utc": str(record.get("captured_utc") or ""),
+        "account_binding": binding if isinstance(binding, str) else "",
+        "record_sha256": hashlib.sha256(raw).hexdigest(),
+        "current": _record_is_current(record, profile),
+    }
+
+
+def _capture_inventory(profile=None):
+    """扫 current_profiles：当前版本录制与旧版本录制分开列，旧的不算已录过。"""
+    profile = profile or _current_game_profile()
+    current, stale = [], []
+    root = xg_paths.CURRENT_PROFILES
+    try:
+        children = sorted(root.iterdir())
+    except OSError:
+        children = []
+    for child in children:
+        record_path = child / "record.json"
+        if not child.is_dir() or not record_path.is_file():
+            continue
+        try:
+            raw = record_path.read_bytes()
+            record = json.loads(raw.decode("utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        entry = _record_entry(child, record, raw, profile)
+        (current if entry["current"] else stale).append(entry)
+    order = lambda row: (str(row.get("captured_utc") or ""), str(row.get("record_dir") or ""))
+    current.sort(key=order, reverse=True)
+    stale.sort(key=order, reverse=True)
+    return {"current": current, "stale": stale, "profile": profile,
+            "current_version": profile.get("version") or "",
+            "current_build": profile.get("build")}
+
+
+def _stale_capture_message(profile, stale):
+    current = (profile or {}).get("version") or "新版本"
+    versions = []
+    for row in stale or []:
+        version = str(row.get("version") or "").strip()
+        if version and version not in versions:
+            versions.append(version)
+    old = "、".join(versions) if versions else "旧版本"
+    return ("游戏已更新到 %s，之前的遇境录制是 %s 的，"
+            "需要用 MuMu 重新录一次遇境（只需遇境一张）。" % (current, old))
+
+
+def _active_capture_state(cap):
+    state = str((cap or {}).get("state") or "")
+    return (bool((cap or {}).get("worker_pid")) and state not in ("", "idle", "stopped")
+            or state in ("starting", "searching", "waiting", "recording", "registering"))
+
+
+def capture_status(profile=None, inventory=None):
+    """给前端的采集状态：recorded / last_registered 只认当前版本录制。"""
+    cap = dict(capture_ctl.status() or {})
+    profile = profile or _current_game_profile()
+    inv = inventory or _capture_inventory(profile)
+    current, stale = inv["current"], inv["stale"]
+    cap["recorded"] = sorted({str(row["scene"]) for row in current if row.get("scene")})
+    cap["stale"] = stale
+    cap["current_version"] = profile.get("version") or ""
+    cap["current_build"] = profile.get("build")
+    cap["current_game_version"] = profile.get("game_version") or ""
+    current_names = {str(row.get("record_dir") or "") for row in current}
+    reg = cap.get("last_registered")
+    if isinstance(reg, dict):
+        name = Path(str(reg.get("record_dir") or "")).name
+        if name not in current_names:
+            cap["last_registered_stale"] = reg
+            cap["last_registered"] = None
+    if stale and not current:
+        notice = _stale_capture_message(profile, stale)
+        cap["stale_notice"] = notice
+        cap["stale_version"] = stale[0].get("version") or ""
+        if not _active_capture_state(cap) and cap.get("state") != "error":
+            cap["state"] = "stale"
+            cap["message"] = notice
+    else:
+        cap.pop("stale_notice", None)
+    return cap
+
+
+def _game_data_versions():
+    """data\\game 下其它版本的旧游戏数据目录，只为提示“需要重新生成”。"""
+    root = xg_paths.DATA / "game"
+    current = str(xg_paths.GAME_VERSION)
+    rows = []
+    try:
+        children = sorted(root.iterdir())
+    except OSError:
+        children = []
+    for child in children:
+        if child.name == current or not child.is_dir():
+            continue
+        names = (child / "names").is_dir()
+        terrain = (child / "terrain").is_dir()
+        if not (names or terrain):
+            continue
+        profile = _profile_candidate(child.name)
+        rows.append({"dir": child.name, "path": str(child),
+                     "version": (profile or {}).get("version") or child.name,
+                     "has_names": names, "has_terrain": terrain})
+    return rows
+
+
+def _game_data_state(profile, complete):
+    stale = _game_data_versions()
+    return {"current_version": profile.get("version") or "",
+            "current_dir": str(xg_paths.GAME_DIR),
+            "current_dir_version": str(xg_paths.GAME_VERSION),
+            "complete": bool(complete), "stale": stale,
+            "needs_rebuild": bool(stale) and not complete}
 
 
 def _ai_configured():
@@ -320,19 +560,30 @@ def step_status():
     acc = active_account()
     cap = capture_ctl.status()
     apk = _apk_path()
+    profile = _current_game_profile()
+    inventory = _capture_inventory(profile)
     data_done = _data_complete()
+    data_state = _game_data_state(profile, data_done)
     capture_account = str(acc or (cap.get("catalog") or {}).get("account")
                           or (cap.get("last_registered") or {}).get("account") or "")
-    capture_ok = _catalog_ready(capture_account)
+    capture_ok = _catalog_ready(capture_account, profile=profile)
+    data_hint = "生成名称表与地形（约 25 分钟，可后台继续）"
+    if data_state["needs_rebuild"]:
+        data_hint = ("游戏已更新到 %s，新版本需要重新生成游戏数据"
+                     "（名称表 + 地形，约 25 分钟）。" % (profile.get("version") or "新版本"))
+    capture_hint = "用这个号在 MuMu 里走进遇境，录一次，再生成这个号的地图目录"
+    stale_capture = bool(inventory["stale"] and not inventory["current"])
+    if stale_capture:
+        capture_hint = _stale_capture_message(profile, inventory["stale"])
     checks = {
         "risk": (consent, "先读完风险告知并同意"),
         "mumu": (bool((saved.get("mumu") or {}).get("done")) or bool((cap.get("mumu") or {}).get("root")),
                  "检查 MuMu、adb、Root，并在 MuMu 里装好游戏"),
         "apk": (bool((saved.get("apk") or {}).get("done")) and bool(apk), "从 MuMu 拉 APK，或手动选安装包"),
-        "data": (data_done,
-                 "生成名称表与地形（约 25 分钟，可后台继续）"),
+        "data": (data_done, data_hint),
+        # 账号登录会话与游戏版本无关：换版本不要求重新登录。
         "login": (bool(acc and _accounts()), "登录要给小光用的游戏号（不得使用主号）"),
-        "capture": (capture_ok, "用这个号在 MuMu 里走进遇境，录一次，再生成这个号的地图目录"),
+        "capture": (capture_ok, capture_hint),
         "ai": (_ai_configured(), "填 AI 接口的 Key / 地址 / 模型并测试"),
         "owner": (xg_paths.OWNER_UUID.is_file(), "从小光号好友里选“哥哥”，起称呼、选人设"),
         "finish": (bool(w.get("completed_at")), "全部完成后点“完成，上线”"),
@@ -345,6 +596,18 @@ def step_status():
             item["at"] = saved[sid].get("at")
             item["detail"] = saved[sid].get("detail")
             item["message"] = saved[sid].get("message")
+        if sid == "data" and data_state["needs_rebuild"]:
+            item["needs_rebuild"] = True
+            item["game_data_stale"] = data_state["stale"]
+        if sid == "capture" and inventory["stale"]:
+            item["stale"] = inventory["stale"]
+            item["stale_version"] = inventory["stale"][0].get("version") or ""
+            if stale_capture:
+                notice = _stale_capture_message(profile, inventory["stale"])
+                item["stale_notice"] = notice
+                item["message"] = notice
+                if isinstance(item.get("detail"), dict):
+                    item["detail"] = {k: v for k, v in item["detail"].items() if k != "result"}
         rows.append(item)
     current = next((r["id"] for r in rows if not r["done"]), None)
     return rows, current
@@ -364,17 +627,30 @@ def _device_status():
 def summary():
     rows, current = step_status()
     task = tasks.current()
-    cap = capture_ctl.status()
+    profile = _current_game_profile()
+    inventory = _capture_inventory(profile)
+    cap = capture_status(profile, inventory)
     return {"ok": True, "version": WIZARD_VERSION, "steps": rows, "current": current,
             "device": _device_status(),
             "completed": bool(_wizard().get("completed_at")),
             "completed_at": _wizard().get("completed_at"),
             "account": active_account(), "apk": _apk_path(),
             "aiConfigured": _ai_configured(),
+            "gameVersion": profile.get("version") or "",
+            "gameBuild": profile.get("build"),
+            "gameVersionDir": str(xg_paths.GAME_VERSION),
+            "gameData": _game_data_state(profile, _data_complete()),
             "task": task.get("task"), "taskRunning": bool(task.get("running")),
             "capture": {"state": cap.get("state"), "message": cap.get("message"),
                         "scene": cap.get("scene"), "scene_name": cap.get("scene_name"),
-                        "recorded": cap.get("recorded") or [], "mumu": cap.get("mumu") or {},
+                        "recorded": cap.get("recorded") or [], "stale": cap.get("stale") or [],
+                        "stale_notice": cap.get("stale_notice") or "",
+                        "stale_version": cap.get("stale_version") or "",
+                        "current_version": cap.get("current_version") or "",
+                        "current_game_version": cap.get("current_game_version") or "",
+                        "last_registered": cap.get("last_registered"),
+                        "last_registered_stale": cap.get("last_registered_stale"),
+                        "mumu": cap.get("mumu") or {},
                         "last_error": cap.get("last_error") or "",
                         "catalog": cap.get("catalog") or {}},
             "autostart": _autostart_status()}
@@ -527,11 +803,17 @@ def stop_capture():
 def start_catalog(account=None, apk=None):
     account = str(account or active_account() or "")
     apk = apk or _apk_path()
+    profile = _current_game_profile()
+    inventory = _capture_inventory(profile)
+    if inventory["stale"] and not inventory["current"]:
+        notice = _stale_capture_message(profile, inventory["stale"])
+        return {"ok": False, "code": "capture_stale", "message": notice,
+                "stale": inventory["stale"], "current_version": profile.get("version") or ""}
     if not account:
         return {"ok": False, "message": "还没登录游戏号：先做第 5 步"}
     if not apk:
         return {"ok": False, "message": "还没校验安装包：先做第 3 步"}
-    if _catalog_ready(account):
+    if _catalog_ready(account, profile=profile):
         mark("capture", True, detail={"account": account, "catalog": str(_catalog_dir(account)),
                                       "result": _catalog_result(account)},
              message="这个号的地图目录已经生成")
@@ -567,6 +849,16 @@ def register_capture(path=""):
         return {"ok": False, "message": "录制目录不可读：%s" % exc}
     if not p.is_dir() or not p.is_relative_to(root):
         return {"ok": False, "message": "只能重新登记本机 current_profiles 里的录制：%s" % p}
+    try:
+        raw = (p / "record.json").read_bytes()
+        record = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        record = None
+    profile = _current_game_profile()
+    if isinstance(record, dict) and not _record_is_current(record, profile):
+        entry = _record_entry(p, record, raw, profile)
+        notice = _stale_capture_message(profile, [entry])
+        return {"ok": False, "code": "capture_stale", "message": notice, "stale": [entry]}
     r = gamedata.run(["capture-register", "--dir", str(p)], timeout=900)
     final = r.get("final") or {}
     if not r.get("ok"):
@@ -584,7 +876,7 @@ def register_capture(path=""):
     recorded = sorted(set(rec.get("scenes") or []) | set(cap.get("recorded") or []))
     scene = str(final.get("scene") or cap.get("scene") or "")
     apk = _apk_path()
-    already = _catalog_ready(account)
+    already = _catalog_ready(account, profile=profile)
     need = bool(scene == "CandleSpace" and account and apk and not already)
     cap.update(state="ready", last_error="", last_error_code="", last_error_detail=None,
                last_record_dir=str(p), recorded=recorded,

@@ -81,16 +81,21 @@
     async function poll() {
       try {
         const c = await j("/api/capture/status");
+        const stale = Array.isArray(c.stale) ? c.stale : [];
+        const running = !!(c.state && !["idle", "stopped", "stale"].includes(c.state));
         const labels = { idle: "还没开始", starting: "正在启动", searching: "正在找 MuMu",
           ready: "就绪", waiting: "等进图", recording: "正在录", registering: "正在登记",
-          error: "出错", stopped: "已停止" };
+          stale: "需要重新录制遇境", error: "出错", stopped: "已停止" };
         stateEl.textContent = labels[c.state] || c.state || "—";
         const m = c.mumu || {};
         mumuEl.textContent = m.serial ? (m.serial + "（进程 " + m.pid + "，Root " + (m.root ? "有" : "没有") + "）") : "—";
         sceneEl.textContent = c.scene ? ((c.scene_name || c.scene) + "（" + c.scene + "）") : "—";
-        recordedEl.textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、") : "—";
-        msgEl.textContent = c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || "");
-        const running = !!(c.state && !["idle", "stopped"].includes(c.state));
+        recordedEl.textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、")
+          : (stale.length ? ("旧录制：" + stale.map((x) => x.version || "旧版本").join("、")) : "—");
+        const staleOnly = !running && stale.length && !(c.recorded && c.recorded.length);
+        const staleMsg = c.stale_notice || (staleOnly ? ("游戏已更新到 " + (c.current_version || "新版本") +
+          "，之前的遇境录制是 " + (stale[0].version || "旧版本") + " 的，需要用 MuMu 重新录一次遇境（只需遇境一张）。") : "");
+        msgEl.textContent = staleMsg || (c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || ""));
         start.hidden = running;
         stop.hidden = !running;
       } catch (e) { /* 录图进程没起也不影响面板 */ }

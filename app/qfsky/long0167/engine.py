@@ -25,10 +25,10 @@ from .actor_codec.actor_migration_0167 import migrate_actor_body_0167, OLD_SHA25
 from .actor_codec.legacy_actor.actor_wire import inspect_actor_wire, reencode_actor_wire
 from .actor_pose_clock_extension import extend_actor_pose_clocks
 from .actor_prepared_revision_tick import advance_prepared_actor_revisions
+from qfsky.version_profile import profile_for_build
 
-HOME_MAP = 3526133726
-_SCENE_SHA = '8a608f701e561f062fcfb43e5122927a22db84cd0e5fd04c364ab3162f0de0b0'
-_ACTOR_SHA = '5a3bcc353ec622810c505a3e4546c8b23b40146826492e7444694a215d7c1e14'
+_HOME_PROFILE = profile_for_build(421629)
+HOME_MAP = _HOME_PROFILE['home_level_id']
 _INITIAL_ACTOR_SECONDS = .091
 _ACTOR_INTERVAL_SECONDS = .120
 _CONTROLLER_INTERVAL_SECONDS = .113
@@ -96,20 +96,22 @@ def _validate_neutral(observed):
 
 
 def validate_templates(scene, actor):
-    """Validate exact supplied baselines, Home association and both schemas.
+    """Validate structurally current, Home-associated templates.
 
     Reads no file and opens no connection. The pinned neutral Actor seed is
     not an arbitrary user-produced Actor; only clock/revision changes made
     inside this package are accepted for subsequent updates.
+
+    场景/角色的逐字节哈希不再绑死 0.16.7 的旧模板：0.16.8 的遇境重做后
+    场景和 Actor 字节都会变化。这里按当前版本档案校验 resource tag、
+    Scene/Actor 规范编码、HOME map 关联和迁移形状。
     """
-    if (type(scene) is not bytes or len(scene) != 4292 or
-            hashlib.sha256(scene).hexdigest() != _SCENE_SHA):
+    if type(scene) is not bytes or not 4 <= len(scene) <= 0x2000:
         raise ValueError('long0167_scene_template_mismatch')
-    if (type(actor) is not bytes or len(actor) != 814 or
-            hashlib.sha256(actor).hexdigest() != _ACTOR_SHA):
+    if type(actor) is not bytes or not 1 <= len(actor) <= 0x528:
         raise ValueError('long0167_actor_template_mismatch')
     _check_record(LevelRecord(0x63c0, 0, 0, 0, 5, 125, scene),
-        expected_resource_tag=36851, verified_profile_sha256=PUBLIC_ELF_SHA256)
+        verified_profile_sha256=PUBLIC_ELF_SHA256)
     scene_observation = inspect_scene_wire(scene, verified_profile_sha256=PUBLIC_ELF_SHA256,
                                           check_zero_padding=True)
     owner = scene_observation._tokens[scene_observation._home_owner_end_token_index-1]
@@ -168,6 +170,8 @@ class Engine:
         self._scope = ConnectionScope(account_uuid, object(), object(), object(),
             generation, match.self_net_player_id, HOME_MAP, True, live_check)
         self._scope.validate()
+        self._scene_digest = hashlib.sha256(scene).hexdigest()
+        self._actor_digest = hashlib.sha256(actor).hexdigest()
         self._match = match
         self._role = LevelRoleReceiver(match,
             room_generation=self._scope.room_generation, peer_epoch=generation)
@@ -184,8 +188,8 @@ class Engine:
         self._local_idle_restored = local_idle is not None
         if local_idle is not None:
             self._actor_origin,self._idle_revision_base = _restore_idle(local_idle,
-                owner=account_uuid,map_id=HOME_MAP,scene_digest=_SCENE_SHA,
-                actor_digest=_ACTOR_SHA,now=self._registered_at)
+                owner=account_uuid,map_id=HOME_MAP,scene_digest=self._scene_digest,
+                actor_digest=self._actor_digest,now=self._registered_at)
         self._actor_sequence = 0
         self._pending = None
         self._pending_data = None
@@ -258,7 +262,7 @@ class Engine:
         if self._pending is not None:
             raise ValueError('long0167_idle_export_delivery_pending')
         self._check(self._last_now)
-        return _export_idle(self._scope.owner_uuid,HOME_MAP,_SCENE_SHA,_ACTOR_SHA,
+        return _export_idle(self._scope.owner_uuid,HOME_MAP,self._scene_digest,self._actor_digest,
             self._actor_origin,self._idle_revision_base+self._counts['actor_extensions'],
             self._last_now)
 

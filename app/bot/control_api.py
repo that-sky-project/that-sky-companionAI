@@ -11,6 +11,9 @@
 * 首次运行（DATA 下没有 config.json）：`GET /` 先给风险告知页，勾选同意走
   `POST /api/consent`，写入同意时间后才显示面板。
 * 进程/脚本操作全部走 xg_ctl、xg_proc、xg_runtime（不再 bash / pgrep / /proc）。
+* 桌面版通过 `XG_PARENT_PID` + `XG_PARENT_CREATE_TIME` 传入宿主身份；看门狗每
+  2.5 秒核对一次，宿主消失（崩溃/任务管理器结束/注销）就执行与 `/api/quit`
+  相同的清理后退出，避免留下孤儿后台。
 
 用法：python bot/control_api.py [--port 8791] [--token TOKEN] [--no-window]
 """
@@ -63,6 +66,12 @@ COOKIE = "xg_token"
 LOG_EVENTS = {"heard", "said", "emote", "control", "not_replied", "offer_to_me", "offer_accept_requested",
               "offer_denied", "offer_expired", "friend_add", "friend_code_shared", "outfit_read", "reply_fixed"}
 LOCK = threading.Lock()
+PARENT_CHECK_SECONDS = 2.5
+PARENT_PID_ENV = "XG_PARENT_PID"
+PARENT_CREATE_ENV = "XG_PARENT_CREATE_TIME"
+_SHUTDOWN_LOCK = threading.Lock()
+_SHUTDOWN_STARTED = False
+_SERVER = None
 
 BOT = xg_paths.BOT_CODE
 WEB = xg_paths.WEB
@@ -301,6 +310,106 @@ def go_map(map_id):
     return xg_runtime.go(int(map_id))
 
 
+# ------------------------------------------------------------------ 生命周期
+def _lifecycle_event(event, **fields):
+    """One append-only JSON log line for startup/exit diagnosis; no secrets."""
+    row = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event}
+    row.update(fields)
+    try:
+        xg_paths.LOGS.mkdir(parents=True, exist_ok=True)
+        with (xg_paths.LOGS / "control_api.log").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _parent_from_env(environ=None):
+    """Return {pid, create_time} supplied by desktop.py, or None when unset/invalid."""
+    env = os.environ if environ is None else environ
+    raw_pid = env.get(PARENT_PID_ENV)
+    if not raw_pid:
+        return None
+    try:
+        pid = int(raw_pid)
+        create_time = float(env.get(PARENT_CREATE_ENV) or "")
+    except (TypeError, ValueError):
+        _lifecycle_event("parent_watchdog_disabled", reason="invalid_parent_identity",
+                         parent_pid=str(raw_pid)[:32])
+        return None
+    if pid <= 0 or create_time <= 0:
+        _lifecycle_event("parent_watchdog_disabled", reason="invalid_parent_identity",
+                         parent_pid=pid)
+        return None
+    return {"pid": pid, "create_time": round(create_time, 6)}
+
+
+def _parent_alive(parent):
+    """PID plus creation time: a recycled PID is not our parent."""
+    row = xg_proc.identity(parent["pid"])
+    if row is None or row.get("state") == "Z":
+        return False
+    try:
+        return abs(float(row["create_time"]) - float(parent["create_time"])) <= 1e-3
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _request_shutdown(reason, **fields):
+    """Run the same cleanup as /api/quit, exactly once, then stop HTTP serving."""
+    global _SHUTDOWN_STARTED
+    with _SHUTDOWN_LOCK:
+        if _SHUTDOWN_STARTED:
+            return False
+        _SHUTDOWN_STARTED = True
+    _lifecycle_event("shutdown_requested", reason=reason, pid=os.getpid(), **fields)
+
+    def _finish():
+        time.sleep(0.8)  # Let /api/quit flush its response before teardown.
+        try:
+            import launcher
+            launcher.stop(xg_paths, all_proc=True)
+        except Exception as exc:  # noqa: BLE001 - HTTP shutdown must still run
+            _lifecycle_event("shutdown_cleanup_failed", reason=reason,
+                             error=type(exc).__name__)
+        finally:
+            srv = _SERVER
+            if srv is not None:
+                try:
+                    srv.shutdown()
+                except Exception:  # noqa: BLE001
+                    pass
+        _lifecycle_event("shutdown_cleanup_done", reason=reason)
+
+    threading.Thread(target=_finish, name="xg-shutdown", daemon=True).start()
+    return True
+
+
+def _watch_parent(stop_evt, parent):
+    """Poll every 2.5 s; the normal /api/quit cleanup runs if the host disappears."""
+    if not _parent_alive(parent):
+        _lifecycle_event("parent_missing_at_startup", parent_pid=parent["pid"])
+        _request_shutdown("parent_exited", parent_pid=parent["pid"])
+        return
+    while not stop_evt.wait(PARENT_CHECK_SECONDS):
+        if not _parent_alive(parent):
+            _lifecycle_event("parent_exited", parent_pid=parent["pid"],
+                             parent_create_time=parent["create_time"])
+            _request_shutdown("parent_exited", parent_pid=parent["pid"])
+            return
+
+
+def _start_parent_watchdog(stop_evt):
+    parent = _parent_from_env()
+    if parent is None:
+        return None
+    threading.Thread(target=_watch_parent, args=(stop_evt, parent),
+                     name="xg-parent-watchdog", daemon=True).start()
+    _lifecycle_event("parent_watchdog_started", parent_pid=parent["pid"],
+                     parent_create_time=parent["create_time"],
+                     interval=PARENT_CHECK_SECONDS)
+    return parent
+
+
 # ------------------------------------------------------------------ HTTP
 class Handler(BaseHTTPRequestHandler):
     server_version = "xiaoguang-local"
@@ -486,7 +595,8 @@ class Handler(BaseHTTPRequestHandler):
                        "error": f"任务状态读取失败：{type(exc).__name__}"}
             return self.reply(200, doc)
         if api in ("/api/capture", "/api/capture/status"):
-            return self.reply(200, capture_ctl.status())
+            # 采集状态只把与当前游戏版本一致的录制算作有效；旧录制单独标成 stale。
+            return self.reply(200, wizard.capture_status())
         if api == "/api/autostart":
             return self.reply(200, autostart.status())
         return self.reply(404, {"error": "not_found"})
@@ -551,14 +661,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         if api == "/api/quit":
-            def _quit_later():
-                time.sleep(1.0)
-                try:
-                    import launcher
-                    launcher.stop(xg_paths, all_proc=True)
-                except Exception:
-                    pass
-            threading.Thread(target=_quit_later, daemon=True).start()
+            _request_shutdown("api_quit")
             return self.reply(200, {"ok": True, "message": "小光和后台正在退出，可以关掉这个页面了。"})
 
         if not LOCK.acquire(blocking=False):
@@ -861,6 +964,7 @@ def _monitor_loop(stop_evt):
 
 
 def main(argv=None):
+    global _SERVER
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8791)
     ap.add_argument("--token", default="")
@@ -880,6 +984,7 @@ def main(argv=None):
     Handler.server_token = token
     Handler.started_at = time.time()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    _SERVER = srv
     port = srv.server_address[1]
     _write_web_json(port, Handler.server_token)
     # 上次点“重启后台”留下的标记：起来后把小光也重启一遍
@@ -903,12 +1008,20 @@ def main(argv=None):
                       "web": str(xg_paths.WEB_JSON), "data": str(xg_paths.DATA)}, ensure_ascii=False), flush=True)
     stop_evt = threading.Event()
     threading.Thread(target=_monitor_loop, args=(stop_evt,), daemon=True).start()
+    _start_parent_watchdog(stop_evt)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         stop_evt.set()
+        _SERVER = None
+        try:
+            doc = xg_paths.read_json(xg_paths.WEB_JSON, None)
+            if isinstance(doc, dict) and doc.get("pid") == os.getpid():
+                xg_paths.WEB_JSON.unlink()
+        except OSError:
+            pass
         try:
             srv.server_close()
         except OSError:
