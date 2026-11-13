@@ -1,7 +1,7 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.9",
-  "client_revision": "r10.2-terrainfix.9",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.10",
+  "client_revision": "r10.2-terrainfix.10",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
@@ -71,7 +71,7 @@
     "compact_960x640_checked": true,
     "packaged_window_tested": false
   },
-  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.8",
+  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.9",
   "terrain_generation_patch": {
     "revision": "terrainfix.1",
     "date": "2026-11-11",
@@ -211,6 +211,20 @@
       "maps": 115,
       "variants": 1
     },
+    "exe_host_rebuilt": false,
+    "previous_terrainfix_included": true
+  },
+  "terrainfix_10": {
+    "revision": "terrainfix.10",
+    "date": "2026-11-13",
+    "summary": "修复 0.16.8 下上线后游戏连接进程立即退出：跟随配置 codecSHA256、anim_pose 角色状态地址、scene_migration 目标哈希仍为 0.16.7",
+    "files_changed": [
+      "app/config/experimental-hop-trial.runtime.json",
+      "app/bot/anim_pose.py",
+      "app/qfsky/map_long0167/scene_migration.py",
+      "tests/test_version_pins_0168.py"
+    ],
+    "live_online_retested": true,
     "exe_host_rebuilt": false,
     "previous_terrainfix_included": true
   }

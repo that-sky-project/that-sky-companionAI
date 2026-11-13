@@ -12,7 +12,7 @@ import struct
 from qfsky.long0167.codec import scene_wire as scene
 
 OLD_SHA=scene.PUBLIC_ELF_SHA256
-NEW_SHA=scene.PUBLIC_ELF_SHA256_0167
+NEW_SHA=scene.PUBLIC_ELF_SHA256_0168
 
 def rail_token_indices(observed):
     positions=[];bit=0

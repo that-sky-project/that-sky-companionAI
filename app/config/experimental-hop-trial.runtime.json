@@ -17,7 +17,7 @@
   "capturePins": [
    "c61d4855555a4a66c3d54438f368e52c390c72db971ebf6febc774fc4baa949f"
   ],
-  "codecSHA256": "0b81f1da54d9c6f28c08746b2ec19519d8eb78c4f1b3c5e4e420ff726dc25321",
+  "codecSHA256": "0b18ecc44e873f6caa181e6bc49f14b7e07058888523e47db52a14b32077a7ed",
   "enabled": true,
   "profileId": "manual_stand_r",
   "proofDirectory": "data:hop-proofs"

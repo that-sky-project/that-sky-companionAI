@@ -26,8 +26,8 @@ YAW1, YAW2, FWD = "0x21dd1dc", "0x21dd234", "0x21dd350"
 VEL = "0x21dd298"
 VEL_SCALE = 0.9
 # 坐椅子（2026-10-30 抓真人坐遇境桌边 4 次）：坐着 = 当前动画 GoSit2 + mode 2（保持），
-# 在座位上 0x21dd820=1，座位号 0x21dd858（13 位），角色状态 0x21df140 由 2 变 15，入座瞬间 0x21dd830=1
-SEATED, SIT_ENTER, SEAT_ID, AVATAR_STATE = "0x21dd820", "0x21dd830", "0x21dd858", "0x21df140"
+# 在座位上 0x21dd820=1，座位号 0x21dd858（13 位），角色状态 0x21de944 由 2 变 15，入座瞬间 0x21dd830=1
+SEATED, SIT_ENTER, SEAT_ID, AVATAR_STATE = "0x21dd820", "0x21dd830", "0x21dd858", "0x21de944"
 
 # 线上策略：资源帧 1196..1260，pack_fps 30，播放速率 0.4 → 64/30/0.4 秒；之后 0.9 秒 gate
 TAKE_CANDLE_SECONDS = 64 / 30 / 0.4
