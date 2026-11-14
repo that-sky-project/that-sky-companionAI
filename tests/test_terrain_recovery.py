@@ -109,7 +109,9 @@ class OutputPathTests(unittest.TestCase):
             short_path.restype = ctypes.c_uint32
             for value in (b"new-1", b"new-2"):
                 buf = ctypes.create_unicode_buffer(32768)
-                count = short_path(str(path), buf, len(buf))
+                # Relative input avoids enumerating protected ancestor directories.
+                # This still exercises a real Win32 8.3 alias and both atomic replacements.
+                count = short_path(os.path.relpath(path), buf, len(buf))
                 self.assertTrue(count)
                 alias = Path(buf.value)
                 if alias.name.casefold() == path.name.casefold():

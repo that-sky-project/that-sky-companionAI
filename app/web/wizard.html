@@ -7,6 +7,7 @@
 <title>小光 · 首次安装向导</title>
 <link rel='stylesheet' href='/static/desktop.css'>
 <link rel='stylesheet' href='/static/wizard.css'>
+<link rel='stylesheet' href='/static/reset_cleanup.css?v=reset11'>
 </head>
 <body class='wz-body'>
 <svg class='wz-sprite' aria-hidden='true' focusable='false' xmlns='http://www.w3.org/2000/svg'>
@@ -64,6 +65,7 @@
 </aside>
 <main class='wz-main' id='wz-main' tabindex='-1'>
 <div class='wz-scroll' tabindex='0' role='region' aria-label='当前步骤内容'>
+<div id='wz-cleanup' class='xg-reset-host'></div>
 <section class='wz-panel glass-strong' data-panel='risk'>
 <header class='wz-panel-head'>
 <span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-alert'></use></svg></span>
@@ -117,10 +119,10 @@
 <section class='wz-panel glass-strong' data-panel='data' hidden>
 <header class='wz-panel-head'>
 <span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-database'></use></svg></span>
-<div class='wz-panel-heading'><span class='wz-eyebrow'>第 4 步 · 游戏与地图</span><h1>生成游戏数据</h1><p class='wz-panel-sub'>名称表与地形由本机生成，按顺序跑完即可。</p></div>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 4 步 · 游戏与地图</span><h1>生成游戏数据</h1><p class='wz-panel-sub'>名称表、地形与道具形状由本机 APK 生成；道具失败可单独补生成。</p></div>
 </header>
-<p class='wz-note wz-lede'>先名称表、再地形，总共约 <b>25 分钟</b>。可以关掉这个页面，后台会继续跑；回来接着看进度。失败可以重试 / 续跑。</p>
-<div class='wz-task-stage' aria-hidden='true'><span>名称表</span><i></i><span>地形</span></div>
+<p class='wz-note wz-lede'>先名称表、再地形、最后道具形状。道具失败不影响前两项成功。地形约 <b>25 分钟</b>。可以关掉这个页面，后台会继续跑；回来接着看进度。失败可以重试 / 续跑。</p>
+<div class='wz-task-stage' aria-hidden='true'><span>名称表</span><i></i><span>地形</span><i></i><span>道具形状</span></div>
 <div class='wz-card'>
 <div class='wz-actions wz-actions-flat'>
 <button class='wz-btn primary' id='wz-data-start' type='button'>开始生成</button>
@@ -129,6 +131,9 @@
 </div>
 <div class='wz-progress'><progress id='wz-data-progress' max='100' value='0'></progress><span id='wz-data-pct'>0%</span></div>
 <p class='wz-note' id='wz-data-msg' role='status' aria-live='polite'>还没开始。</p>
+<div class='wz-card'><h3>道具形状</h3><p class='wz-note' id='wz-props-state' role='status' aria-live='polite'>读取道具形状状态…</p>
+<p class='wz-note'>已生成名称表与地形的旧用户，只需单独补生成这一项；不需要重新跑地形或录图。未生成道具资产时暂停道具地形与坐座位，行走可用。</p>
+<button class='wz-btn quiet' id='wz-props-start' type='button'>补生成道具形状（不重做地形）</button></div>
 <details class='wz-details' id='wz-task-details' hidden><summary>详情（错误码 / 原始信息 / 日志位置）</summary><pre class='wz-log' id='wz-task-detail' tabindex='0' aria-label='生成任务详情'></pre></details>
 </div>
 <div class='wz-log-wrap'><span class='wz-log-label'>运行日志</span><pre class='wz-log' id='wz-data-log' tabindex='0' role='log' aria-live='polite' aria-label='游戏数据生成日志'></pre></div>
@@ -138,7 +143,7 @@
 <span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-camera'></use></svg></span>
 <div class='wz-panel-heading'><span class='wz-eyebrow'>第 5 步 · 游戏与地图</span><h1>录制遇境</h1><p class='wz-panel-sub'>先在 MuMu 里用<b>要给小光用的那个号</b>走进<b>遇境</b>，点“开始录图”（登录放到第 6 步）。</p></div>
 </header>
-<p class='wz-note wz-lede'>录的时候站稳别动，不要切图。录完会在本机登记；如果这个号还没有地图目录，会自动接着生成（第 4 步之后台任务）。</p>
+<p class='wz-note wz-lede'>录的时候站稳别动，不要切图。录完会在本机登记。清理后请明确点击构建地图目录；不会自动生成，也不需要逐张跑图。</p>
 <div class='wz-actions'>
 <button class='wz-btn primary' id='wz-cap-start' type='button'>开始录图</button>
 <button class='wz-btn danger' id='wz-cap-stop' type='button' hidden>停止录图</button>
@@ -256,7 +261,8 @@
 </main>
 </div>
 </div>
-<script src='/static/wizard.js'></script>
+<script src='/static/reset_cleanup.js?v=reset11'></script>
+<script src='/static/wizard.js?v=reset11'></script>
 <script src='/static/auth_service.js'></script>
 <script src="/static/service_account.js"></script></body>
 </html>

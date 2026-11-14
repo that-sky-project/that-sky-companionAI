@@ -5,7 +5,9 @@ import socket, subprocess, sys, tempfile, threading, time, unittest
 from unittest import mock
 
 S=Path(__file__).resolve().parents[2]
-T=tempfile.TemporaryDirectory(prefix='xg-desktop-backend-')
+# All fixture state, including native rule input, remains inside the workspace.
+TEMP_ROOT=S.parent/'test-tmp'; TEMP_ROOT.mkdir(parents=True,exist_ok=True)
+T=tempfile.TemporaryDirectory(prefix='xg-desktop-backend-',dir=TEMP_ROOT)
 D=Path(T.name)
 os.environ['XG_DATA_DIR']=str(D/'data')
 os.environ['SKY_AI_ROOT']=str(S/'app')
@@ -23,6 +25,35 @@ network_guard=mock.patch.object(socket.socket,'connect',connect_local)
 process_guard=mock.patch.object(subprocess,'Popen',side_effect=AssertionError('test forbids subprocess launch'))
 network_guard.start();process_guard.start()
 import control_api,owner_title,textcheck,autostart,xg_paths
+
+# Authored synthetic rules only. The counts exercise readiness without shipping,
+# opening or deriving any SDK/cache rule data. Most rules target impossible test
+# markers; one deliberate intercept exercises the existing blocked-title cases.
+SYNTHETIC_COUNTS={'shield':689,'intercept':88,'replace':2,'remind':1}
+SYNTHETIC_SUBJECT = """# Synthetic normalization, not an SDK implementation.
+import unicodedata
+def make_subject(text, group, *, level='1', channel='chat_max'):
+    return unicodedata.normalize('NFKC', text).replace('\\u200b', '')
+"""
+
+def write_synthetic_rules(root, *, invalid=False):
+    root.mkdir(parents=True,exist_ok=True)
+    (root/'sdk_subject.py').write_text(SYNTHETIC_SUBJECT,encoding='utf-8')
+    (root/'t2s.json').write_text('{}\n',encoding='utf-8')
+    rows=[]
+    for group,count in SYNTHETIC_COUNTS.items():
+        for number in range(count):
+            pattern=f'__synthetic_{group}_{number:04d}__'
+            if group=='intercept' and number==0: pattern='主人'
+            if group=='shield' and number==0: pattern='SyntheticBlock'
+            if invalid and group=='shield' and number==0: pattern='('
+            rows.append({'group':group,'id':f'synthetic-{group}-{number:04d}',
+                         'engine_pattern':pattern,'compileOptions':'00000000'})
+    (root/'cached_patterns.jsonl').write_text(''.join(json.dumps(row,ensure_ascii=False)+'\n' for row in rows),encoding='utf-8')
+    return root
+
+SYNTHETIC_RULES=write_synthetic_rules(Path(xg_paths.GAME_DIR)/'text-rules')
+
 # The HTTP handler is real; only runtime/process observations are stubbed.
 running_guard=mock.patch.object(control_api,'chat_running',return_value=False)
 find_guard=mock.patch.object(control_api.xg_proc,'find_script',return_value=[])
@@ -131,19 +162,17 @@ class TitleTests(unittest.TestCase):
         self.assertFalse(ok);self.assertEqual(owner_title.get(),'哥哥')
         self.assertIn('姐姐，你来啦',msg)
         self.assertEqual(fake.check.call_count,3);fake.require_ready.assert_called_once()
-    def test_12_missing_rules_fail_closed(self):
+    def test_12_missing_rules_basic_checks_and_honest_save(self):
         missing=D/'missing_rules'
-        with mock.patch.object(textcheck,'RULES',missing),mock.patch.object(textcheck,'_engine',None):
+        with mock.patch.object(textcheck,'_rules_dir',return_value=missing),mock.patch.object(textcheck,'_engine',None):
+            with self.assertRaises(textcheck.RulesUnavailable): textcheck.Engine()
             ok,msg=owner_title.set_title('姐姐')
-        self.assertFalse(ok);self.assertEqual(owner_title.get(),'哥哥')
+        self.assertTrue(ok);self.assertEqual(owner_title.get(),'姐姐')
+        self.assertIn('未进行本地词表审核',msg)
+        self.assertNotIn('审核通过',msg)
     def test_13_real_compile_failure_fail_closed(self):
-        rules=D/'invalid_rules';rules.mkdir(exist_ok=True)
-        # Reuse only the normalization helper, not any production state.
-        for name in ('sdk_subject.py','t2s.json'):
-            (rules/name).write_bytes((S/'app/ref/textrules'/name).read_bytes())
-        pattern={'group':'shield','id':'bad','engine_pattern':'(','compileOptions':'00000000'}
-        (rules/'cached_patterns.jsonl').write_text(json.dumps(pattern)+'\n',encoding='utf-8')
-        with mock.patch.object(textcheck,'RULES',rules),mock.patch.object(textcheck,'_engine',None):
+        rules=write_synthetic_rules(D/'invalid_rules',invalid=True)
+        with mock.patch.object(textcheck,'_rules_dir',return_value=rules),mock.patch.object(textcheck,'_engine',None):
             bad=textcheck.engine();self.assertEqual(len(bad.failed),1)
             self.assertFalse(owner_title.set_title('姐姐')[0])
         self.assertEqual(owner_title.get(),'哥哥')
@@ -211,6 +240,52 @@ class TitleTests(unittest.TestCase):
             code,out=request('POST','/chat/restart',{})
         self.assertEqual(code,500);self.assertFalse(out['ok'])
 
+
+    def test_29_missing_rules_http_check_then_save_warns(self):
+        with mock.patch.object(textcheck,'_rules_dir',return_value=D/'missing_http'),mock.patch.object(textcheck,'_engine',None):
+            code,out=request('POST','/xiaoguang/owner/title',{'title':'姐姐','check':True})
+            self.assertEqual(code,200);self.assertTrue(out['ok'])
+            self.assertEqual(owner_title.get(),'哥哥')
+            self.assertIn('基本格式校验',out['message']);self.assertIn('未进行本地词表审核',out['message'])
+            self.assertNotIn('审核通过',out['message'])
+            code,out=request('POST','/owner/title',{'title':'姐姐'})
+            self.assertEqual(code,200);self.assertTrue(out['ok']);self.assertEqual(out['title'],'姐姐')
+            self.assertIn('未进行本地词表审核',out['message']);self.assertNotIn('审核通过',out['message'])
+            self.assertFalse(out['restart_required']);self.assertEqual(owner_title.get(),'姐姐')
+
+    def test_30_missing_rules_http_shape_and_reserved_still_rejected(self):
+        with mock.patch.object(textcheck,'_rules_dir',return_value=D/'missing_shape'),mock.patch.object(textcheck,'_engine',None):
+            for title in ('','abcdefg','hello!!','兄 姐','a\u200b','a\x00',*owner_title.RESERVED):
+                with self.subTest(title=repr(title)):
+                    code,out=request('POST','/owner/title',{'title':title,'check':True})
+                    self.assertEqual(code,200);self.assertFalse(out['ok'])
+                    code,out=request('POST','/owner/title',{'title':title})
+                    self.assertEqual(code,400);self.assertFalse(out['ok'])
+                    self.assertEqual(owner_title.get(),'哥哥')
+
+    def test_31_missing_rules_http_auth_origin_and_lock_unchanged(self):
+        with mock.patch.object(textcheck,'_rules_dir',return_value=D/'missing_auth'),mock.patch.object(textcheck,'_engine',None):
+            self.assertEqual(request('POST','/owner/title',{'title':'姐姐'},token=False)[0],403)
+            self.assertEqual(request('POST','/owner/title',{'title':'姐姐'},origin='https://unrelated.invalid')[0],403)
+            with control_api.LOCK:
+                self.assertEqual(request('POST','/owner/title',{'title':'姐姐'})[0],409)
+        self.assertEqual(owner_title.get(),'哥哥')
+
+    def test_32_synthetic_subject_uses_real_pcre2(self):
+        # This tests our explicitly synthetic normalization, not SDK equivalence.
+        text='ＳｙｎｔｈｅｔｉｃＢｌｏｃｋ'
+        self.assertIn(('shield','synthetic-shield-0000'),self.engine.check(text,textcheck.BLOCKING))
+        self.assertIn(('shield','synthetic-shield-0000'),self.engine.check('Synthetic\u200bBlock',textcheck.BLOCKING))
+        self.assertTrue(all(rid.startswith('synthetic-') for rows in self.engine.rules.values() for rid,_ in rows))
+
+    def test_33_missing_rules_save_failure_retains_old_title(self):
+        with mock.patch.object(textcheck,'_rules_dir',return_value=D/'missing_io'),mock.patch.object(textcheck,'_engine',None):
+            with mock.patch.object(owner_title.os,'replace',side_effect=OSError('synthetic write failure')):
+                code,out=request('POST','/owner/title',{'title':'姐姐'})
+        self.assertEqual(code,400);self.assertFalse(out['ok']);self.assertEqual(owner_title.get(),'哥哥')
+        self.assertIn('保存称呼失败',out['message'])
+        self.assertFalse(list(owner_title.FILE.parent.glob('owner_title.*.pending')))
+
 class AutostartTests(unittest.TestCase):
     def setUp(self):
         self.pack=Path(tempfile.mkdtemp(prefix='package-',dir=D));self.app=self.pack/'app';self.app.mkdir()
@@ -256,10 +331,10 @@ if __name__=='__main__':
         suite=unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
         result=unittest.TextTestRunner(verbosity=2).run(suite)
         summary={'testsRun':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'skipped':len(result.skipped),'successful':result.wasSuccessful(),
-                 'realPcre2':True,'rules':{g:len(v) for g,v in textcheck.engine().rules.items()},
+                 'realPcre2':True,'ruleSource':'synthetic-only','ruleSubject':'synthetic NFKC plus zero-width removal, not SDK behavior','workspaceTemporary':True,'rules':{g:len(v) for g,v in textcheck.engine().rules.items()},
                  'ruleCompilationFailures':textcheck.engine().failed,'http':'real loopback ThreadingHTTPServer',
                  'upstream':'blocked','gameProcesses':'blocked','startupDirectory':'temporary fixture only',
-                 'modifiedFiles':['app/bot/control_api.py','app/bot/owner_title.py','app/bot/textcheck.py','app/launcher/autostart.py']}
+                 'exercisedModules':['app/bot/control_api.py','app/bot/owner_title.py','app/bot/textcheck.py','app/launcher/autostart.py']}
         print('SCENARIO_RESULT='+json.dumps(summary,ensure_ascii=False))
     finally:
         server.shutdown();server.server_close();thread.join(timeout=3)

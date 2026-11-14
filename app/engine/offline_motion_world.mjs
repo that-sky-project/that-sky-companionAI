@@ -1,4 +1,6 @@
 // Explicit offline-only collision adapter; core/defaults/live worker stay unchanged.
+import RAPIER from '@dimforge/rapier3d-compat';
+import {InitialContactQuery} from './initial_contact.mjs';
 import {TerrainWorld,DEFAULTS} from './core.mjs';
 import {LocalFrame,localizeGeometry} from './local_frame.mjs';
 import {queryStartSupportProjection} from './start_support.mjs';
@@ -55,8 +57,39 @@ function options(value){
   return value;
 }
 
+
+// A center ray does not cover the capsule footprint. Recover one shallow bottom
+// contact only; this proposal still requires the ORIGINAL full capsule test.
+export function queryShallowGroundContactProjection(world, rawStart, prior) {
+ const reject=reason=>({status:'blocked',reason});
+ const finitePoint=p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite);
+ if(!finitePoint(rawStart)||!prior||!['adjusted','unchanged'].includes(prior.status)||
+    !prior.support||!finitePoint(prior.support.position)||!finitePoint(prior.support.normal))return reject('contact_recovery_support_required');
+ const c=world.config,ny=prior.support.normal[1],floor=Math.cos(DEFAULTS.slopeDegrees*Math.PI/180);
+ if(c.radius!==DEFAULTS.radius||c.height!==DEFAULTS.height||c.skin!==DEFAULTS.skin||c.slopeDegrees!==DEFAULTS.slopeDegrees)return reject('contact_recovery_capsule_config');
+ if(Math.abs(prior.support.position[1]-rawStart[1])>.02||ny<floor||Math.abs(Math.hypot(...prior.support.normal)-1)>.001)return reject('contact_recovery_support_band');
+ const shape=new RAPIER.Capsule((c.height-2*c.radius)/2,c.radius),center={x:rawStart[0],y:rawStart[1]+c.height/2+c.skin,z:rawStart[2]};
+ const hit=world.terrain.contactShape(shape,center,{x:0,y:0,z:0,w:1},0);
+ if(!hit)return reject('contact_recovery_no_contact');
+ const a=p=>[p.x,p.y,p.z],point1=a(hit.point1),point2=a(hit.point2),normal=a(hit.normal1);
+ if(!Number.isFinite(hit.distance)||!finitePoint(point1)||!finitePoint(point2)||!finitePoint(normal)||
+    hit.distance>=0||hit.distance<-.015||normal[1]<floor||Math.abs(Math.hypot(...normal)-1)>.001)return reject('contact_recovery_not_shallow_ground');
+ // Limit both witnesses to the bottom spherical cap and a narrow support band;
+ // wall sides, head/ceiling contacts, remote and unsupported hits stay blocked.
+ if([point1,point2].some(p=>p[1]<rawStart[1]-.02||p[1]>rawStart[1]+.1||Math.hypot(p[0]-rawStart[0],p[2]-rawStart[2])>c.radius+.001))return reject('contact_recovery_not_bottom');
+ const delta=Math.max(prior.deltaY??0,-hit.distance/normal[1]+.0001);
+ if(!Number.isFinite(delta)||delta<=0||delta>.02)return reject('contact_recovery_lift_budget');
+ const adjusted=[rawStart[0],rawStart[1]+delta,rawStart[2]];
+ return {...prior,status:'adjusted',rawStart:[...rawStart],adjustedStart:adjusted,deltaY:delta,delta:[0,delta,0],
+   reason:'shallow_bottom_contact_proposal',calculations:{...prior.calculations,requiredY:adjusted[1],formula:'rawY+max(existing_support_lift,-penetration_distance/up_normal_y+0.0001)'},
+   contactRecovery:{kind:'single_measured_bottom_contact',maximumLift:.02,maximumPenetration:.015,
+      distance:hit.distance,point1,point2,normal,normalPolicy:'unchanged_actual_contact',
+      formula:'max(existing_support_lift,-penetration_distance/up_normal_y+0.0001)',attempts:1},
+   audit:{...prior.audit,kind:'shallow_bottom_contact_not_avatar_calibration',maximumLift:.02,collisionClearanceVerified:false,footOffsetCalibrated:false,nativeCollisionVerified:false,calibrationInstalled:false,runtimeReady:false}};
+}
+
 export class OfflineMotionWorld{
-  #motorPolicy;#frame;#world;#motor=null;#hop=null;#closed=false;#supportEnabled;#lastAudit=null;#coverage=null;
+  #initialContacts;#motorPolicy;#frame;#world;#motor=null;#hop=null;#closed=false;#supportEnabled;#lastAudit=null;#coverage=null;
   constructor(positions,indices,provided){
     const o=options(provided);this.#motorPolicy=o.motorPolicy;
     const runtime=o.collisionWindow===undefined?null:assertPinnedCollisionRuntime();
@@ -71,6 +104,7 @@ export class OfflineMotionWorld{
     this.#coverage=mesh.coverage??null;
     const window=this.#frame.toLocalWindow(o.navigationWindow??null);
     this.#world=new TerrainWorld(mesh.positions,mesh.indices,{navigation:false,navigationWindow:window,...(o.motorPolicy?{config:{stepHeight:.6,snapGround:.6}}:{})});
+    this.#initialContacts=new InitialContactQuery(this.#world,mesh.positions,mesh.indices);
     const physicalBounds=freeze(structuredClone(this.#world.bounds));
     // Only the movement failure boundary changes ownership: physical collider/BVH
     // retains whole faces, while below_geometry still uses the ORIGINAL query domain.
@@ -97,7 +131,9 @@ export class OfflineMotionWorld{
   #audit(proposal){
     const result=structuredClone(proposal);
     for(const key of ['rawStart','adjustedStart'])if(result[key])result[key]=this.#frame.toWorldPosition(result[key]);
+    for(const hit of result.contacts??[]){hit.point=this.#frame.toWorldPosition(hit.point);hit.vertices=hit.vertices.map(p=>this.#frame.toWorldPosition(p));}
     if(result.support)result.support.position=this.#frame.toWorldPosition(result.support.position);
+    if(result.contactRecovery){for(const key of ['point1','point2'])result.contactRecovery[key]=this.#frame.toWorldPosition(result.contactRecovery[key]);}
     if(result.query)result.query.origin=this.#frame.toWorldPosition(result.query.origin);
     if(result.audit?.navigationWindow)result.audit.navigationWindow=this.#frame.toWorldWindow(result.audit.navigationWindow);
     if(result.calculations){
@@ -110,6 +146,13 @@ export class OfflineMotionWorld{
     this.#open();this.#coverage?.assertWorldCapsule(point,{radius:0,skin:0});
     const hit=this.#world.ground(this.#frame.toLocalPosition(point),maxDistance);
     return hit?{position:this.#frame.toWorldPosition(hit.position),normal:this.#frame.toWorldVector(hit.normal),distance:hit.distance}:null;
+  }
+  capsuleProbe(point,resolve=true){
+    this.#open();this.#coverage?.assertWorldCapsule(point,{radius:DEFAULTS.radius+.5,skin:DEFAULTS.skin});
+    const result=this.#initialContacts.probe(this.#frame.toLocalPosition(point),{resolve});
+    for(const k of ['rawStart','adjustedStart'])if(result[k])result[k]=this.#frame.toWorldPosition(result[k]);
+    for(const h of result.contacts??[]){h.point=this.#frame.toWorldPosition(h.point);h.vertices=h.vertices.map(v=>this.#frame.toWorldPosition(v));}
+    return {...result,coordinateFrame:'world_feet'};
   }
   motor(start,path,now,speed=DEFAULTS.speed,requestWindow=null){
     this.#open();need(this.#motor===null&&this.#hop===null,'single_motor_only');
@@ -135,20 +178,50 @@ export class OfflineMotionWorld{
       this.#lastAudit=freeze({...auditBase,status:'blocked',adjustedStart:null,deltaY:null,
         reason:error.message,collisionConstructorAccepted:false});
       if(error.message!=='start_overlaps_collision'||!this.#supportEnabled)throw error;
+      try{
       const supportWorld=this.#motorPolicy?{config:DEFAULTS,navigationWindow:this.#world.navigationWindow,ground:this.#world.ground.bind(this.#world)}:this.#world;
       // Autostep policy does not alter the capsule/start-only .3m support proposal.
       const proposal=queryStartSupportProjection(supportWorld,localStart);
       this.#lastAudit=this.#audit(proposal);
-      if(proposal.status!=='adjusted')throw error;
+      if(!['adjusted','unchanged'].includes(proposal.status))throw error;
       // Original collision constructor must still accept the proposed start.
-      try{inner=this.#world.motor(proposal.adjustedStart,localPath,now,speed);}
+      try{if(proposal.status==='unchanged')throw error;inner=this.#world.motor(proposal.adjustedStart,localPath,now,speed);}
       catch(rejected){
         this.#lastAudit=freeze({...this.#lastAudit,applied:false,collisionConstructorAccepted:false});
-        throw rejected;
+        if(rejected.message!=='start_overlaps_collision')throw rejected;
+        const recovery=queryShallowGroundContactProjection(this.#world,localStart,proposal);
+        if(recovery.status!=='adjusted')throw rejected;
+        this.#lastAudit=this.#audit(recovery);
+        try{inner=this.#world.motor(recovery.adjustedStart,localPath,now,speed);}
+        catch(stillBlocked){this.#lastAudit=freeze({...this.#lastAudit,applied:false,collisionConstructorAccepted:false});throw stillBlocked;}
+      }
+      }catch(originalSupportError){
+        if(originalSupportError.message!=='start_overlaps_collision')throw originalSupportError;
+        const separation=this.#initialContacts.probe(localStart);
+        if(separation.status!=='adjusted')throw originalSupportError;
+        coverage?.assertWorldPath([start,this.#frame.toWorldPosition(separation.adjustedStart)],{radius:DEFAULTS.radius,skin:DEFAULTS.skin});
+        inner=this.#world.motor(separation.adjustedStart,localPath,now,speed);
+        this.#lastAudit=freeze({...this.#audit(separation),initialContactExit:true});
       }
       this.#lastAudit=freeze({...this.#lastAudit,collisionConstructorAccepted:true});
     }
     const frame=this.#frame;let closed=false,coverageFailure=null;
+    const exit=this.#lastAudit?.initialContactExit?this.#lastAudit:null;
+    const exitDuration=exit?Math.max(DEFAULTS.fixedDt,exit.deltaLength/speed):0;
+    let exitDone=!exit,exitLastTime=now,exitLastResult=exit?freeze({position:[...exit.rawStart],velocity:[0,0,0],grounded:true,arrived:false,blocked:false,reason:'initial_contact_exit',heading:0}):null,exitCancelled=false;
+    const sampleWithExit=time=>{
+      need(Number.isFinite(time),'invalid_time');
+      if(exitCancelled)return exitLastResult;
+      if(!exitDone&&time<=exitLastTime)return exitLastResult;
+      if(!exitDone&&time-exitLastTime>DEFAULTS.maxElapsed){inner.cancel('clock_gap');exitCancelled=true;return exitLastResult=freeze({...exitLastResult,blocked:true,velocity:[0,0,0],reason:'clock_gap'});}
+      if(!exitDone&&time<now+exitDuration){
+        const t=Math.max(0,(time-now)/exitDuration),p=exit.rawStart.map((v,i)=>v+exit.delta[i]*t);
+        coverage?.assertWorldSweep(exitLastResult.position,p,{radius:DEFAULTS.radius,skin:DEFAULTS.skin});
+        exitLastTime=time;return exitLastResult=freeze({position:p,velocity:exit.delta.map(v=>v/exitDuration),grounded:true,arrived:false,blocked:false,reason:'initial_contact_exit',heading:Math.atan2(exit.delta[0],exit.delta[2])});
+      }
+      if(!exitDone)coverage?.assertWorldSweep(exitLastResult.position,exit.adjustedStart,{radius:DEFAULTS.radius,skin:DEFAULTS.skin});
+      exitDone=true;return convert(inner.sample(time-exitDuration));
+    };
     if(coverage){
       const originalStep=inner.step.bind(inner);
       const capsule={radius:DEFAULTS.radius,skin:DEFAULTS.skin};
@@ -175,9 +248,9 @@ export class OfflineMotionWorld{
         return hit?{normal1:{x:hit.normal1.x,y:hit.normal1.y,z:hit.normal1.z}}:null;}
     });
     const motor=Object.freeze({controller,startSupportAudit:this.#lastAudit,
-      snapshot:()=>{need(!closed&&!coverageFailure,'inactive_motor');return convert(inner.cached);},
+      snapshot:()=>{need(!closed&&!coverageFailure,'inactive_motor');return exitDone?convert(inner.cached):exitLastResult;},
       retarget:(actualStart,nextPath,nextWindow,nextSpeed=speed)=>{
-        need(!closed&&!coverageFailure&&!inner.closed&&!inner.arrived&&!inner.blocked&&inner.grounded&&inner.cached.grounded,'active_grounded_motor_required');
+        need(exitDone&&!closed&&!coverageFailure&&!inner.closed&&!inner.arrived&&!inner.blocked&&inner.grounded&&inner.cached.grounded,'active_grounded_motor_required');
         need(nextSpeed===speed&&nextSpeed===inner.speed,'retarget_speed_change_requires_cold_plan');
         const current=frame.toWorldPosition(inner.cached.position),checkedStart=frame.toWorldPosition(frame.toLocalPosition(actualStart));
         need(Math.hypot(...current.map((v,i)=>v-checkedStart[i]))<=1e-5,'retarget_start_mismatch');
@@ -194,8 +267,8 @@ export class OfflineMotionWorld{
         inner.path=nextLocalPath;inner.index=0;inner.goal=nextLocalPath.at(-1);coverage=nextCoverage;
         return snapshot;
       },
-      sample:time=>{if(coverageFailure)throw coverageFailure;return convert(inner.sample(time));},
-      cancel:reason=>{if(coverageFailure)throw coverageFailure;return convert(inner.cancel(reason));},
+      sample:time=>{if(coverageFailure)throw coverageFailure;return sampleWithExit(time);},
+      cancel:reason=>{if(coverageFailure)throw coverageFailure;const result=convert(inner.cancel(reason));if(!exitDone){exitCancelled=true;return exitLastResult=freeze({...result,position:[...exitLastResult.position]});}return result;},
       dispose:()=>{if(!closed){inner.dispose();closed=true;this.#motor=null;}}
     });
     this.#motor=motor;return motor;

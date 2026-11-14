@@ -10,8 +10,52 @@ from .common import (GAME_VERSION, GameDataError, Progress, final, game_dir,
                      read_json, resolve_data, sha256_file, xg_paths)
 
 
-def collect(data: Path) -> dict:
+def props_status(root: Path, profile=None) -> dict:
+    """Use the runtime's full generated-catalog validator, never a saved checkbox."""
+    import sys
+    from .common import APP_ROOT
+    root = Path(root)
+    result = {"ready": False, "state": "missing", "code": "props_missing", "count": 0,
+              "known": 0, "message": "道具形状尚未生成，请单独补生成；当前暂停道具地形与坐座位，行走可用。"}
+    if not (root / "generation.json").is_file() or not (root / "catalog.json").is_file():
+        return result
+    try:
+        source = str(APP_ROOT / "src")
+        if source not in sys.path:
+            sys.path.insert(0, source)
+        from skyterrain.props import load_generated_catalog
+        load_generated_catalog(root, expected_build=(profile or {}).get("build"))
+        proof = read_json(root / "generation.json", {}) or {}
+        counts = proof.get("counts") or {}
+        ready = counts.get("ready", proof.get("ready", 0))
+        known = counts.get("known", proof.get("known", ready))
+        if type(ready) is not int or ready <= 0 or type(known) is not int or known < ready:
+            raise ValueError("props_counts_invalid")
+        result.update(ready=True, state="ready", code="", count=ready, known=known,
+                      message="道具形状已生成：%d 种；运行时按实际校验结果使用。" % ready)
+        return result
+    except Exception:
+        result.update(state="invalid", code="props_invalid",
+                      message="道具形状缺失或校验未通过，请单独补生成；当前暂停道具地形与坐座位，行走可用。")
+        return result
+
+
+def collect(data: Path, account=None, account_uuid=None, profile=None) -> dict:
+    from qfsky.version_profile import CURRENT_BUILD, profile_for_build
+    from .catalog_state import certify
+    profile = profile or profile_for_build(CURRENT_BUILD)
+    if account is None:
+        try:
+            account = (Path(data) / "control/active_account").read_text(encoding="utf-8").strip()
+        except OSError:
+            account = ""
+    if account_uuid is None and account:
+        accounts = read_json(Path(data) / "runtime/runtime-data/accounts.json", {}) or {}
+        rows = accounts.get("accounts", []) if isinstance(accounts, dict) else []
+        account_uuid = next((row.get("user_uuid") for row in rows if isinstance(row, dict)
+                             and str(row.get("id")) == str(account)), None)
     game = game_dir(data)
+    props = props_status(game / "props", profile)
     names_dir = game / "names"
     terrain_dir = game / "terrain"
     apk_dir = Path(data) / "game" / "apk"
@@ -92,9 +136,22 @@ def collect(data: Path) -> dict:
         cap = (entry or {}).get("current_capture") or {}
         own = cap.get("by_account") or {}
         if own or cap.get("record_dir"):
+            selected = own.get(account_uuid) if account_uuid else None
+            selected = selected if isinstance(selected, dict) else cap if cap.get("account") == account_uuid else {}
+            record_name = selected.get("record_dir")
+            record = {}
+            if isinstance(record_name, str) and record_name and Path(record_name).name == record_name:
+                record = read_json(private / "current_profiles" / record_name / "record.json", {}) or {}
+            nv = record.get("netversion_u16") if isinstance(record, dict) else None
+            current_capture = (isinstance(record, dict)
+                and record.get("apk_build") == profile.get("build")
+                and record.get("native_sha256") == profile.get("native_sha256")
+                and record.get("resource_revision") == profile.get("resource_revision")
+                and isinstance(nv, list) and len(nv) == 6
+                and (str(map_id) != str(profile.get("home_level_id")) or nv[0] == profile.get("home_resource_tag")))
             capture_rows.append({"map_id": map_id, "scene": (entry or {}).get("scene"),
                                  "record_dir": cap.get("record_dir"),
-                                 "accounts": sorted(own)})
+                                 "accounts": sorted(own), "current": bool(current_capture)})
 
     catalogs = []
     if account_dir.is_dir():
@@ -102,10 +159,13 @@ def collect(data: Path) -> dict:
             manifest = folder / "manifest.json"
             if folder.is_dir() and manifest.is_file():
                 doc = read_json(manifest, {}) or {}
+                checked = certify(data, str(account), account_uuid, profile) if folder.name == account else {
+                    "certified": False, "state": "not_current_account", "code": "not_current_account",
+                    "message": "此目录不是当前账号，未作可用性认证"}
                 catalogs.append({"account": folder.name, "manifest": str(manifest),
                                  "sha256": sha256_file(manifest),
                                  "maps": len(doc.get("entries") or {}),
-                                 "variants": sum(len(v) for v in (doc.get("variants") or {}).values())})
+                                 "variants": sum(len(v) for v in (doc.get("variants") or {}).values()), **checked})
 
     return {
         "ok": True,
@@ -113,6 +173,7 @@ def collect(data: Path) -> dict:
         "data": str(data),
         "apk": apk_row,
         "names": name_rows,
+        "props": props,
         "names_ready": all(v is not None for v in name_rows.values()),
         "terrain": terrain_row,
         "scene_inputs": scene_inputs_row,
@@ -121,14 +182,16 @@ def collect(data: Path) -> dict:
         "captures": capture_rows,
         "catalog_sources": sources,
         "catalogs": catalogs,
+        "account": str(account or ""),
         "done": {
             "apk": apk_row is not None,
             "names": all(v is not None for v in name_rows.values()),
             "terrain": terrain_row is not None,
+            "props": props["ready"],
             "scene_inputs": scene_inputs_row is not None,
-            "capture": bool(capture_rows),
+            "capture": any(r["current"] for r in capture_rows),
             "dictionary": bool(dict_row and dict_row.get("exists")),
-            "catalog": bool(catalogs),
+            "catalog": any(r.get("account") == account and r.get("certified") is True for r in catalogs),
         },
     }
 

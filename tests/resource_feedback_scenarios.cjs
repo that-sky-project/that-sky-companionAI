@@ -10,7 +10,7 @@ const model=context.model;
 const results=[];
 function test(name,fn){fn();results.push({name,ok:true});}
 const pending=()=>({ok:true,account:'fixture-a',steps:[{id:'capture',done:false},{id:'data',done:false}]});
-const ready=()=>({ok:true,account:'fixture-a',steps:[{id:'capture',done:true,detail:{account:'fixture-a',result:{ok:true,account:'fixture-a',maps:115,variants:1}}},{id:'data',done:true}]});
+const ready=()=>({ok:true,account:'fixture-a',catalog:{account:'fixture-a',certified:true,maps:115,variants:1},steps:[{id:'capture',done:true,detail:{account:'fixture-a',result:{ok:true,account:'fixture-a',maps:115,variants:1}}},{id:'data',done:true}]});
 const cap=()=>({state:'ready',worker_pid:123,scene:'CandleSpace',recorded:['CandleSpace'],message:'遇境这个号已经录过了，去下一张图',last_registered:{scene:'CandleSpace',account:'fixture-a'}});
 const task=(extra={})=>({id:'fixture-task',kind:'catalog',label:'生成本账号地图目录',running:true,ok:null,stage:'catalog',done:75,total:115,msg:'自检 75/115',...extra});
 const wrap=t=>({ok:t?.ok!==false,running:!!t?.running,task:t,meta:{account:'fixture-a'}});
@@ -34,7 +34,7 @@ test('verified catalog explicitly reports map and variant counts',()=>{const v=m
 test('completed catalog persists after another task',()=>assert.equal(model.catalogView(ready(),wrap(task({kind:'data',running:true}))).state,'success'));
 test('current rebuild does not reuse stale green state',()=>assert.equal(model.catalogView(ready(),wrap(task())).state,'running'));
 test('failure overrides previous green state and offers retry',()=>{const v=model.catalogView(ready(),wrap(task({running:false,ok:false,error:'缺少地图文件'})));assert.equal(v.state,'error');assert.match(v.message,/缺少地图文件/);assert.match(v.detail,/重试/);assert.doesNotMatch(v.title,/构建成功/);});
-test('wrong-account success detail is not accepted',()=>{const s=ready();s.steps[0].detail.account='fixture-b';assert.notEqual(model.catalogView(s,null).state,'success');});
+test('wrong-account success detail is not accepted',()=>{const s=ready();s.steps[0].detail.account='fixture-b';s.catalog.account='fixture-b';assert.notEqual(model.catalogView(s,null).state,'success');});
 test('unknown terminal outcome is not shown as completed',()=>assert.equal(model.taskView(wrap(task({running:false,ok:null})),pending()).state,'waiting'));
 test('summary read failure clears successful certification',()=>assert.equal(model.catalogView(ready(),null,'读取失败').state,'error'));
 test('data task needs its own integrity confirmation',()=>assert.equal(model.taskView(wrap(task({kind:'data',running:false,ok:true})),pending()).state,'waiting'));

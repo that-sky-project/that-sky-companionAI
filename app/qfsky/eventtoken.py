@@ -193,7 +193,7 @@ def _tally(resp, got_ids, cts, uniq):
 #     r=inactive_event 该活动当前没开（例：global_fashion）
 #   `collected` 是**按池共享**的计数（同 pool 的发射器读到同一个值）；
 #   单次请求服务端最多回 32 项 ⇒ 必须按 32 切批。
-# ★ 池按**账号 + 天**：对照号 84100d47 当天 moonlight_ec_pool collected=0，
+# ★ 池按**账号 + 天**：对照号 [已移除历史账号片段] 当天 moonlight_ec_pool collected=0，
 #   本号已 60/60 —— 证明是每账号每天独立的额度。
 SWEEP_CHUNKS = 64          # 单发射器最多扫 chunk_seq 0..63
 MAX_DAILY_BATCHES = 140    # 每日烛火最多发多少批（32 项/批），防失控

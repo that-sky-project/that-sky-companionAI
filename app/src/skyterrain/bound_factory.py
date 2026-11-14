@@ -300,6 +300,17 @@ class BoundWorkerBackend(WorkerBackend):
         except Exception:
             self._ground_surface=None
 
+    @property
+    def _ground_surface(self):
+        # air_terrain/stuck_recovery 已访问这个入口；统一叠加，不改其策略。
+        surface=getattr(self,'_static_ground_surface',None)
+        binding=getattr(self,'_placeables',None)
+        return surface if binding is None else binding.surface(surface)
+
+    @_ground_surface.setter
+    def _ground_surface(self,value):
+        self._static_ground_surface=value
+
     def terrain_ground(self,x,z,near_y=None):
         """按 (x,z) 查当前场景真实地面；结果已换算成 Actor 原点坐标。
 

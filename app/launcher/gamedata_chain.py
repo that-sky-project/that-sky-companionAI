@@ -24,8 +24,26 @@ import xg_exec  # noqa: E402
 from capture import gamedata  # noqa: E402
 
 
+def _optional_props_tail(plan, kind, index, completed):
+    return (kind == "data" and len(plan) == 3 and index == 3
+            and len(completed) == 2 and completed == ["names", "terrain"]
+            and all(isinstance(row, list) and row for row in plan)
+            and plan[0][0] == "names" and plan[1][0] == "terrain"
+            and plan[2][0] == "props" and "--optional" in plan[2])
+
+
+def _optional_props_warning(code):
+    print(json.dumps({"ok": True, "kind": "data",
+          "props": {"ready": False, "state": "missing", "code": code},
+          "warning_code": code,
+          "warning": "名称表与地形已成功，道具形状未生成。可单独补生成；当前暂停道具地形与坐座位，行走可用。"},
+          ensure_ascii=False), flush=True)
+    return 0
+
+
 def run_plan(plan, kind):
     env = gamedata.env()
+    completed = []
     for i, args in enumerate(plan, 1):
         print(json.dumps({"stage": "chain", "done": i - 1, "total": len(plan),
                           "eta_s": None, "msg": "开始：" + " ".join(map(str, args))},
@@ -35,6 +53,8 @@ def run_plan(plan, kind):
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  text=True, encoding="utf-8", errors="replace", bufsize=1)
         except OSError as exc:
+            if _optional_props_tail(plan, kind, i, completed):
+                return _optional_props_warning("props_process_start_failed")
             print(json.dumps({"ok": False, "stage": "chain",
                               "error": f"起不了 xg_gamedata：{type(exc).__name__}"},
                              ensure_ascii=False), flush=True)
@@ -56,12 +76,20 @@ def run_plan(plan, kind):
         except KeyboardInterrupt:
             proc.terminate()
             return 130
+        if _optional_props_tail(plan, kind, i, completed) and (
+                code != 0 or final is None or final.get("ok") is not True):
+            return _optional_props_warning("props_process_incomplete")
+        if code != 0:
+            print(json.dumps({"ok": False, "stage": "chain", "code": "core_process_failed",
+                              "error": "资源子命令未正常退出，未确认成功"}, ensure_ascii=False), flush=True)
+            return 1
         if final is None:
             print(json.dumps({"ok": False, "stage": "chain",
                               "error": "xg_gamedata 没有输出结果行"}, ensure_ascii=False), flush=True)
             return 1
-        if not final.get("ok"):
+        if final.get("ok") is not True:
             return 1
+        completed.append(args[0])
     # 最后一条子命令的 ok 行就是整条链的结果（保留 apk/path 等字段，别再补一条空结果）
     return 0
 

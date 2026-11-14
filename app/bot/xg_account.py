@@ -29,7 +29,7 @@ if str(_APP) not in sys.path:
 import xg_exec  # noqa: E402
 
 ROOT = Path(os.environ.get("XG_DATA_DIR") or os.environ.get("SKY_AI_ROOT")
-           or "/root/claudework/sky-ai")
+           or str(_APP.parent / "data"))
 try:
     # 安装版：代码在 app\、数据在 %LOCALAPPDATA%\XiaoGuang\data。统一用 xg_paths
     # 的 DATA/BOT_CODE/python_exe；服务器上这些常量仍然等于原路径。

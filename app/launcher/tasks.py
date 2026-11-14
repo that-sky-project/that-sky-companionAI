@@ -11,6 +11,9 @@ import os
 import secrets
 import sys
 import time
+import threading
+import copy
+from functools import wraps
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
@@ -24,8 +27,17 @@ import error_detail  # noqa: E402
 from capture import gamedata  # noqa: E402
 
 CHAIN = Path(__file__).resolve().parent / "gamedata_chain.py"
-LOCK_KINDS = {"data", "catalog", "pull-apk", "single"}
+LOCK_KINDS = {"data", "props", "catalog", "pull-apk", "single"}
 TAIL_BYTES = 4 * 1024 * 1024
+_TASK_LOCK = threading.RLock()
+
+
+def _serialized(fn):
+    @wraps(fn)
+    def call(*args, **kwargs):
+        with _TASK_LOCK:
+            return fn(*args, **kwargs)
+    return call
 
 
 def _status_path():
@@ -89,28 +101,69 @@ def _alive(doc):
         return False
     ident = xg_proc.identity(pid)
     if not ident:
-        return False
-    if doc.get("create_time") and abs(float(ident.get("create_time", 0)) -
-                                      float(doc["create_time"])) > 1e-3:
-        return False
+        try:
+            return None if xg_proc.psutil.pid_exists(int(pid)) else False
+        except (AttributeError, OSError, ValueError, TypeError):
+            return None  # AccessDenied/unknown is busy, never a free task slot.
     argv = xg_proc.argv_of(pid)
-    return any("gamedata_chain" in str(a) for a in argv)
+    try:
+        created = float(ident.get("create_time", 0))
+        expected = float(doc.get("create_time") or 0)
+        if not created > 0 or ident.get("state") == "Z":
+            return False
+        if expected > 0 and abs(created - expected) > 1e-3:
+            return False
+        if not argv:
+            return None
+        norm = lambda value: os.path.normcase(os.path.abspath(str(value)))
+        if not any(norm(arg) == norm(CHAIN) for arg in argv):
+            return False
+        plan_at, kind_at = argv.index("--plan"), argv.index("--kind")
+        if norm(argv[plan_at + 1]) != norm(doc.get("plan") or "") or argv[kind_at + 1] != doc.get("kind"):
+            return False
+        if expected <= 0:
+            # Legacy rows lack a PID birth stamp. Require the exact nonce-bound
+            # plan plus a creation time close to the persisted launch timestamp;
+            # an unrelated/reused PID must never keep the slot busy or be killed.
+            if not doc.get("id") or str(doc["id"]) not in Path(doc.get("plan") or "").name:
+                return False
+            started = float(doc.get("started_epoch") or time.mktime(
+                time.strptime(doc.get("started") or "", "%Y-%m-%d %H:%M:%S")))
+            if abs(created - started) > 5.0:
+                return False
+        return True
+    except (ValueError, TypeError, IndexError, OverflowError, OSError):
+        return False
 
 
+def _persist_if_current(original, terminal):
+    """CAS under the task slot lock: a late reader cannot replace a new task."""
+    if original == terminal:
+        return True
+    fresh = xg_paths.read_json(_status_path(), {}) or {}
+    if fresh != original:
+        return False
+    xg_paths.write_json(_status_path(), terminal, private_file=False)
+    return True
+
+
+@_serialized
 def current():
     doc = xg_paths.read_json(_status_path(), {}) or {}
     if not isinstance(doc, dict) or not doc:
         return {"ok": True, "running": False, "task": None}
+    original = copy.deepcopy(doc)
     log = Path(doc.get("log") or "")
     progress, final, ok_count, rows = _parse(_tail(log))
-    alive = _alive(doc)
+    identity_alive = _alive(doc)
+    alive = identity_alive is not False
     plan_count = _plan_count(doc)
     # 一条链里每个子命令都会输出自己的 ok 行（names 完成时 terrain 还在跑），
     # 所以“看到 ok”不等于整条链结束：进程真的退出了，而且 ok 行数够 plan 的命令数，才算终态。
     running = bool(doc.get("running")) and alive
     partial = (final is not None and not alive and plan_count
                and ok_count < plan_count and final.get("ok"))
-    if final is not None and not alive:
+    if final is not None and not alive and original.get("running"):
         running = False
         doc["ok"] = bool(final.get("ok")) and not partial
         doc["result"] = final
@@ -135,17 +188,23 @@ def current():
     elif doc.get("running") and not alive:
         doc["running"] = False
         doc["ok"] = False
-        doc["error"] = "任务进程已经不在了（可能被关掉或出错退出）"
+        doc["error"] = "任务进程已退出"
         doc["error_code"] = "task_process_gone"
         doc["error_detail"] = error_detail.describe(
             None, code="task_process_gone", text=_raw_tail(_tail(log)))
         doc["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    if original.get("running") and not alive:
+        # Persist the terminal transition before adding response-only progress
+        # and nested task fields; later polls do not rewrite an unchanged file.
+        if not _persist_if_current(original, doc):
+            return current()
     if progress:
         for k in ("stage", "done", "total", "eta_s", "msg"):
             if k in progress:
                 doc[k] = progress[k]
         doc["progress"] = {k: progress.get(k) for k in ("stage", "done", "total", "eta_s", "msg")}
     doc["running"] = running
+    doc["process_state"] = "unknown" if identity_alive is None else "alive" if alive else "exited"
     doc["lines"] = rows
     doc["task"] = {
         "id": doc.get("id"), "kind": doc.get("kind"), "label": doc.get("label"),
@@ -155,10 +214,12 @@ def current():
         "error_code": doc.get("error_code") or "", "error_detail": doc.get("error_detail"),
         "started": doc.get("started"), "finished": doc.get("finished"),
         "log": doc.get("log"),
+        "process_state": doc["process_state"],
     }
     return doc
 
 
+@_serialized
 def start(kind, plan, label="", meta=None):
     if kind not in LOCK_KINDS:
         return {"ok": False, "message": "未知任务类型：" + str(kind)}
@@ -184,18 +245,22 @@ def start(kind, plan, label="", meta=None):
            "create_time": (ident or {}).get("create_time"), "running": True, "ok": None,
            "stage": "starting", "done": 0, "total": None, "eta_s": None,
            "msg": "任务已开始", "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+           "started_epoch": time.time(),
            "finished": None, "error": None, "log": str(log_path), "plan": str(plan_path),
            "meta": meta or {}}
     xg_paths.write_json(_status_path(), doc, private_file=False)
     return {"ok": True, "task": current().get("task")}
 
 
+@_serialized
 def stop(grace=5.0):
     doc = current()
     if not doc.get("running"):
         return {"ok": True, "message": "没有在跑的任务", "task": doc.get("task")}
     pid = doc.get("pid")
     if pid:
+        if not doc.get("create_time") or _alive(doc) is not True:
+            return {"ok": False, "busy": True, "message": "任务进程身份暂时无法确认，请稍后重试", "task": doc.get("task")}
         xg_proc.terminate(pid, grace=grace)
     doc = current()
     doc.update(running=False, ok=False, error="已取消",
@@ -207,7 +272,11 @@ def stop(grace=5.0):
     return {"ok": True, "message": "任务已取消", "task": current().get("task")}
 
 
+@_serialized
 def clear():
+    cur = current()
+    if cur.get("running"):
+        return {"ok": False, "busy": True, "message": "任务仍在运行或身份未确认，不能清空任务槽"}
     try:
         xg_paths.WIZARD_TASK.unlink()
     except OSError:
@@ -222,7 +291,10 @@ def command_for(kind, **kw):
         plan = [["names", "--apk", apk], ["terrain", "--apk", apk]]
         if kw.get("resume"):
             plan[-1].append("--resume")
+        plan.append(["props", "--apk", apk, "--output", str(xg_paths.props_dir()), "--optional"])
         return plan
+    if kind == "props":
+        return [["props", "--apk", kw["apk"], "--output", str(xg_paths.props_dir())]]
     if kind == "catalog":
         return [["catalog", "--apk", kw["apk"], "--account", kw["account"]]]
     if kind == "pull-apk":

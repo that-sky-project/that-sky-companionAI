@@ -53,7 +53,7 @@ def prepare(mode):
     })
     write_json(DATA / "runtime" / "runtime-data" / "accounts.json", {
         "accounts": [{"id": "fixture-a",
-                      "user_uuid": "00000000-0000-4000-8000-000000000001",
+                      "user_uuid": "10000000-0000-4000-8000-000000000001",
                       "created_at": 1}]})
     (DATA / "control").mkdir(parents=True, exist_ok=True)
     (DATA / "control" / "active_account").write_text("fixture-a\n", encoding="utf-8")
@@ -69,6 +69,12 @@ def prepare(mode):
     else:
         current = record(CURRENT_BUILD, PROFILE["native_sha256"],
                          PROFILE["resource_revision"], "2026-02-02T00:00:00+00:00")
+        # A current capture must also identify this fixture account and the
+        # current home NetVersion; metadata-only rows cannot certify a catalogue.
+        from qfsky.join0167_profile import account_binding
+        current.update(level_id=PROFILE["home_level_id"],
+                       netversion_u16=list(PROFILE["home_netversion"]),
+                       account_binding={"value": account_binding("10000000-0000-4000-8000-000000000001")})
         write_json(profiles / NEW_RECORD / "record.json", current)
         last = {"record_dir": NEW_RECORD, "scene": "CandleSpace", "account": "fixture-a"}
     write_json(DATA / "control" / "capture.json", {

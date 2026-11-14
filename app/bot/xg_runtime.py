@@ -106,7 +106,7 @@ def list_maps_payload(rows, query=""):
                if q in _key(x["名称"] + "".join(x["其它叫法"]) + x["区域"] + x["内部名"])]
         if hit:
             return {"ok": True, "count": len(hit), "maps": hit,
-                    "note": "这些是名字里含“%s”的图/落点；要去就发 /带我去+名称" % query}
+                    "note": "这些是名字里含“%s”的图/落点；候选最多列8个全名，列出后问想去哪个，选定由系统带路，不要要求重发指令或声称已出发" % query}
         return {"ok": True, "count": len(rows), "maps": rows,
                 "note": "名字里没有直接含“%s”的图，下面是全部，请按内部名/区域自己判断" % query}
     return {"ok": True, "count": len(rows), "maps": rows}

@@ -1,7 +1,7 @@
-"""对哥哥的称呼（2026-11-06）：后台可改成姐姐、宝宝等。存 control/owner_title，默认“哥哥”。
+"""主人称呼：基本格式校验始终启用，用户本地词表可用时追加词表预检。
 
-校验：1～6 个汉字/字母/数字；不能含小光等保留字；单独和放进常见句子里都要通过网易聊天审核规则
-（bot/textcheck.py，780 条设备缓存规则的离线引擎；命中 shield/intercept 即不通过）。
+公共安装包不带游戏词表。词表缺失允许保存，但必须明确说明未做词表审核；
+已有词表损坏、编译失败或匹配异常仍拒绝设置，避免把错误当作放行。
 """
 import os
 import re
@@ -15,6 +15,7 @@ FILE = xg_paths.CONTROL / "owner_title"
 DEFAULT = "哥哥"
 SHAPE = re.compile(r"[一-鿿A-Za-z0-9]{1,6}")
 RESERVED = ("小光", "烁光", "小烁", "管理员", "官方", "客服", "系统")
+RULES_UNAVAILABLE_MESSAGE = "仅完成基本格式校验；本地词表未生成，未进行本地词表审核，游戏内仍可能屏蔽或拦截。"
 CONTEXTS = ("{t}", "{t}好", "{t}，你来啦", "我在等{t}", "{t}想和我牵手", "{t}发起，直接接受")
 
 
@@ -36,10 +37,12 @@ def check(title):
     for w in RESERVED:
         if w in t:
             return False, f"称呼里不能有“{w}”"
+    import textcheck
     try:
-        import textcheck
         checker = textcheck.engine()
         checker.require_ready()
+    except textcheck.RulesUnavailable:
+        return True, RULES_UNAVAILABLE_MESSAGE
     except Exception:
         return False, "审核规则不可用或不完整，未更改称呼；请修复本地规则后重试"
     for c in CONTEXTS:
@@ -77,4 +80,7 @@ def set_title(title):
                 tmp.unlink(missing_ok=True)
             except OSError:
                 pass
-    return True, "已改为“" + title.strip() + "”"
+    message = "已改为“" + title.strip() + "”"
+    if why == RULES_UNAVAILABLE_MESSAGE:
+        message += "。" + why
+    return True, message

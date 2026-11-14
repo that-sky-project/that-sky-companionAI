@@ -72,11 +72,14 @@ PARENT_CREATE_ENV = "XG_PARENT_CREATE_TIME"
 _SHUTDOWN_LOCK = threading.Lock()
 _SHUTDOWN_STARTED = False
 _SERVER = None
+_CLEANUP_SERVICE = None
+_CLEANUP_ROOT = None
 
 BOT = xg_paths.BOT_CODE
 WEB = xg_paths.WEB
 PINNED = {"service_account.js", "desktop.css", "desktop.js", "auth_service.js", "xiaoguang.html", "xiaoguang.js", "xiaoguang.css", "style.css", "risk.html",
-          "standalone.css", "ai_settings.js", "w4b.js", "wizard.html", "wizard.js", "wizard.css"}
+          "standalone.css", "ai_settings.js", "w4b.js", "wizard.html", "wizard.js", "wizard.css",
+          "reset_cleanup.js", "reset_cleanup.css"}
 
 
 # ------------------------------------------------------------------ 状态
@@ -87,7 +90,10 @@ def consent_ok() -> bool:
 
 
 def wizard_done() -> bool:
-    return bool(((xg_paths.config() or {}).get("wizard") or {}).get("completed_at"))
+    try:
+        return bool(wizard.is_complete())
+    except Exception:
+        return False
 
 
 def ai_status() -> dict:
@@ -101,6 +107,67 @@ def ai_status() -> dict:
 
 def chat_running() -> bool:
     return bool(xg_proc.find_script("bot/ai_companion.py"))
+
+
+def _cleanup_online() -> bool:
+    """Process-only maintenance gate; do not load account/AI configuration."""
+    try:
+        return bool(xg_runtime.pids() or chat_running()
+                    or xg_proc.find_any_script(xg_runtime.GO_SCRIPTS)
+                    or xg_proc.find_any_script(("launcher/supervisor_sixhour.py",
+                                               "candidate_supervisor_sixhour_v22.py")))
+    except Exception:
+        return True  # An unverified offline state must never permit data moves.
+
+
+def _cleanup_busy() -> bool:
+    try:
+        return bool(capture_ctl.running() or tasks.current().get("running"))
+    except Exception:
+        return True
+
+
+def _cleanup_service():
+    global _CLEANUP_SERVICE, _CLEANUP_ROOT
+    import data_cleanup
+    root = Path(xg_paths.DATA).resolve()
+    if _CLEANUP_SERVICE is None or _CLEANUP_ROOT != root:
+        _CLEANUP_SERVICE = data_cleanup.CleanupService(
+            root, is_online=_cleanup_online, is_busy=_cleanup_busy)
+        _CLEANUP_ROOT = root
+    return _CLEANUP_SERVICE
+
+
+def cleanup_action(action, payload):
+    """Called only after local authentication, origin validation and API LOCK."""
+    if not isinstance(payload, dict):
+        return {"ok": False, "error_code": "bad_request", "message": "清理请求格式无效"}
+    if action not in {"preview", "execute", "restore-preview", "restore", "purge-preview", "purge"}:
+        return {"ok": False, "error_code": "unknown_action", "message": "未知维护操作"}
+    service = _cleanup_service()
+    if action == "preview":
+        selection = payload.get("selection")
+        if not isinstance(selection, dict):
+            return {"ok": False, "error_code": "bad_selection", "message": "请选择要清理的数据类别"}
+        return service.preview(selection)
+    if action == "restore-preview":
+        return service.restore_preview()
+    if action == "purge-preview":
+        return service.purge_preview()
+    plan_id = payload.get("plan_id")
+    if not isinstance(plan_id, str) or not plan_id or len(plan_id) > 256:
+        return {"ok": False, "error_code": "invalid_plan", "message": "请先预览并确认本次操作"}
+    confirm = payload.get("confirm") is True
+    result = getattr(service, action)(plan_id, confirm=confirm)
+    if ((result.get("ok") and action in {"execute", "restore"})
+            or (action == "execute" and result.get("error_code") == "rollback_incomplete")):
+        try:
+            wizard.after_data_reset(action, result.get("selection") or {},
+                                    batch_id=result.get("batch_id"))
+        except Exception:
+            # The move has already completed. Never report it as if nothing moved.
+            result["state_warning"] = "数据已有移动，状态标记更新失败；请刷新资源页重新校验并检查回收区"
+    return result
 
 
 def _accounts_doc():
@@ -588,8 +655,12 @@ class Handler(BaseHTTPRequestHandler):
         if api == "/api/wizard/task":
             try:
                 doc = tasks.current()
-                wizard.after_task(doc)
-                wizard.ensure_catalog()
+                if LOCK.acquire(blocking=False):
+                    try:
+                        wizard.after_task(doc)
+                        wizard.ensure_catalog()
+                    finally:
+                        LOCK.release()
             except Exception as exc:
                 doc = {"ok": False, "running": False,
                        "error": f"任务状态读取失败：{type(exc).__name__}"}
@@ -667,6 +738,13 @@ class Handler(BaseHTTPRequestHandler):
         if not LOCK.acquire(blocking=False):
             return self.reply(409, {"error": "busy", "message": "上一个操作还没完成"})
         try:
+            if api.startswith("/api/wizard/cleanup/"):
+                try:
+                    r = cleanup_action(api[len("/api/wizard/cleanup/" ):], data)
+                except Exception:
+                    r = {"ok": False, "error_code": "cleanup_internal",
+                         "message": "数据维护失败；未确认的文件不会被主动覆盖，请重新预览检查回收区"}
+                return self.reply(200 if r.get("ok") else 409, r)
             if api == "/chat/trigger":
                 # Keep legacy all-chat mode readable/writable; the desktop only
                 # exposes explicit-prefix replies. Never coerce an empty prefix.
@@ -717,6 +795,16 @@ class Handler(BaseHTTPRequestHandler):
             if api == "/api/wizard/apk/check":
                 r = wizard.check_apk(data.get("path"))
                 return self.reply(200 if r.get("ok") else 400, r)
+            if api in ("/api/wizard/data/start", "/api/wizard/props/start"):
+                if _cleanup_online():
+                    return self.reply(409, {"ok": False, "error_code": "offline_required",
+                                            "message": "请先让小光下线并停止聊天/换图，再生成资源"})
+                if _cleanup_busy():
+                    return self.reply(409, {"ok": False, "error_code": "task_busy",
+                                            "message": "请先停止采集或等待当前构建完成"})
+            if api == "/api/wizard/props/start":
+                r = wizard.start_props()
+                return self.reply(200 if r.get("ok") else 409, r)
             if api == "/api/wizard/data/start":
                 r = wizard.start_data(bool(data.get("resume")))
                 return self.reply(200 if r.get("ok") else 409, r)
@@ -955,9 +1043,13 @@ def _monitor_loop(stop_evt):
     """后台巡检：刷新长任务、录图完成后自动起 catalog。不依赖页面是否开着。"""
     while not stop_evt.is_set():
         try:
-            doc = tasks.current()
-            wizard.after_task(doc)
-            wizard.ensure_catalog()
+            if LOCK.acquire(blocking=False):
+                try:
+                    doc = tasks.current()
+                    wizard.after_task(doc)
+                    wizard.ensure_catalog()
+                finally:
+                    LOCK.release()
         except Exception:
             pass
         stop_evt.wait(1.5)
@@ -970,6 +1062,8 @@ def main(argv=None):
     ap.add_argument("--token", default="")
     a = ap.parse_args(argv)
     xg_paths.ensure_dirs()
+    # Persist stale task termination before the first resource-page request.
+    tasks.current()
     token = a.token or os.environ.pop("XG_WEB_TOKEN", "")
     if not token:
         # 服务器兼容：sky-play 读 DATA/control/api.token（同一份）。没有就生成。

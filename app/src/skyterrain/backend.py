@@ -28,6 +28,7 @@ WORKER=Path(__file__).resolve().parents[2]/'engine/worker.mjs'
 STAGED_WORKER=WORKER.with_name('staged_worker.mjs')
 STAGED_PROFILE='preserving_imported_nav'
 MAX_FRAME=65536
+MAX_COLLIDER_FRAME=524288
 PROTOCOL_VERSION=1
 _MOTOR_POLICY_SEAL=object()
 _STEP_POLICY='bounded_step_0_6_preflight_v14'
@@ -244,7 +245,7 @@ class JsonlWorkerTransport:
 
     def request(self,op,*,_deadline=None,**payload):
         allowed=('ping','load','plan','sample','cancel','invalidate','ground')
-        if self.worker_profile==STAGED_PROFILE:allowed+=('preparePlan','retarget')
+        if self.worker_profile==STAGED_PROFILE:allowed+=('preparePlan','retarget','setColliders','addColliders','removeColliders')
         if self.hop_enabled:allowed+=('prepareHop','startHop','sampleHop','softCancelHop','hardCancelHop')
         if op not in allowed:
             raise WorkerError('unknown_operation')
@@ -252,7 +253,7 @@ class JsonlWorkerTransport:
         request_id=uuid.uuid4().hex
         try:frame=(json.dumps({'id':request_id,'op':op,**payload},allow_nan=False,separators=(',',':'))+'\n').encode('utf8')
         except (TypeError,ValueError,OverflowError):raise WorkerError('invalid_request') from None
-        if len(frame)>MAX_FRAME:raise WorkerError('request_budget')
+        if len(frame)>(MAX_COLLIDER_FRAME if op in ('setColliders','addColliders') else MAX_FRAME):raise WorkerError('request_budget')
         hot_ops=('plan','sample','retarget','startHop','sampleHop','softCancelHop','hardCancelHop')
         budget=min(self.timeout,.05) if op in hot_ops else self.timeout
         deadline=math.nextafter(time.monotonic()+budget,-math.inf)
@@ -379,8 +380,54 @@ class WorkerBackend:
         self._lock=threading.RLock();self._epoch=0;self._scope=None;self._scope_id=None
         self._token=None;self._loaded_epoch=None;self._desired_goal=None
         self._prepared_route=None
+        self._placeables=None;self._collider_load_epoch=None
         self._hop_ground_failure=None;self._hop_owner=None
         self._route_owner_lock=threading.Lock();self._route_scheduler_owner=None;self._route_ownership_epoch=0
+    def bind_placeables(self, snapshot, revision, *, room_generation, map_id, log=None, allow_observed=False, catalog=None):
+        """冷构建时绑定房间内存表；此操作不启动进程、不写文件。"""
+        from .dynamic_props import PlaceableBinding
+        self._placeables=PlaceableBinding(snapshot,revision,room_generation=room_generation,
+            map_id=map_id,log=log,allow_observed=allow_observed,catalog=catalog,require_focus=True)
+
+    @property
+    def placeable_selection_revision(self):
+        binding=getattr(self,'_placeables',None)
+        return None if binding is None else binding.selection_revision
+
+    def focus_placeables(self,start_actor,goal_actor):
+        """显式冷调用：地面/空中共用的active焦点；不从sample调用。"""
+        with self._lock:
+            binding=getattr(self,'_placeables',None)
+            if binding is None or not binding.enabled:return True
+            if not self.prepared or self.offset is None:return False
+            before=binding.selection_revision
+            try:
+                start,goal=_vector(start_actor),_vector(goal_actor)
+                binding.set_focus(tuple(x-y for x,y in zip(start,self.offset)),tuple(x-y for x,y in zip(goal,self.offset)))
+                ready=binding.sync(self.transport,self._collider_load_epoch)
+            except Exception:return False
+            finally:
+                if binding.selection_revision!=before:
+                    self._epoch+=1;self._token=None;self._prepared_route=None
+                    self._hop_ground_failure=None
+            return ready
+
+    def placeable_path_covered(self,points_actor):
+        """冷轨迹审查：actor折线转feet，覆盖预算排除项；版本失效拒绝。"""
+        with self._lock:
+            binding=getattr(self,'_placeables',None)
+            if binding is None or not binding.enabled:return True
+            if self.offset is None or not binding.applied_current(self.transport.generation):return False
+            try:
+                if not isinstance(points_actor,(list,tuple)) or not 2<=len(points_actor)<=2048:return False
+                points=[tuple(x-y for x,y in zip(_vector(p),self.offset)) for p in points_actor]
+                return binding.path_covered(points)
+            except (ValueError,TypeError,OverflowError):return False
+
+    def _props_current(self):
+        binding=getattr(self,'_placeables',None)
+        return binding is None or binding.applied_current(self.transport.generation)
+
     @contextmanager
     def _hot_lock(self):
         acquired=self._lock.acquire(blocking=False)
@@ -407,6 +454,8 @@ class WorkerBackend:
                     if loaded.get('status')!='ready' or loaded.get('navigationReady') is not True:
                         return Decision('unavailable',reason='navigation_unavailable')
                     self._loaded_epoch=self.transport.generation
+                    self._collider_load_epoch=loaded.get("colliderEpoch")
+                    if self._placeables is not None:self._placeables.on_load(self._collider_load_epoch)
                 return Decision('ready')
             except Exception:return Decision('unavailable',reason='worker_failed')
 
@@ -455,6 +504,10 @@ class WorkerBackend:
                 start,goal=_vector(start),_vector(goal);speed=_number(speed)
                 if not 0<speed<=10:raise ValueError('speed')
                 if not self.prepared:return Decision('unavailable',reason='worker_not_prepared')
+                if self._placeables is not None:
+                    self._placeables.set_focus(tuple(x-y for x,y in zip(start,self.offset)),tuple(x-y for x,y in zip(goal,self.offset)))
+                    if not self._placeables.sync(self.transport,self._collider_load_epoch):
+                        return Decision('unavailable',reason='props_changed_during_prepare')
                 if self._scope is not scope:self._scope=scope;self._scope_id=uuid.uuid4().hex
                 extra={};intent=None
                 if hop_scope is not None:
@@ -482,6 +535,8 @@ class WorkerBackend:
                             epoch=self._epoch,transport_epoch=self.transport.generation,scope_id=self._scope_id,
                             lease=lease,ownership_epoch=ownership_epoch)
                     return Decision('blocked' if reply.get('status')=='blocked' else 'unavailable',reason='worker_prepare_failed')
+                if self._placeables is not None and not self._placeables.path_covered(reply.get('path')):
+                    return Decision('blocked',reason='props_path_coverage_missing')
                 receipt=None
                 if intent is not None:
                     self.last_follow_intent_audit=_check_follow_prefix(reply,intent)
@@ -498,6 +553,7 @@ class WorkerBackend:
                     raise ValueError('prepared_route_identity')
                 if self._route_owner_epoch(lease)!=ownership_epoch:return Decision('unavailable',reason='route_owner_changed')
                 if lease is not None and not lease.unconsumed_valid:return Decision('unavailable',reason='route_lease_revoked')
+                if not self._props_current():return Decision('unavailable',reason='props_changed_during_prepare')
                 self._prepared_route=(scope,start,goal,speed,token,self.transport.generation,self._epoch,lease,ownership_epoch,receipt)
                 return Decision('ready')
             except Exception:return Decision('unavailable',reason='worker_prepare_failed')
@@ -519,7 +575,7 @@ class WorkerBackend:
     def _valid(self,motion):
         with self._hot_lock() as acquired:
             if not acquired:return False
-            return (motion._epoch==self._epoch and motion._scope is self._scope and motion._token==self._token
+            return (self._props_current() and motion._epoch==self._epoch and motion._scope is self._scope and motion._token==self._token
                     and motion._transport_epoch==self.transport.generation and not self.transport.failed
                     and (motion._lease is None or motion._lease.valid)
                     and motion._ownership_epoch is not None
@@ -533,6 +589,8 @@ class WorkerBackend:
         """Hot same-motor path update. No epoch change, load, time advance or sample."""
         if getattr(self.transport,'worker_profile',None)!=STAGED_PROFILE:
             return {'status':'needs_cold_replan','reason':'retarget_profile'}
+        if getattr(getattr(self,'_placeables',None),'has_excluded_colliders',False):
+            return {'status':'needs_cold_replan','reason':'excluded_props_require_cold_replan'}
         if verified_motion_step_height(motion)>.3:
             return {'status':'needs_cold_replan','reason':'motor_policy_requires_cold_preflight'}
         if not motion._lock.acquire(blocking=False):
@@ -573,6 +631,7 @@ class WorkerBackend:
             if not acquired:return Decision('unavailable',reason='backend_busy')
             self._epoch+=1;self._token=None
             staged_route,self._prepared_route=self._prepared_route,None
+            if not self._props_current():return Decision("unavailable",reason="props_changed_before_start")
             if self.offset is None:return Decision('unavailable',reason='calibration_missing')
             if getattr(self.transport,'offline',False) is not True:return Decision('unavailable',reason='offline_only')
             try:
@@ -595,6 +654,7 @@ class WorkerBackend:
                     if lease is not None and not lease.claim():return Decision('unavailable',reason='route_lease_revoked')
                     payload['preparedToken']=prepared_token
                 reply=self.transport.request('plan',**payload)
+                if not self._props_current():return Decision('unavailable',reason='props_changed_during_start')
                 if self._route_owner_epoch(lease)!=ownership_epoch:return Decision('unavailable',reason='route_owner_changed')
                 if lease is not None and not lease.valid:return Decision('unavailable',reason='route_lease_revoked')
                 if reply.get('status')!='ready':

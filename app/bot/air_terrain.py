@@ -104,6 +104,11 @@ class TerrainView:
     def __repr__(self):
         return f"TerrainView({self.source}, offset={self.offset})"
 
+    def capsule_probe(self):
+        """只读共享三角网；与地面 motor 一致的 .25 / 1.5 / .015 胶囊。"""
+        from skyterrain.capsule import CapsuleProbe
+        return CapsuleProbe(self)
+
 
 class HeightOnlyTerrain:
     """Adapter fallback: ground height only, no corridor/headroom evidence."""
@@ -148,6 +153,8 @@ def terrain_view(adapter):
 def ground_below(terrain, x, z, y, *, max_drop=None, up_normal=0.65):
     """Highest standable hit at/below ``y`` (used by AirMotion.cancel)."""
     best = None
+    # 有完整几何时高度命中不再等价于可落脚；取消下落也不得选墙内的脚下点。
+    probe = terrain.capsule_probe() if callable(getattr(terrain, 'capsule_probe', None)) else None
     for _i, hy, ny in terrain.hits(x, z):
         if ny < up_normal or hy > y + 0.05:
             continue
@@ -156,8 +163,9 @@ def ground_below(terrain, x, z, y, *, max_drop=None, up_normal=0.65):
         if best is None or hy > best:
             best = hy
     if best is not None:
-        return best
+        # 最高表面若无法容纳身体，不能悄悄选更低一层并穿过该表面落下。
+        return best if probe is None or probe.standable((x,best,z)) else None
     h = terrain.height(x, z, y)
-    if h is not None and h <= y + 0.05:
+    if h is not None and h <= y + 0.05 and (probe is None or probe.standable((x,h,z))):
         return h
     return None

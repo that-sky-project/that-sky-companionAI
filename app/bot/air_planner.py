@@ -90,6 +90,53 @@ def _height(terrain, x, z, near_y=None):
     return float(value)
 
 
+def _capsule(terrain):
+    """只在真实三角网启用；旧 height/hits 适配器保持原协议。"""
+    method = getattr(terrain, 'capsule_probe', None)
+    return method() if callable(method) else None
+
+
+def _capsule_landing(terrain, point):
+    """落点本身无重叠且能支持motor；邻点按位移排序，不把修正当作瞬移。"""
+    probe = _capsule(terrain)
+    if probe is None:
+        return tuple(point)
+    x,y,z=point
+    if probe.standable(point):
+        return tuple(point)
+    candidates=[]
+    # 先使用真实接触法线去穿透给出的近邻，再查有界的同层支持环。
+    resolved=probe.resolve(point)
+    if resolved is not None:
+        q=resolved['point']; h=_height(terrain,q[0],q[2],y)
+        if h is not None and abs(h-y)<=.5:
+            candidates.append((q[0],h,q[2]))
+    for radius in (.15,.3,.5,.75,1.,1.5):
+        for i in range(16):
+            a=math.tau*i/16;cx=x+radius*math.cos(a);cz=z+radius*math.sin(a)
+            h=_height(terrain,cx,cz,y)
+            if h is not None and abs(h-y)<=.5:
+                candidates.append((cx,h,cz))
+    candidates.sort(key=lambda q:_dist(point,q))
+    for q in candidates:
+        if probe.standable(q):return q
+    return None
+
+
+def _capsule_proof(terrain, phases):
+    from stuck_recovery import validate_static_takeoff
+    return validate_static_takeoff(terrain, phases)
+
+
+def _with_capsule_proof(terrain, result):
+    if _capsule(terrain) is not None:
+        proof,reason=_capsule_proof(terrain,result['phases'])
+        if reason:raise PlanError(reason)
+        if proof is not None:result['static_overlap_escape']=proof
+        result['landing_validation']='motor_capsule_0.25_1.5_skin_0.015'
+    return result
+
+
 def _hits(terrain, x, z):
     if not getattr(terrain, "has_hits", True):
         return []
@@ -202,6 +249,15 @@ def _landing(terrain, target, follow_distance, start):
     follow = max(0.0, float(follow_distance))
     x, z = target[0] + dx / length * follow, target[2] + dz / length * follow
     h = _height(terrain, x, z, target[1])
+    if _capsule(terrain) is not None:
+        for px,pz,fallback in ((x,z,None),(target[0],target[2],'target_foot')):
+            ground=_height(terrain,px,pz,target[1])
+            if ground is None:continue
+            point=_capsule_landing(terrain,(px,ground,pz))
+            if point is not None:
+                changed=_dist(point,(px,ground,pz))>1e-6
+                return point, 'capsule_nearby' if changed else fallback
+        raise PlanError('no_capsule_landing')
     if h is not None and _column_open(terrain, x, z, h + HEADROOM_LOW, h + LANDING_HEADROOM):
         return (x, h, z), None
     h = _height(terrain, target[0], target[2], target[1])
@@ -303,6 +359,9 @@ def _trajectory_clear(terrain, phases, dt=0.05):
     斜爬升那段钻进了头顶的岩檐。这里把整条空中轨迹（walk 以外）逐点检查：
     身体高度带 [y+0.15, y+1.8] 内（中心 + 左右 0.35 m）不能有面，
     相邻两点之间也不能穿过任何面（落点地面本身除外）。"""
+    if _capsule(terrain) is not None:
+        _proof, reason = _capsule_proof(terrain, phases)
+        return reason is None, reason
     traj = Trajectory([dict(p) for p in phases])
     prev = None
     for phase in traj.phases:
@@ -443,8 +502,43 @@ def _fly_phases(terrain, start, takeoff, landing, cruise):
     return phases
 
 
+def _try_capsule_fly(terrain,start,target,landing,cruise):
+    """精确网格不以周围高度差充当墙；完整胶囊轨迹才是起飞条件。
+
+    初始去穿透是 .5m 内的连续短段，不瞬移也不把豁免扩展到后续航线。
+    每个后续面（包括原接触重新进入）由共享静态初段审查器完整检查。
+    """
+    probe=_capsule(terrain);initial=probe.intersecting(start)
+    choices=[(tuple(start),[])]
+    if initial:
+        resolved=probe.resolve(start)
+        if resolved is not None:
+            point=tuple(float(v) for v in resolved['point'])
+            segment={'phase':'climb','mode':'linear','duration':max(.12,_dist(start,point)/2.),
+                     'from':tuple(start),'to':point}
+            choices.insert(0,(point,[segment]))
+    last='no_capsule_takeoff'
+    for takeoff,prefix in choices:
+        phases=prefix+_fly_phases(terrain,takeoff,takeoff,landing,cruise)
+        _check_limits(phases,airborne=True)
+        proof,reason=_capsule_proof(terrain,phases)
+        if reason:
+            last=reason;continue
+        result=dict(kind='fly',reason='target_above' if target[1]>start[1]+1.2 else 'glide_down',
+            start=tuple(start),target=tuple(target),goal=tuple(landing),takeoff=tuple(start),
+            landing=tuple(landing),cruise_height=float(cruise),walk_distance=0.,
+            flight_distance=float(_xz_dist(start,landing)),takeoff_tries=len(choices),
+            phases=phases,waypoints=_waypoints(phases),
+            landing_validation='motor_capsule_0.25_1.5_skin_0.015')
+        if proof is not None:result['static_overlap_escape']=proof
+        return result
+    raise PlanError(last)
+
+
 def _try_fly(terrain, start, target, landing, follow_distance, cruise):
     """One cruise altitude: candidate takeoffs sorted by total route length."""
+    if _capsule(terrain) is not None:
+        return _try_capsule_fly(terrain,start,target,landing,cruise)
     candidates = []
     base_h = _height(terrain, start[0], start[2], start[1])
     if base_h is None:
@@ -495,8 +589,47 @@ def _try_fly(terrain, start, target, landing, follow_distance, cruise):
     raise PlanError("no_clear_takeoff" if not scored else "no_route_clearance")
 
 
+def _try_capsule_jump(terrain,start,target,landing):
+    probe=_capsule(terrain);choices=[(tuple(start),[])]
+    if probe.intersecting(start):
+        resolved=probe.resolve(start)
+        if resolved is not None:
+            for lift in (0.,.2,.35):
+                q=tuple(float(v) for v in resolved['point']);q=(q[0],q[1]+lift,q[2])
+                if _dist(start,q)>.5:continue
+                choices.append((q,[dict(phase='climb',mode='linear',duration=max(.12,_dist(start,q)/2.),
+                                        **{'from':tuple(start),'to':q})]))
+    last='jump_blocked'
+    for takeoff,prefix in choices:
+        horizontal=_xz_dist(takeoff,landing)
+        if horizontal>4.0+1e-6:continue
+        base_duration=max(.55,horizontal/4.)
+        for duration in (base_duration,max(base_duration,.85),max(base_duration,1.05)):
+            vy0=(landing[1]-takeoff[1]+.5*GRAVITY*duration*duration)/duration
+            if vy0>11.5 or vy0<-MAX_FALL:continue
+            phases=prefix+[dict(phase='jump',mode='ballistic',duration=duration,
+                **{'from':takeoff,'to':tuple(landing),'vy0':vy0,'gravity':GRAVITY})]
+            try:_check_limits(phases,airborne=True,jump=True)
+            except PlanError as error:last=str(error);continue
+            proof,reason=_capsule_proof(terrain,phases)
+            if reason:last=reason;continue
+            apex=takeoff[1]+max(vy0,0.)**2/(2*GRAVITY)
+            out=dict(kind='jump',reason='small_step',start=tuple(start),target=tuple(target),
+                goal=tuple(landing),takeoff=tuple(start),landing=tuple(landing),cruise_height=apex,
+                walk_distance=0.,flight_distance=_xz_dist(start,landing),takeoff_tries=len(choices),
+                phases=phases,waypoints=_waypoints(phases),
+                landing_validation='motor_capsule_0.25_1.5_skin_0.015')
+            if proof is not None:out['static_overlap_escape']=proof
+            return out
+    raise PlanError(last)
+
+
 def _plan_jump(terrain, start, target, target_ground):
     landing = (target[0], target_ground, target[2])
+    if _capsule(terrain) is not None:
+        landing=_capsule_landing(terrain,landing)
+        if landing is None:raise PlanError('no_capsule_landing')
+        return _try_capsule_jump(terrain,start,target,landing)
     horizontal = _xz_dist(start, landing)
     if horizontal > 4.0 + 1e-6:
         raise PlanError("jump_too_far")
@@ -508,9 +641,9 @@ def _plan_jump(terrain, start, target, target_ground):
     if vy0 < -MAX_FALL:
         raise PlanError("jump_fall_speed")
     apex = start[1] + vy0 * vy0 / (2.0 * GRAVITY) if vy0 > 0 else start[1]
-    if not _column_open(terrain, start[0], start[2], start[1] + HEADROOM_LOW, apex + 0.5):
+    if _capsule(terrain) is None and not _column_open(terrain, start[0], start[2], start[1] + HEADROOM_LOW, apex + 0.5):
         raise PlanError("jump_headroom")
-    if not _column_open(terrain, landing[0], landing[2],
+    if _capsule(terrain) is None and not _column_open(terrain, landing[0], landing[2],
                         landing[1] + HEADROOM_LOW, landing[1] + 2.0):
         raise PlanError("landing_headroom")
     phase = {"phase": "jump", "mode": "ballistic", "duration": duration,
@@ -519,7 +652,7 @@ def _plan_jump(terrain, start, target, target_ground):
     _check_limits([phase], airborne=True, jump=True)
     if not _trajectory_clear(terrain, [phase])[0]:
         raise PlanError("jump_blocked")
-    return {
+    return _with_capsule_proof(terrain, {
         "kind": "jump",
         "reason": "small_step",
         "start": tuple(float(v) for v in start),
@@ -536,7 +669,7 @@ def _plan_jump(terrain, start, target, target_ground):
                                                              apex,
                                                              start[2] + (landing[2] - start[2]) * 0.5),
                                           "apex"),)),
-    }
+    })
 
 
 def _plan_drop(terrain, start, target, landing, edge):
@@ -584,17 +717,15 @@ def _plan_drop(terrain, start, target, landing, edge):
         if len(fall) > 1:
             fall[1]["from"] = fall[0]["to"]
             fall[1]["to"] = (fall[-1]["to"][0], landing[1], fall[-1]["to"][2])
-    if not _column_open(terrain, edge[0], edge[2], edge[1] + HEADROOM_LOW, edge[1] + 2.0):
+    if _capsule(terrain) is None and not _column_open(terrain, edge[0], edge[2], edge[1] + HEADROOM_LOW, edge[1] + 2.0):
         raise PlanError("drop_headroom")
-    if not _column_open(terrain, landing[0], landing[2],
+    if _capsule(terrain) is None and not _column_open(terrain, landing[0], landing[2],
                         landing[1] + HEADROOM_LOW, landing[1] + 2.0):
         raise PlanError("landing_headroom")
     approach = _walk_phases(terrain, start, edge)
     phases = approach + fall
     _check_limits(phases, airborne=True)
-    if not _trajectory_clear(terrain, phases)[0]:
-        raise PlanError("drop_blocked")
-    return {
+    candidate = {
         "kind": "drop",
         "reason": "front_cliff",
         "start": tuple(float(v) for v in start),
@@ -609,6 +740,16 @@ def _plan_drop(terrain, start, target, landing, edge):
         "phases": phases,
         "waypoints": _waypoints(phases),
     }
+    if not _trajectory_clear(terrain, phases)[0]:
+        # 悬空家具的原 drop 可能擦过自身桌边。保持既有 TASK-i 的转换顺序：
+        # 先让原平台规则产生全碰撞已验证的 jump，再接受；绝不返回未验证 drop。
+        if _capsule(terrain) is not None and getattr(getattr(terrain,'surface',None),'collider_ranges',()):
+            from stuck_recovery import plan_prop_transfer
+            transfer=plan_prop_transfer(terrain,start,candidate)
+            if transfer.get('kind')=='jump' and transfer.get('prop_platform_transfer',{}).get('full_collision'):
+                return _with_capsule_proof(terrain,transfer)
+        raise PlanError("drop_blocked")
+    return _with_capsule_proof(terrain,candidate)
 
 
 def _none(start, target, reason, **extra):
@@ -694,14 +835,17 @@ def plan(terrain, start, target, follow_distance=1.2, *, terrain_failed_seconds=
         # 直接掉落不行（或前方没崖、地面又走不通）就改走下面的飞行（滑翔下降）路线。
         edge = _front_edge(terrain, start, target)
         if edge is None:
-            if not (allow_fly and failed):
+            if not (allow_fly and (failed or _capsule(terrain) is not None)):
                 out = _none(start, target, "walk")
                 out.update(common)
                 out["kind"] = "walk"
                 return out
             drop_reason = "no_front_edge"
         else:
-            landing, fallback = _landing(terrain, target, follow_distance, start)
+            try:
+                landing, fallback = _landing(terrain, target, follow_distance, start)
+            except PlanError as error:
+                out=_none(start,target,str(error));out.update(common);return out
             if landing[1] > edge[1] - 1.2:
                 out = _none(start, target, "walk")
                 out.update(common)
@@ -721,7 +865,10 @@ def plan(terrain, start, target, follow_distance=1.2, *, terrain_failed_seconds=
                 return out
 
     # fly
-    landing, fallback = _landing(terrain, target, follow_distance, start)
+    try:
+        landing, fallback = _landing(terrain, target, follow_distance, start)
+    except PlanError as error:
+        out=_none(start,target,str(error));out.update(common);return out
     base_cruise = max(start_ground, landing[1]) + CRUISE_MARGIN
     last_reason = "no_clear_takeoff"
     for retry, extra in enumerate(HEIGHT_RETRIES):
@@ -841,9 +988,17 @@ def plan_from_air(terrain, pos, target, follow_distance=1.2):
     target_ground = _height(terrain, target[0], target[2], target[1])
     if target_ground is None or abs(target_ground - target[1]) > 1.0:
         target_ground = target[1]
-    landing, fallback = _landing(terrain, target, follow_distance, pos)
+    try:
+        landing, fallback = _landing(terrain, target, follow_distance, pos)
+    except PlanError:
+        return None
     if abs(landing[1] - target_ground) > 1.0:
-        landing, fallback = (target[0], target_ground, target[2]), "target_foot"
+        if _capsule(terrain) is not None:
+            landing=_capsule_landing(terrain,(target[0],target_ground,target[2]))
+            if landing is None:return None
+            fallback='capsule_nearby'
+        else:
+            landing, fallback = (target[0], target_ground, target[2]), "target_foot"
     for retry, extra in enumerate((0.0, 2.0, 4.0)):
         cruise = max(pos[1], landing[1] + CRUISE_MARGIN) + extra
         try:
@@ -855,7 +1010,7 @@ def plan_from_air(terrain, pos, target, follow_distance=1.2):
             continue
         if not _trajectory_clear(terrain, phases)[0]:
             continue
-        return {
+        return _with_capsule_proof(terrain, {
             "kind": "fly", "reason": "retarget",
             "start": pos, "target": target, "goal": tuple(float(v) for v in landing),
             "takeoff": pos, "landing": tuple(float(v) for v in landing),
@@ -864,7 +1019,7 @@ def plan_from_air(terrain, pos, target, follow_distance=1.2):
             "height_retries": retry, "landing_fallback": fallback,
             "phases": phases, "waypoints": _waypoints(phases), "airborne_start": True,
             "ground_ref": (target[0], float(target_ground), target[2]),
-        }
+        })
     return None
 
 

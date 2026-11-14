@@ -13,6 +13,16 @@ FIXTURE = ROOT / "tests" / "fixtures" / "desktop_backend_scenarios.py"
 
 
 class DesktopControlTests(unittest.TestCase):
+    def test_actual_desktop_title_warning_is_preserved(self):
+        result = subprocess.run(
+            [str(ROOT / "runtime/node/node.exe"), str(FIXTURE.with_name("title_warning_scenarios.cjs"))],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-5000:])
+        summary = json.loads(result.stdout)
+        self.assertEqual(summary["passed"], 3)
+        self.assertEqual(summary["failed"], 0)
+
     def test_isolated_control_api_and_native_rule_engine(self):
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
         result = subprocess.run(
@@ -26,12 +36,14 @@ class DesktopControlTests(unittest.TestCase):
         self.assertEqual(len(records), 1, detail)
         summary = json.loads(records[0])
         self.assertTrue(summary["successful"], detail)
-        self.assertEqual(summary["testsRun"], 28, detail)
+        self.assertEqual(summary["testsRun"], 33, detail)
         self.assertEqual(summary["failures"], 0, detail)
         self.assertEqual(summary["errors"], 0, detail)
         self.assertEqual(summary["ruleCompilationFailures"], [], detail)
         self.assertEqual(sum(summary["rules"].values()), 780, detail)
         self.assertTrue(summary["realPcre2"], detail)
+        self.assertEqual(summary["ruleSource"], "synthetic-only", detail)
+        self.assertTrue(summary["workspaceTemporary"], detail)
         self.assertEqual(summary["upstream"], "blocked", detail)
         self.assertEqual(summary["gameProcesses"], "blocked", detail)
         if os.name == "nt":

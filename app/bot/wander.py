@@ -20,7 +20,7 @@ import xg_paths
 
 ROOT = xg_paths.DATA
 STATE = xg_paths.POSE_STATE
-SWITCH = ROOT / "control/wander"
+SWITCH = xg_paths.CONTROL / "wander"
 
 TICK = (12.0, 30.0)           # 两次自主决定之间随机等这么久（秒）
 QUIET_AFTER_CHAT = 45.0       # 有人跟她说话后这么久不乱跑
@@ -40,6 +40,82 @@ ACTIONS = {
     "sit": "找附近的空椅子坐下，和旁边的人聊聊（只有 can_sit 为真才能选）",
     "stay": "就待着发会儿呆，什么也不做",
 }
+
+
+HOME_MAP_ID = 3526133726
+
+
+def _map_id(st):
+    """只读姿态状态中的地图；缺失/非法值不猜图，仍按原行为。"""
+    if not isinstance(st, dict):
+        return None
+    room = st.get("room")
+    room = room if isinstance(room, dict) else {}
+    for value in (st.get("map_id"), room.get("map_id")):
+        # bool/浮点数不是地图号，避免 int() 截断后误认遇境。
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            continue
+        try:
+            return int(value)
+        except ValueError:
+            continue
+    return None
+
+
+def _without_seat_hints(text):
+    """仅用于遇境自主闲逛：清理聊天处境、历史及人设里的坐椅引导。"""
+    # 先单独移除坐下动作标签，保留同一行里的其它动作标签。
+    text = re.sub(r"[\[【]动作\s*[:：]\s*坐下[\]】](?:（[^）]*）|\([^)]*\))?[、，,]?", "", text)
+    parts = re.findall(r"[^。！？!?；;\n]+[。！？!?；;\n]*|[。！？!?；;\n]+", text)
+    return "".join(part for part in parts
+                   if not re.search(r"椅|凳|座位|坐(?:下|好|会|一会|一坐)|\bsit\b", part, re.I))
+
+
+HOME_SEAT_STATUS_SCHEMA = "home-seat-live-v1"
+HOME_SEAT_STATE_MAX_AGE = 5.0     # 姿态状态快照的新鲜度，非座位观测的 600 秒 TTL
+
+
+def _home_room_context(st):
+    """只接受新控制器发布的本房摘要；旧文件计数不作为现场证据。"""
+    if _map_id(st) != HOME_MAP_ID:
+        return None
+    status = st.get("home_seat_status")
+    if not isinstance(status, dict) or status.get("schema") != HOME_SEAT_STATUS_SCHEMA:
+        return None
+    if status.get("map_id") != HOME_MAP_ID:
+        return None
+    room = st.get("room")
+    if (not isinstance(room, dict) or _map_id({"room": room}) != HOME_MAP_ID
+            or room.get("connected") is not True):
+        return None
+    session = status.get("home_session")
+    if not isinstance(session, str) or not session:
+        return None
+    for name in ("room_generation", "seat_epoch"):
+        if type(status.get(name)) is not int or status[name] < 0:
+            return None
+    if room.get("room_generation") != status["room_generation"]:
+        return None
+    observed = status.get("observed_at")
+    if (isinstance(observed, bool) or not isinstance(observed, (int, float))
+            or not math.isfinite(observed)
+            or not 0 <= time.time() - observed <= HOME_SEAT_STATE_MAX_AGE):
+        return None
+    return {name: status[name] for name in ("home_session", "room_generation", "seat_epoch")}
+
+
+def _home_live_context(st):
+    context = _home_room_context(st)
+    if context is None:
+        return None
+    status = st["home_seat_status"]
+    if type(status.get("count")) is not int or status["count"] <= 0:
+        return None
+    expires = status.get("expires_at")
+    if (isinstance(expires, bool) or not isinstance(expires, (int, float))
+            or not math.isfinite(expires) or time.time() > expires):
+        return None
+    return context
 
 
 def enabled():
@@ -143,7 +219,10 @@ class Wanderer(threading.Thread):
     def decide(self, st, sitting):
         people = self._people(st)
         now = time.monotonic()
-        can_sit = (st.get("seats_here") or 0) > 0 and not sitting   # 这个房间里确实有空椅子
+        home = _map_id(st) == HOME_MAP_ID
+        home_context = _home_live_context(st) if home else None
+        can_sit = (home_context is not None if home else (st.get("seats_here") or 0) > 0) and not sitting
+        actions = {k: v for k, v in ACTIONS.items() if not (home and not can_sit and k == "sit")}
         roster = []
         for name, (u, _o) in people.items():
             note = self.bot.memory.person_note(u) if hasattr(self.bot.memory, "person_note") else ""
@@ -156,15 +235,19 @@ class Wanderer(threading.Thread):
             self.persona() + self.situation() +
             "\n\n现在没人在跟你说话，你在自己逛。按你的性格决定接下来做什么，像真人玩家一样自然、有变化，"
             "别每次都一样，也别太闹腾（有时候待着发呆也很正常）。看到小黑可以主动去帮他点火（点完你会自动鞠躬）。“小黑”只是你心里对还没点亮的人的叫法，说话时别这么叫人，也别老念叨“小黑”。\n"
-            f"【你现在】{'坐在椅子上' if sitting else '站着'}；can_sit={'是' if can_sit else '否'}\n"
+            f"【你现在】{('坐着' if home else '坐在椅子上') if sitting else '站着'}；can_sit={'是' if can_sit else '否'}\n"
             f"【房间里的人】\n{chr(10).join(roster) or '（只有你自己）'}\n"
             f"【最近的聊天】\n{history or '（没有）'}\n"
             f"【你刚才自己做过的事】{'；'.join(self.done[-5:]) or '（还没有）'}\n"
-            "【能做的事】\n" + "\n".join(f"- {k}：{v}" for k, v in ACTIONS.items())
-            + ("\n- stand：从椅子上站起来去逛" if sitting else "") +
+            "【能做的事】\n" + "\n".join(f"- {k}：{v}" for k, v in actions.items())
+            + (("\n- stand：站起来去逛" if home else "\n- stand：从椅子上站起来去逛") if sitting else "") +
             f"\n【能用的动作 emote】{'、'.join(self.emotes)}\n"
             "可以顺口说一句话（say，20 字以内，口语，可以留空；大多数时候留空）。"
             "只输出一个 JSON：{\"action\": \"...\", \"target\": \"房间里的人名或空\", \"emote\": \"动作名或空\", \"say\": \"...\"}")
+        if home and not can_sit:
+            prompt = _without_seat_hints(prompt)
+        elif home:
+            prompt += "\n遇境只选择本房间实时确认、见证人仍在且未过期的空椅子；执行时还会再次确认。"
         msg = self.llm.chat([{"role": "user", "content": prompt}], max_tokens=150, temperature=0.95, timeout=20)
         raw = msg.get("content") or ""
         m = re.search(r"\{.*\}", raw, re.S)
@@ -176,9 +259,20 @@ class Wanderer(threading.Thread):
         emote, say = str(d.get("emote") or "").strip(), str(d.get("say") or "").strip()[:40]
         who = people.get(target, (None, None))[0]
         self.log("wander_decide", action=act, target=target, emote=emote, say=say)
-        self._execute(act, who, target, emote, say, people, sitting)
+        self._execute(act, who, target, emote, say, people, sitting, home=home,
+                      home_context=home_context if can_sit else None)
 
-    def _execute(self, act, who, target, emote, say, people, sitting):
+    def _execute(self, act, who, target, emote, say, people, sitting, *, home=False, home_context=None):
+        seat_context = None
+        if act == "sit":
+            current = self._state()
+            if home or _map_id(current) == HOME_MAP_ID:
+                seat_context = _home_live_context(current)
+                if not home or home_context is None or seat_context != home_context:
+                    self.log("wander_sit_failed", reason="no_seat", detail="遇境实时座位已失效或房间已变化")
+                    self.done.append("待着发了会儿呆")
+                    del self.done[:-10]
+                    return
         now = time.monotonic()
         anim, seconds = self.resolve_emote(emote) if emote else (None, 0)
         if act in ("candle", "greet", "stroll") and who is None:
@@ -205,11 +299,15 @@ class Wanderer(threading.Thread):
             near = people.get(target, (None,))[0] or (next(iter(people.values()))[0] if people else None)
             self.sitting_since = now
             self.busy_until = now + random.uniform(*SIT_MINUTES) * 60
-            self._do("sit", {"pose": "sit", **({"near": near} if near else {})}, who=target)
+            self._do("sit", {"pose": "sit", **({"near": near} if near else {}),
+                             **({"home_seat_context": seat_context} if seat_context is not None else {})}, who=target)
             if people and now - self.last_hint > SIT_HINT_EVERY:      # 主动坐下：必须提醒“加/”
                 self.last_hint = self.last_say = now
                 line = say if ("/" in say or "／" in say) else (say + " 想跟我聊天的话，话前面加个“/”哦～" if say else SIT_HINT)
-                threading.Timer(6.0, self.bot.send, args=(line,)).start()
+                if seat_context is not None:
+                    threading.Timer(6.0, self._home_sit_hint, args=(seat_context, line)).start()
+                else:
+                    threading.Timer(6.0, self.bot.send, args=(line,)).start()
                 return
         elif act == "stand" and sitting:
             self.sitting_since = None
@@ -219,6 +317,15 @@ class Wanderer(threading.Thread):
         if say and now - self.last_say > SAY_EVERY and people:
             self.last_say = now
             threading.Timer(2.0, self.bot.send, args=(say,)).start()
+
+    def _home_sit_hint(self, context, line):
+        """遇境提醒只在实际坐下且仍是原房间时发送，不替失败动作报成功。"""
+        st = self._state()
+        if (_home_room_context(st) != context
+                or not (st.get("sitting") is True or st.get("pose") == "sit")):
+            self.log("wander_sit_hint_skipped", reason="not_sitting_or_room_changed")
+            return
+        self.bot.send(line)
 
     def _do(self, what, cmd, **info):
         self.log("wander_act", act=what, **info)

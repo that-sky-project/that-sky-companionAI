@@ -45,6 +45,177 @@ STEP_IDS = [s[0] for s in STEPS]
 LOCK = threading.RLock()
 
 
+def _reset_path():
+    return xg_paths.CONTROL / "resource_reset.json"
+
+
+def _reset_doc():
+    value = xg_paths.read_json(_reset_path(), {}) or {}
+    return value if isinstance(value, dict) else {}
+
+
+def _reset_steps(doc, account=None):
+    account = str(account or active_account() or "")
+    return [step for step in doc.get("steps", [])
+            if step not in ("capture", "catalog")
+            or account not in doc.get(step + "_approved_accounts", [])]
+
+
+def resource_reset_status():
+    doc = _reset_doc()
+    result = {key: doc.get(key) for key in ("action", "selection", "at", "auto_suppressed")}
+    result["steps"] = _reset_steps(doc)
+    result["active"] = bool(result["steps"])
+    return result
+
+
+def _save_reset(doc):
+    doc["active"] = bool(doc.get("steps"))
+    xg_paths.write_json(_reset_path(), doc, private_file=False)
+
+
+def after_data_reset(action, selection, batch_id=None):
+    """Maintenance state only: never alter account/AI/owner settings."""
+    with LOCK:
+        selected = {key: bool((selection or {}).get(key)) for key in ("terrain", "catalog", "names", "captures", "props")}
+        current = tasks.current()
+        previous = _reset_doc()
+        history = list(previous.get("history") or [])
+        if action == "restore":
+            # A restore only undoes the maintenance gates belonging to its
+            # own latest batch. Earlier resets must survive later operations.
+            match = bool(history and (not batch_id or history[-1].get("batch_id") == str(batch_id)))
+            if match:
+                doc = dict(history[-1].get("prior") or {})
+                doc["history"] = history[:-1]
+            else:
+                doc = dict(previous)
+                doc["restore_scope_unknown"] = bool(previous)
+            doc.setdefault("steps", [])
+            doc.update(action="restore", selection=selected, auto_suppressed=True,
+                       at=time.strftime("%Y-%m-%d %H:%M:%S"),
+                       stale_task_id=(current.get("task") or {}).get("id"), allowed_task_ids=[])
+        else:
+            prior = {key: value for key, value in previous.items() if key != "history"}
+            history.append({"batch_id": str(batch_id or ""), "prior": prior})
+            steps = list(previous.get("steps") or [])
+            if selected["terrain"] or selected["names"]:
+                if "data" not in steps:
+                    steps.append("data")
+            if selected["captures"]:
+                if "capture" not in steps:
+                    steps.append("capture")
+            if selected["props"] and "props" not in steps:
+                steps.append("props")
+            if any(selected[key] for key in ("terrain", "catalog", "names", "captures")):
+                if "catalog" not in steps:
+                    steps.append("catalog")
+            doc = {**previous, "version": 2, "action": str(action), "selection": selected,
+                   "steps": [step for step in ("data", "props", "capture", "catalog") if step in steps],
+                   "history": history, "at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                   "reset_epoch": time.time(), "auto_suppressed": True,
+                   "stale_task_id": (current.get("task") or {}).get("id"), "allowed_task_ids": []}
+            if any(selected[key] for key in ("terrain", "catalog", "names", "captures")):
+                doc["catalog_approved_accounts"] = []
+            if selected["captures"]:
+                inv = _capture_inventory()
+                doc.update(capture_requested_accounts=[], capture_approved_accounts=[],
+                           capture_baseline=[[r.get("record_dir"), r.get("record_sha256")]
+                                             for r in inv["current"] + inv["stale"]])
+        _save_reset(doc)
+    return resource_reset_status()
+
+
+def _reset_started(kind, output=None, account=None):
+    with LOCK:
+        doc = _reset_doc()
+        if not doc:
+            return
+        if kind != "props":
+            doc["auto_suppressed"] = False
+        if kind == "capture":
+            account = str(account or active_account() or "")
+            if account and account not in doc.setdefault("capture_requested_accounts", []):
+                doc["capture_requested_accounts"].append(account)
+        task_id = ((output or {}).get("task") or {}).get("id")
+        if task_id and task_id not in doc.setdefault("allowed_task_ids", []):
+            doc["allowed_task_ids"].append(task_id)
+        _save_reset(doc)
+
+
+def _reset_complete(step, account=None):
+    with LOCK:
+        doc = _reset_doc()
+        if step not in doc.get("steps", []):
+            return
+        if step in ("capture", "catalog"):
+            account = str(account or active_account() or "")
+            if not account or account in doc.setdefault(step + "_approved_accounts", []):
+                return
+            doc[step + "_approved_accounts"].append(account)
+        else:
+            doc["steps"] = [s for s in doc["steps"] if s != step]
+        _save_reset(doc)
+
+
+def _capture_after_reset(inventory, cap=None, account=None):
+    """Retained raw recordings do not silently undo a registration reset."""
+    reset = _reset_doc()
+    if "capture" not in reset.get("steps", []):
+        return inventory
+    account = str(account or active_account() or "")
+    binding = _account_binding(account)
+    # Retained recordings of a different account must never reappear as this
+    # account's newly approved capture, including after another account finishes.
+    inventory = {**inventory, "current": [r for r in inventory["current"]
+                 if binding and r.get("account_binding") == binding]}
+    if "capture" not in _reset_steps(reset, account):
+        return inventory
+    cap = cap or capture_ctl.status() or {}
+    registered = cap.get("last_registered") or {}
+    name = Path(str(registered.get("record_dir") or "")).name
+    baseline = {tuple(row) for row in reset.get("capture_baseline", []) if isinstance(row, list) and len(row) == 2}
+    accepted = [r for r in inventory["current"]
+                if account in reset.get("capture_requested_accounts", [])
+                and str(registered.get("account") or "") == account
+                and r.get("record_dir") == name
+                and (r.get("record_dir"), r.get("record_sha256")) not in baseline]
+    if accepted:
+        _reset_complete("capture", account)
+        return inventory
+    return {**inventory, "current": [], "reset_blocked": True}
+
+
+def catalog_status(account=None, doc=None, profile=None):
+    from xg_gamedata.catalog_state import certify, REBUILD_MESSAGE
+    account = str(account or active_account() or "")
+    profile = profile or _current_game_profile()
+    reset = _reset_doc()
+    task_doc = tasks.current() if doc is None else doc
+    task = task_doc.get("task") or {}
+    task_account = str((task_doc.get("meta") or {}).get("account") or "")
+    if task.get("kind") == "catalog" and task.get("running") and task_account in ("", account):
+        return {"account": account, "certified": False, "state": "building", "code": "catalog_building",
+                "message": "正在按当前录制重新生成目录，完成后再作运行时校验", "maps": 0, "variants": 0,
+                "current_build": profile.get("build"), "current_version": profile.get("version") or ""}
+    allowed = (task.get("id") in reset.get("allowed_task_ids", [])
+               and task_account == account and bool(account)
+               and task.get("kind") == "catalog" and task.get("ok") is True and not task.get("running"))
+    reset_steps = _reset_steps(reset, account)
+    blocked = ("capture" in reset_steps or "catalog" in reset_steps and not allowed)
+    if blocked:
+        return {"account": account, "certified": False, "state": "reset", "code": "resource_reset",
+                "message": REBUILD_MESSAGE, "maps": 0, "variants": 0,
+                "current_build": profile.get("build"), "current_version": profile.get("version") or ""}
+    inventory = _capture_inventory(profile)
+    if inventory["stale"] and not inventory["current"]:
+        return {"account": account, "certified": False, "state": "stale", "code": "capture_stale",
+                "message": REBUILD_MESSAGE, "maps": 0, "variants": 0,
+                "current_build": profile.get("build"), "current_version": profile.get("version") or ""}
+    owner = next((r for r in _accounts() if str(r.get("id")) == account), {})
+    return certify(xg_paths.DATA, account, owner.get("user_uuid"), profile)
+
+
 # ------------------------------------------------------------------ 状态读写
 def _cfg():
     return xg_paths.config() or {}
@@ -149,77 +320,7 @@ def _catalog_sha(path):
 
 
 def _catalog_ready(account, doc=None, profile=None):
-    if not isinstance(account, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,64}", account) is None:
-        return False
-    try:
-        result = _catalog_result(account, doc)
-        if not result:
-            return False
-        profile = profile or _current_game_profile()
-        current_hashes = {row.get("record_sha256")
-                          for row in _capture_inventory(profile)["current"]}
-        if not current_hashes:
-            return False
-        owner = next((row for row in _accounts() if str(row.get("id")) == account), {})
-        if not owner.get("user_uuid") or result.get("uuid") != owner["user_uuid"]:
-            return False
-        from qfsky.join0167_profile import account_binding
-        if result.get("binding") != account_binding(owner["user_uuid"]):
-            return False
-        root = _catalog_dir(account).resolve()
-        root.relative_to((xg_paths.ASSET_RELEASE / "asset-catalog-acct").resolve())
-
-        def verified(relative, digest):
-            path = (root / relative).resolve()
-            path.relative_to(root)
-            if not path.is_file() or not digest or _catalog_sha(path) != digest:
-                raise ValueError("missing or changed catalog output")
-            return path
-
-        manifest_path = verified("manifest.json", result["manifest_sha256"])
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        # 旧版本录制生成的目录即使文件齐全也不算有效：源录制必须还是当前版本。
-        if manifest.get("source_capture_record_sha256") not in current_hashes:
-            return False
-        entries, variants = manifest["entries"], manifest.get("variants") or {}
-        # 落点包按目录的版本档案选；旧代码固定读 spawn_pack.json（0.16.7 证据）。
-        from xg_gamedata import spawn_loader
-        from xg_gamedata.common import GameDataError
-        build = manifest.get("apk_build")
-        if type(build) is not int:
-            return False
-        try:
-            pack = spawn_loader.load(build=build)
-        except (GameDataError, OSError, ValueError, TypeError):
-            return False
-        expected = {str(row["map_id"]): scene for scene, row in pack["placements"].items()}
-        expected_variants = {(str(pack["placements"][scene]["map_id"]), name)
-                             for scene, rows in (pack.get("variants") or {}).items() for name in rows}
-        actual_variants = {(map_id, name) for map_id, rows in variants.items() for name in rows}
-        raw_entries = json.dumps(entries, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
-        if (manifest.get("schema") != "sky-asset-catalog-trial-v32c"
-                or pack.get("schema") != "xg-spawn-pack-v1" or not expected
-                or manifest.get("source_account_binding_hash") != result.get("binding")
-                or not result.get("binding") or set(entries) != set(expected)
-                or result["maps"] != len(expected) or actual_variants != expected_variants
-                or result["variants"] != len(actual_variants)
-                or hashlib.sha256(raw_entries).hexdigest() != result["entries_sha256"]):
-            return False
-        verified("source-metadata.json", manifest["source_metadata_sha256"])
-        for map_id, row in entries.items():
-            scene = row["scene"]
-            if scene != expected[map_id]:
-                return False
-            for filename, field in (("scene.bin", "scene_sha256"), ("cache.bin", "cache_sha256"),
-                                    ("actor.bin", "actor_sha256"), ("placement.json", "placement_sha256"),
-                                    ("scene-provenance.json", "scene_provenance_sha256")):
-                verified(Path(scene) / filename, row[field])
-            for name, variant in (variants.get(map_id) or {}).items():
-                for filename, field in (("actor.bin", "actor_sha256"), ("placement.json", "placement_sha256")):
-                    verified(Path(scene) / "variants" / name / filename, variant[field])
-        return True
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError):
-        return False
+    return catalog_status(account, doc=doc, profile=profile).get('certified') is True
 
 
 def active_account():
@@ -314,6 +415,12 @@ def _record_version(record, profile=None):
 def _record_is_current(record, profile):
     if not isinstance(record, dict) or not profile:
         return False
+    nv = record.get("netversion_u16")
+    if (record.get("scene") == profile.get("home_scene") and nv is not None
+            and (not isinstance(nv, list) or len(nv) != 6
+                 or any(type(v) is not int or not 0 <= v <= 65535 for v in nv)
+                 or nv[0] != profile.get("home_resource_tag"))):
+        return False
     return (type(record.get("apk_build")) is int
             and record["apk_build"] == profile.get("build")
             and record.get("native_sha256") == profile.get("native_sha256")
@@ -344,6 +451,7 @@ def _record_entry(path, record, raw, profile):
         "scene_name": record.get("scene_name") if isinstance(record.get("scene_name"), str) else "",
         "apk_build": record.get("apk_build"),
         "resource_revision": record.get("resource_revision"),
+        "netversion_u16": record.get("netversion_u16"),
         "native_sha256": record.get("native_sha256"),
         "version": _record_version(record, rp),
         "game_version": (rp or {}).get("game_version") or "",
@@ -406,7 +514,7 @@ def capture_status(profile=None, inventory=None):
     """给前端的采集状态：recorded / last_registered 只认当前版本录制。"""
     cap = dict(capture_ctl.status() or {})
     profile = profile or _current_game_profile()
-    inv = inventory or _capture_inventory(profile)
+    inv = _capture_after_reset(inventory or _capture_inventory(profile), cap)
     current, stale = inv["current"], inv["stale"]
     cap["recorded"] = sorted({str(row["scene"]) for row in current if row.get("scene")})
     cap["stale"] = stale
@@ -429,6 +537,13 @@ def capture_status(profile=None, inventory=None):
             cap["message"] = notice
     else:
         cap.pop("stale_notice", None)
+    if inv.get("reset_blocked"):
+        cap.update(state="reset" if not _active_capture_state(cap) else cap.get("state"),
+                   message="录制登记已清理，请重新录制遇境或明确重新登记现有录制",
+                   last_registered=None)
+    cert = catalog_status(profile=profile)
+    cap["catalog"] = {**(cap.get("catalog") or {}), **cert,
+                      "done": cert["certified"], "needed": not cert["certified"]}
     return cap
 
 
@@ -453,6 +568,15 @@ def _game_data_versions():
                      "version": (profile or {}).get("version") or child.name,
                      "has_names": names, "has_terrain": terrain})
     return rows
+
+
+def _props_status(profile=None):
+    from xg_gamedata.status import props_status
+    result = props_status(xg_paths.props_dir(), profile or _current_game_profile())
+    if "props" in _reset_doc().get("steps", []):
+        result.update(ready=False, state="reset", code="props_reset",
+                      message="道具形状已清理，请单独补生成；无需重做名称表与地形。")
+    return result
 
 
 def _game_data_state(profile, complete):
@@ -561,13 +685,15 @@ def step_status():
     cap = capture_ctl.status()
     apk = _apk_path()
     profile = _current_game_profile()
-    inventory = _capture_inventory(profile)
+    inventory = _capture_after_reset(_capture_inventory(profile), cap)
     data_done = _data_complete()
+    if "data" in _reset_doc().get("steps", []):
+        data_done = False
     data_state = _game_data_state(profile, data_done)
     capture_account = str(acc or (cap.get("catalog") or {}).get("account")
                           or (cap.get("last_registered") or {}).get("account") or "")
     capture_ok = _catalog_ready(capture_account, profile=profile)
-    data_hint = "生成名称表与地形（约 25 分钟，可后台继续）"
+    data_hint = "生成名称表、地形与道具形状（道具失败可单独补生成）"
     if data_state["needs_rebuild"]:
         data_hint = ("游戏已更新到 %s，新版本需要重新生成游戏数据"
                      "（名称表 + 地形，约 25 分钟）。" % (profile.get("version") or "新版本"))
@@ -575,6 +701,8 @@ def step_status():
     stale_capture = bool(inventory["stale"] and not inventory["current"])
     if stale_capture:
         capture_hint = _stale_capture_message(profile, inventory["stale"])
+    if inventory.get("reset_blocked"):
+        capture_hint = "录制登记已清理，请重新录制遇境或明确重新登记现有录制"
     checks = {
         "risk": (consent, "先读完风险告知并同意"),
         "mumu": (bool((saved.get("mumu") or {}).get("done")) or bool((cap.get("mumu") or {}).get("root")),
@@ -586,8 +714,11 @@ def step_status():
         "capture": (capture_ok, capture_hint),
         "ai": (_ai_configured(), "填 AI 接口的 Key / 地址 / 模型并测试"),
         "owner": (xg_paths.OWNER_UUID.is_file(), "从小光号好友里选“哥哥”，起称呼、选人设"),
-        "finish": (bool(w.get("completed_at")), "全部完成后点“完成，上线”"),
+        "finish": (False, "全部完成后点“完成，上线”"),
     }
+    checks["finish"] = (bool(w.get("completed_at"))
+                        and all(value[0] for key, value in checks.items() if key != "finish"),
+                        checks["finish"][1])
     rows = []
     for sid, title in STEPS:
         done, hint = checks[sid]
@@ -613,6 +744,14 @@ def step_status():
     return rows, current
 
 
+def is_complete(rows=None):
+    """Historical completion is valid only while every prerequisite is real."""
+    if rows is None:
+        rows, _ = step_status()
+    return (bool(_wizard().get("completed_at"))
+            and all(row.get("done") is True for row in rows if row.get("id") != "finish"))
+
+
 def _device_status():
     """本机设备摘要（W7）；失败只返回中文说明，不影响向导其它步骤。"""
     try:
@@ -630,17 +769,22 @@ def summary():
     profile = _current_game_profile()
     inventory = _capture_inventory(profile)
     cap = capture_status(profile, inventory)
+    certificate = catalog_status(profile=profile, doc=task)
+    props = _props_status(profile)
+    game_data = _game_data_state(profile, next(r["done"] for r in rows if r["id"] == "data"))
+    game_data["props"] = props
     return {"ok": True, "version": WIZARD_VERSION, "steps": rows, "current": current,
             "device": _device_status(),
-            "completed": bool(_wizard().get("completed_at")),
+            "completed": is_complete(rows),
             "completed_at": _wizard().get("completed_at"),
             "account": active_account(), "apk": _apk_path(),
             "aiConfigured": _ai_configured(),
             "gameVersion": profile.get("version") or "",
             "gameBuild": profile.get("build"),
             "gameVersionDir": str(xg_paths.GAME_VERSION),
-            "gameData": _game_data_state(profile, _data_complete()),
+            "gameData": game_data,
             "task": task.get("task"), "taskRunning": bool(task.get("running")),
+            "catalog": certificate, "props": props, "resourceReset": resource_reset_status(),
             "capture": {"state": cap.get("state"), "message": cap.get("message"),
                         "scene": cap.get("scene"), "scene_name": cap.get("scene_name"),
                         "recorded": cap.get("recorded") or [], "stale": cap.get("stale") or [],
@@ -758,12 +902,25 @@ def start_data(resume=False):
     if not apk:
         return {"ok": False, "message": "还没校验安装包：先做第 3 步"}
     plan = tasks.command_for("data", apk=apk, resume=bool(resume))
-    out = tasks.start("data", plan, label="生成游戏数据（名称表 + 地形）",
+    out = tasks.start("data", plan, label="生成游戏数据（名称表 + 地形 + 道具形状）",
                       meta={"apk": apk, "resume": bool(resume)})
+    if out.get("ok"):
+        _reset_started("data", out)
     return out
 
 
 # ------------------------------------------------------------------ 第 5 步
+def start_props():
+    apk = _apk_path()
+    if not apk:
+        return {"ok": False, "message": "请先校验本机 APK，再补生成道具形状"}
+    out = tasks.start("props", tasks.command_for("props", apk=apk),
+                      label="补生成道具形状（不重做地形）", meta={"apk": apk})
+    if out.get("ok"):
+        _reset_started("props", out)
+    return out
+
+
 def login_done():
     accounts = _accounts()
     if not accounts:
@@ -788,6 +945,7 @@ def login_done():
 def start_capture():
     out = capture_ctl.start()
     if out.get("ok"):
+        _reset_started("capture")
         cfg = _cfg()
         cfg.setdefault("wizard", {"version": WIZARD_VERSION, "steps": {}})
         w = cfg["wizard"]
@@ -804,7 +962,7 @@ def start_catalog(account=None, apk=None):
     account = str(account or active_account() or "")
     apk = apk or _apk_path()
     profile = _current_game_profile()
-    inventory = _capture_inventory(profile)
+    inventory = _capture_after_reset(_capture_inventory(profile), account=account)
     if inventory["stale"] and not inventory["current"]:
         notice = _stale_capture_message(profile, inventory["stale"])
         return {"ok": False, "code": "capture_stale", "message": notice,
@@ -813,19 +971,21 @@ def start_catalog(account=None, apk=None):
         return {"ok": False, "message": "还没登录游戏号：先做第 5 步"}
     if not apk:
         return {"ok": False, "message": "还没校验安装包：先做第 3 步"}
-    if _catalog_ready(account, profile=profile):
-        mark("capture", True, detail={"account": account, "catalog": str(_catalog_dir(account)),
-                                      "result": _catalog_result(account)},
-             message="这个号的地图目录已经生成")
-        cap = capture_ctl.status()
-        cap["catalog"] = {"needed": False, "started": True, "done": True,
-                          "account": account, "apk": apk}
-        xg_paths.write_json(xg_paths.CAPTURE_STATUS, cap, private_file=False)
-        return {"ok": True, "already": True, "message": "地图目录已经在了"}
+    binding = _account_binding(account)
+    current_home = [r for r in inventory["current"]
+                    if r.get("scene") == profile.get("home_scene")
+                    and r.get("account_binding") == binding and binding
+                    and isinstance(r.get("netversion_u16"), list)
+                    and len(r["netversion_u16"]) == 6
+                    and r["netversion_u16"][0] == profile.get("home_resource_tag")]
+    if not current_home:
+        return {"ok": False, "code": "capture_required",
+                "message": "目录需要用当前版本重新录制遇境后重建；请先重新录制或明确重新登记这个号的遇境"}
     plan = tasks.command_for("catalog", apk=apk, account=account)
     out = tasks.start("catalog", plan, label="生成这个号的地图目录",
                       meta={"account": account, "apk": apk})
     if out.get("ok"):
+        _reset_started("catalog", out)
         cap = capture_ctl.status()
         cap["catalog"] = {"needed": False, "started": True, "done": False,
                           "account": account, "apk": apk}
@@ -871,7 +1031,10 @@ def register_capture(path=""):
                    message="重新登记失败：%s（录制还在 %s）" % (why, p.name))
         xg_paths.write_json(xg_paths.CAPTURE_STATUS, cap, private_file=False)
         return {"ok": False, "message": str(why), "detail": detail, "final": final}
+    # This explicit action may re-register a retained current-version recording.
     account = str(final.get("account") or active_account() or "")
+    _reset_complete("capture", account)
+    _reset_started("capture", account=account)
     rec = final.get("recorded") or {}
     recorded = sorted(set(rec.get("scenes") or []) | set(cap.get("recorded") or []))
     scene = str(final.get("scene") or cap.get("scene") or "")
@@ -900,12 +1063,17 @@ def register_capture(path=""):
 
 def ensure_catalog():
     """后台监视：录图进程说需要 catalog 时，自动起任务（同一时刻只跑一个）。"""
+    reset = _reset_doc()
+    if reset.get("auto_suppressed"):
+        return None
     cap = capture_ctl.status()
     cat = cap.get("catalog") or {}
     if not cat.get("needed") or cat.get("started"):
         return None
     account, apk = cat.get("account"), cat.get("apk") or _apk_path()
     if not account or not apk:
+        return None
+    if any(s in _reset_steps(reset, account) for s in ("data", "capture")):
         return None
     if _catalog_ready(account):
         mark("capture", True, detail={"account": account, "result": _catalog_result(account)})
@@ -971,6 +1139,9 @@ def after_task(doc=None):
     tid = task.get("id")
     if not tid or task.get("running"):
         return None
+    reset = _reset_doc()
+    if tid == reset.get("stale_task_id") and tid not in reset.get("allowed_task_ids", []):
+        return None
     w = _wizard()
     if w.get("last_task_id") == tid:
         return None
@@ -979,12 +1150,26 @@ def after_task(doc=None):
     changed = False
     if kind == "data":
         complete = ok and _data_complete(doc)
+        if complete:
+            _reset_complete("data")
+        from xg_gamedata.status import props_status
+        props_ready = props_status(xg_paths.props_dir(), _current_game_profile())["ready"]
+        if props_ready:
+            _reset_complete("props")
         mark("data", complete, detail={"task": tid, "result": result},
-             message="游戏数据已生成" if complete else "游戏数据未完整生成，请重试或续跑")
+             message=("游戏数据已生成" if props_ready else "名称表与地形已生成；道具形状可单独补生成")
+                     if complete else "游戏数据未完整生成，请重试或续跑")
+        changed = True
+    elif kind == "props":
+        from xg_gamedata.status import props_status
+        if ok and props_status(xg_paths.props_dir(), _current_game_profile())["ready"]:
+            _reset_complete("props")
         changed = True
     elif kind == "catalog":
         acc = str((doc.get("meta") or {}).get("account") or result.get("account") or "")
         complete = ok and _catalog_ready(acc, doc)
+        if complete:
+            _reset_complete("catalog", acc)
         mark("capture", complete, detail={"task": tid, "account": acc, "result": result},
              message="这个号的地图目录已生成" if complete else "地图目录未完整生成，请重试")
         cap = capture_ctl.status()

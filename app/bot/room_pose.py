@@ -23,6 +23,8 @@ from qfsky import home_handoff_runtime0167 as pump_mod
 from qfsky.map_long0167 import map_long_engine
 
 import anim_pose
+from seat_tilt_runtime import SeatTiltControllerMixin, upright_action, seat_command
+import prop_motion_guard
 import arrival_snap
 import candle_pose
 import social_accept
@@ -43,6 +45,11 @@ try:
     import shout as shout_mod
 except Exception:                       # pragma: no cover
     shout_mod = None
+
+try:
+    import stuck_recovery
+except ImportError:
+    stuck_recovery = None
 
 AIR_CONTROL_FILE = "air_follow.json"     # 与 pose.json / arrival_snap.json 同目录
 AIR_RETARGET = 1.5                      # 目标挪动超过这么多米就中止当前空中计划
@@ -75,7 +82,11 @@ CANDLE_REAIM = 0.3                 # 举烛：目标挪动超过这么多米就�
 PLAYER_STATUS_MAX_AGE = 5.0       # 只读观测过期后不再输出为当前值；不改变跟随内部坐标
 ROOM_STATUS_SCHEMA = "cn0167-room-status-v1"
 SEAT_SCAN_SECONDS = 1.0            # 每个玩家每秒解析一次座位状态
-PERMANENT_SEAT_MAPS = {3526133726}  # 桌椅是地图自带的图（遇境）；别的图的座位多半是玩家放的摆件，只认当前房间实时看到的
+HOME_MAP_ID = 3526133726            # 遇境椅子全部为玩家摆件，不是永久地图座位
+HOME_SEAT_MAX_AGE = 600.0           # 最近一次实时坐姿观测的有效期（秒，可调）
+HOME_SEAT_PICK_RANGE = 30.0
+HOME_SEAT_PICK_DY = 10.0
+PERMANENT_SEAT_MAPS = set()         # 遇境不得使用永久座位表；其它地图逻辑不变
 TABLE_SAME = 3.0                   # 摆件桌：存档座位离实时看到的同桌座位不到这么远才算同一张桌
 SEAT_GROUP = 3                     # 同一张桌子的座位号相邻（遇境桌 5545~5548）：有人坐 n，就推断 n±1..±3 也是这桌
 TABLE_MOVED = 3.0                  # 某座位号实时出现在离旧记录这么远的地方 → 桌子挪了，整组旧记录作废
@@ -104,6 +115,8 @@ def _dist(a, b):
 
 class RoomTracker:
     def __init__(self):
+        import placeable
+        self._placeable_module = placeable
         self.lock = threading.Lock()
         self.slots = {}      # slot -> uuid 字符串
         self.origins = {}    # slot -> (x, y, z, 时间)
@@ -113,6 +126,10 @@ class RoomTracker:
         self.seated = {}     # slot -> 正坐着的座位号（实时）
         self.seat_book = {}  # 座位号 -> (玩家坐着时的坐标, 偏航码, 时间)：实时看到的座位
         self.seat_checked = {}
+        self.seat_pose_book = {}  # 当前房间座位字段证据，仅RAM，不进入seat持久文件
+        self.seat_witnesses = {}  # seat -> (uuid, slot, incarnation, room_generation, seat_epoch, monotonic)
+        self.seat_epoch = 0
+        self.home_session = str(uuidlib.uuid4())  # RAM-only：进程/追踪器重建后旧自动坐下凭据失效
         self.offers = {}     # slot -> (邀请类型, 对象 slot, 时间)：谁正对谁发起双人互动
         self.own_uuid = None # 小光自己的 uuid（install 设置），用来认出“邀请的是我”
         self.yaws = {}       # slot -> 偏航码（被背时小光朝向跟背人方一致）
@@ -135,10 +152,17 @@ class RoomTracker:
         self._attachment_events = []  # bounded read-only saved-snapshot observations
         self._attachment_seq = 0       # never reused across room incarnations
         self._attachment_wire_seqs = {}
+        self.placeables = placeable.PlaceableRegistry()
+        self.placeable_log = None
+        self._placeable_log_times = {}
+        self.props_assets_ready = False
+        self.placeables.set_known_names({})
 
     def _clear_room_locked(self):
+        self.seat_epoch += 1
+        self.placeables.clear()
         for name in ("slots", "origins", "heights", "height_total", "last_pos", "seated",
-                     "seat_book", "seat_checked", "offers", "yaws", "modes", "candle_targets",
+                     "seat_book", "seat_witnesses", "seat_checked", "seat_pose_book", "offers", "yaws", "modes", "candle_targets",
                      "position_observed", "player_status", "_slot_versions"):
             getattr(self, name).clear()
         self.releases.clear()
@@ -234,6 +258,96 @@ class RoomTracker:
                     self.releases.append((time.monotonic(), kind, body[off + 7], body[off + 8]))
                     del self.releases[:-20]
             off += 7 + size
+
+    def props_revision(self):
+        """热地形查询只比较版本，不复制道具列表。"""
+        if not self.lock.acquire(False):
+            return None
+        try:
+            return self.room_generation, self.placeables.revision
+        finally:
+            self.lock.release()
+
+    def props_snapshot(self):
+        """RAM-only；不加入会落盘的 room status 文档。"""
+        if not self.lock.acquire(False):
+            return None
+        try:
+            now=time.monotonic()
+            observers=[]
+            for slot,origin in self.origins.items():
+                clocks=self.position_observed.get(slot)
+                if (slot not in self.slots or clocks is None or not 0<=now-clocks[1]<=2.5):
+                    continue
+                cached=self.player_status.get(slot) or {}
+                value=(cached.get('value') or {}) if 0<=now-cached.get('observed_mono',-float('inf'))<=2.5 else {}
+                observers.append(dict(slot=slot,uuid=self.slots.get(slot),version=self._slot_versions.get(slot),
+                    position=list(origin[:3]),observed_mono=clocks[1],
+                    seated=bool(value.get('social',{}).get('seated'))))
+                if len(observers)>=64:break
+            unmodeled=self.placeables.unmodeled_snapshot() if self.ready else []
+            return {"room_generation": self.room_generation,
+                    "revision": self.placeables.revision,
+                    "map_id": self.confirmed_map_id, "validated": self.ready,
+                    "props": self.placeables.snapshot() if self.ready else [],
+                    "unmodeled_props": unmodeled,
+                    "assets_ready": self.props_assets_ready,
+                    "unmodeled_revision": self.placeables.unmodeled_revision,
+                    "support_observers": observers if self.ready else []}
+        finally:
+            self.lock.release()
+
+    def set_placeable_names(self, names):
+        with self.lock:
+            self.placeables.set_known_names(names)
+            self.props_assets_ready = bool(self.placeables.geometry_names)
+
+    def _placeable_notice(self, diagnostics):
+        # 每种原因最多每 5 秒记录一次，避免畸形包淹没 runner 日志。
+        for item in diagnostics:
+            if not self.props_assets_ready and item.get('reason') in ('prop_no_geometry', 'prop_unknown_name'):
+                continue  # 缺本地资产是正常降级，由冷绑定仅报告一次状态。
+            reason, now = item.get("reason", "prop_invalid"), time.monotonic()
+            with self.lock:
+                last = self._placeable_log_times.get(reason, -float("inf"))
+                if now - last < 5.0:
+                    continue
+                self._placeable_log_times[reason] = now
+                logger = self.placeable_log
+            if logger is not None:
+                try:
+                    logger("placeable_ignored", **item)
+                except Exception as exc:
+                    # 道具诊断失败不能打断已有引擎 ACK/社交分发。
+                    import logging
+                    logging.getLogger(__name__).warning("placeable logger failed: %s", type(exc).__name__)
+
+    def on_placeable_rpc(self, engine, body):
+        """仅当前引擎/纪元/名单；整条记录链验证完毕后才发布。"""
+        if type(body) is not bytes or len(body) < 4 or body[0] != 2:
+            return
+        with self.lock:
+            if (not self.ready or engine is not self._engine or getattr(engine, "_closed", False)
+                    or body[1] != self.epoch or body[2] not in self.slots
+                    or not getattr(getattr(engine, "_match", None), "ready", False)
+                    or getattr(engine, "_map", None) != self.confirmed_map_id
+                    or self.pending_map_id != self.confirmed_map_id):
+                return
+            generation = self.room_generation
+            identities = {s: (u, self._slot_versions.get(s)) for s, u in self.slots.items()}
+        try:
+            events, diagnostics = self._placeable_module.parse_game(body)
+        except ValueError as exc:
+            self._placeable_notice([{"reason": str(exc)}])
+            return
+        with self.lock:
+            if (not self.ready or engine is not self._engine or getattr(engine, "_closed", False)
+                    or generation != self.room_generation or body[1] != self.epoch
+                    or any(self.slots.get(slot) != identity or self._slot_versions.get(slot) != version
+                           for slot, (identity, version) in identities.items())):
+                return
+            diagnostics.extend(self.placeables.apply(events, self.slots))
+        self._placeable_notice(diagnostics)
 
     def _own_social_binding_locked(self):
         """Caller holds lock. Match/engine identity, not observing our own Actor."""
@@ -374,6 +488,7 @@ class RoomTracker:
                 self._attachment_events[:] = [e for e in self._attachment_events if e["slot"] not in changed]
                 self.releases.clear()
                 self.level_changes.clear()
+            self.placeables.retain_owners(slots.values())
             self.slots = slots
             self.roster_at = time.monotonic()
 
@@ -399,6 +514,7 @@ class RoomTracker:
                         continue
                     identity = self.slots[slot]
                     slot_version = self._slot_versions.get(slot)
+                    seat_epoch = self.seat_epoch
                     self.origins[slot] = (x, y, z, now)
                     self.position_observed[slot] = (now, now_mono)
                     self._room_actor_presence_v20.pop(slot, None)
@@ -434,14 +550,34 @@ class RoomTracker:
                     actor_body = bytes(data[off + 5:off + 5 + size])
                     self._record_owner(slot, actor_body, now)
                     st = anim_pose.social_state(actor_body)
+                    seat_profile = None
+                    if st is not None and st.get("seat"):
+                        try:
+                            import seat_tilt
+                            seat_profile = seat_tilt.observe(actor_body)
+                        except (ValueError, TypeError, OverflowError):
+                            pass
                     if st is not None:
                         with self.lock:
                             if (not self.ready or room_generation != self.room_generation
                                     or self.slots.get(slot) != identity):
                                 return
+                            if (self.confirmed_map_id == HOME_MAP_ID
+                                    and (self.seat_epoch != seat_epoch or self._slot_versions.get(slot) != slot_version)):
+                                return
                             if st["seat"] and slot in self._terrain_slots:
                                 self.seated[slot] = st["seat"]
-                                self.seat_book[st["seat"]] = ((x, y, z), st["yaw"], now)
+                                if self.confirmed_map_id != HOME_MAP_ID or identity != self.own_uuid:
+                                    self.seat_book[st["seat"]] = ((x, y, z), st["yaw"], now)
+                                    if seat_profile is not None:
+                                        if st["seat"] not in self.seat_pose_book and len(self.seat_pose_book)>=256:
+                                            self.seat_pose_book.pop(next(iter(self.seat_pose_book)))
+                                        self.seat_pose_book[st["seat"]] = dict(profile=seat_profile,
+                                            room_generation=room_generation, seat_epoch=seat_epoch,
+                                            slot=slot, identity=identity, slot_version=slot_version)
+                                if self.confirmed_map_id == HOME_MAP_ID and identity != self.own_uuid:
+                                    self.seat_witnesses[st["seat"]] = (
+                                        identity, slot, slot_version, room_generation, seat_epoch, now_mono)
                             else:
                                 self.seated.pop(slot, None)
                             if st.get("mode") is not None:
@@ -744,7 +880,222 @@ def _control_dir_for(control_path, account=None):
     return base
 
 
-class PoseController(threading.Thread):
+
+# 仅接管目录明确列出的单人 Enter/Exit，绝不根据双人动作名称猜测。
+SOLO_EMOTE_EXITS = {
+    anim_pose.anim_key('AmazedEmote_1Enter'): anim_pose.anim_key('AmazedEmote_1Exit'),
+    anim_pose.anim_key('AmazedEmote_2Enter'): anim_pose.anim_key('AmazedEmote_2Exit'),
+    anim_pose.anim_key('ApologizeEmote_1Enter'): anim_pose.anim_key('ApologizeEmote_1Exit'),
+    anim_pose.anim_key('ApologizeEmote_2Enter'): anim_pose.anim_key('ApologizeEmote_2Exit'),
+    anim_pose.anim_key('ArmWaveEmote_1Enter'): anim_pose.anim_key('ArmWaveEmote_1Exit'),
+    anim_pose.anim_key('ArmWaveEmote_2Enter'): anim_pose.anim_key('ArmWaveEmote_2Exit'),
+    anim_pose.anim_key('BalanceEmote_1Enter'): anim_pose.anim_key('BalanceEmote_1Exit'),
+    anim_pose.anim_key('BalanceEmote_2Enter'): anim_pose.anim_key('BalanceEmote_2Exit'),
+    anim_pose.anim_key('BallTrickEmote_1Enter'): anim_pose.anim_key('BallTrickEmote_1Exit'),
+    anim_pose.anim_key('BallTrickEmote_2Enter'): anim_pose.anim_key('BallTrickEmote_2Exit'),
+    anim_pose.anim_key('BaskEmote_1Enter'): anim_pose.anim_key('BaskEmote_1Exit'),
+    anim_pose.anim_key('BaskEmote_2Enter'): anim_pose.anim_key('BaskEmote_2Exit'),
+    anim_pose.anim_key('BellyScratchEmote_1Enter'): anim_pose.anim_key('BellyScratchEmote_1Exit'),
+    anim_pose.anim_key('BellyScratchEmote_2Enter'): anim_pose.anim_key('BellyScratchEmote_2Exit'),
+    anim_pose.anim_key('BreakDanceEmote_1Enter'): anim_pose.anim_key('BreakDanceEmote_1Exit'),
+    anim_pose.anim_key('BreakDanceEmote_2Enter'): anim_pose.anim_key('BreakDanceEmote_2Exit'),
+    anim_pose.anim_key('ButterflyEmote_1Enter'): anim_pose.anim_key('ButterflyEmote_1Exit'),
+    anim_pose.anim_key('ButterflyEmote_2Enter'): anim_pose.anim_key('ButterflyEmote_2Exit'),
+    anim_pose.anim_key('ColdEmote_1Enter'): anim_pose.anim_key('ColdEmote_1Exit'),
+    anim_pose.anim_key('ColdEmote_2Enter'): anim_pose.anim_key('ColdEmote_2Exit'),
+    anim_pose.anim_key('ComeWithMeEmote_1Enter'): anim_pose.anim_key('ComeWithMeEmote_1Exit'),
+    anim_pose.anim_key('ComeWithMeEmote_2Enter'): anim_pose.anim_key('ComeWithMeEmote_2Exit'),
+    anim_pose.anim_key('ConductEmote_1Enter'): anim_pose.anim_key('ConductEmote_1Exit'),
+    anim_pose.anim_key('ConductEmote_2Enter'): anim_pose.anim_key('ConductEmote_2Exit'),
+    anim_pose.anim_key('CrabwalkEmote_1Enter'): anim_pose.anim_key('CrabwalkEmote_1Exit'),
+    anim_pose.anim_key('CrabwalkEmote_2Enter'): anim_pose.anim_key('CrabwalkEmote_2Exit'),
+    anim_pose.anim_key('CuteclapEmote_1Enter'): anim_pose.anim_key('CuteclapEmote_1Exit'),
+    anim_pose.anim_key('CuteclapEmote_2Enter'): anim_pose.anim_key('CuteclapEmote_2Exit'),
+    anim_pose.anim_key('DizzyEmote_1Enter'): anim_pose.anim_key('DizzyEmote_1Exit'),
+    anim_pose.anim_key('DizzyEmote_2Enter'): anim_pose.anim_key('DizzyEmote_2Exit'),
+    anim_pose.anim_key('DozeEmote_1Enter'): anim_pose.anim_key('DozeEmote_1Exit'),
+    anim_pose.anim_key('DozeEmote_2Enter'): anim_pose.anim_key('DozeEmote_2Exit'),
+    anim_pose.anim_key('DrawEmote_1Enter'): anim_pose.anim_key('DrawEmote_1Exit'),
+    anim_pose.anim_key('DrawEmote_2Enter'): anim_pose.anim_key('DrawEmote_2Exit'),
+    anim_pose.anim_key('DuckEmote_1Enter'): anim_pose.anim_key('DuckEmote_1Exit'),
+    anim_pose.anim_key('DuckEmote_2Enter'): anim_pose.anim_key('DuckEmote_2Exit'),
+    anim_pose.anim_key('FaintEmote_1Enter'): anim_pose.anim_key('FaintEmote_1Exit'),
+    anim_pose.anim_key('FaintEmote_2Enter'): anim_pose.anim_key('FaintEmote_2Exit'),
+    anim_pose.anim_key('FloatEmote_1Enter'): anim_pose.anim_key('FloatEmote_1Exit'),
+    anim_pose.anim_key('FloatEmote_2Enter'): anim_pose.anim_key('FloatEmote_2Exit'),
+    anim_pose.anim_key('GriefEmote_1Enter'): anim_pose.anim_key('GriefEmote_1Exit'),
+    anim_pose.anim_key('GriefEmote_2Enter'): anim_pose.anim_key('GriefEmote_2Exit'),
+    anim_pose.anim_key('HandstandEmote_1Enter'): anim_pose.anim_key('HandstandEmote_1Exit'),
+    anim_pose.anim_key('HandstandEmote_2Enter'): anim_pose.anim_key('HandstandEmote_2Exit'),
+    anim_pose.anim_key('HeadbobEmote_1Enter'): anim_pose.anim_key('HeadbobEmote_1Exit'),
+    anim_pose.anim_key('HeadbobEmote_2Enter'): anim_pose.anim_key('HeadbobEmote_2Exit'),
+    anim_pose.anim_key('HypedanceEmote_1Enter'): anim_pose.anim_key('HypedanceEmote_1Exit'),
+    anim_pose.anim_key('HypedanceEmote_2Enter'): anim_pose.anim_key('HypedanceEmote_2Exit'),
+    anim_pose.anim_key('JellyDanceEmote_1Enter'): anim_pose.anim_key('JellyDanceEmote_1Exit'),
+    anim_pose.anim_key('JellyDanceEmote_2Enter'): anim_pose.anim_key('JellyDanceEmote_2Exit'),
+    anim_pose.anim_key('JollyDanceEmote_1Enter'): anim_pose.anim_key('JollyDanceEmote_1Exit'),
+    anim_pose.anim_key('JollyDanceEmote_2Enter'): anim_pose.anim_key('JollyDanceEmote_2Exit'),
+    anim_pose.anim_key('LoopDanceEmote_1Enter'): anim_pose.anim_key('LoopDanceEmote_1Exit'),
+    anim_pose.anim_key('LoopDanceEmote_2Enter'): anim_pose.anim_key('LoopDanceEmote_2Exit'),
+    anim_pose.anim_key('MarchingEmote_1Enter'): anim_pose.anim_key('MarchingEmote_1Exit'),
+    anim_pose.anim_key('MarchingEmote_2Enter'): anim_pose.anim_key('MarchingEmote_2Exit'),
+    anim_pose.anim_key('OuchEmote_1Enter'): anim_pose.anim_key('OuchEmote_1Exit'),
+    anim_pose.anim_key('OuchEmote_2Enter'): anim_pose.anim_key('OuchEmote_2Exit'),
+    anim_pose.anim_key('PeekEmote_1Enter'): anim_pose.anim_key('PeekEmote_1Exit'),
+    anim_pose.anim_key('PeekEmote_2Enter'): anim_pose.anim_key('PeekEmote_2Exit'),
+    anim_pose.anim_key('PenguinDanceEmote_1Enter'): anim_pose.anim_key('PenguinDanceEmote_1Exit'),
+    anim_pose.anim_key('PointEmote_1Enter'): anim_pose.anim_key('PointEmote_1Exit'),
+    anim_pose.anim_key('PointEmote_2Enter'): anim_pose.anim_key('PointEmote_2Exit'),
+    anim_pose.anim_key('PointupEmote_1Enter'): anim_pose.anim_key('PointupEmote_1Exit'),
+    anim_pose.anim_key('PointupEmote_2Enter'): anim_pose.anim_key('PointupEmote_2Exit'),
+    anim_pose.anim_key('PrayEmote_1Enter'): anim_pose.anim_key('PrayEmote_1Exit'),
+    anim_pose.anim_key('PrayEmote_2Enter'): anim_pose.anim_key('PrayEmote_2Exit'),
+    anim_pose.anim_key('PullupEmote_1Enter'): anim_pose.anim_key('PullupEmote_1Exit'),
+    anim_pose.anim_key('PullupEmote_2Enter'): anim_pose.anim_key('PullupEmote_2Exit'),
+    anim_pose.anim_key('RaiseTheRoofEmote_1Enter'): anim_pose.anim_key('RaiseTheRoofEmote_1Exit'),
+    anim_pose.anim_key('RaiseTheRoofEmote_2Enter'): anim_pose.anim_key('RaiseTheRoofEmote_2Exit'),
+    anim_pose.anim_key('ReadingEmote_1Enter'): anim_pose.anim_key('ReadingEmote_1Exit'),
+    anim_pose.anim_key('ReadingEmote_2Enter'): anim_pose.anim_key('ReadingEmote_2Exit'),
+    anim_pose.anim_key('RhythmicClapEmote_1Enter'): anim_pose.anim_key('RhythmicClapEmote_1Exit'),
+    anim_pose.anim_key('RhythmicClapEmote_2Enter'): anim_pose.anim_key('RhythmicClapEmote_2Exit'),
+    anim_pose.anim_key('SaluteEmote_1Enter'): anim_pose.anim_key('SaluteEmote_1Exit'),
+    anim_pose.anim_key('SaluteEmote_2Enter'): anim_pose.anim_key('SaluteEmote_2Exit'),
+    anim_pose.anim_key('SlouchEmote_1Enter'): anim_pose.anim_key('SlouchEmote_1Exit'),
+    anim_pose.anim_key('SlouchEmote_2Enter'): anim_pose.anim_key('SlouchEmote_2Exit'),
+    anim_pose.anim_key('SparklerEmote_1Enter'): anim_pose.anim_key('SparklerEmote_1Exit'),
+    anim_pose.anim_key('SparklerEmote_2Enter'): anim_pose.anim_key('SparklerEmote_2Exit'),
+    anim_pose.anim_key('SpinTrickEmote_1Enter'): anim_pose.anim_key('SpinTrickEmote_1Exit'),
+    anim_pose.anim_key('SpinTrickEmote_2Enter'): anim_pose.anim_key('SpinTrickEmote_2Exit'),
+    anim_pose.anim_key('ThumbsUpEmote_2Enter'): anim_pose.anim_key('ThumbsUpEmote_2Exit'),
+    anim_pose.anim_key('UseTheForceEmote_1Enter'): anim_pose.anim_key('UseTheForceEmote_1Exit'),
+    anim_pose.anim_key('UseTheForceEmote_2Enter'): anim_pose.anim_key('UseTheForceEmote_2Exit'),
+    anim_pose.anim_key('VoilaEmote_1Enter'): anim_pose.anim_key('VoilaEmote_1Exit'),
+    anim_pose.anim_key('VoilaEmote_2Enter'): anim_pose.anim_key('VoilaEmote_2Exit'),
+    anim_pose.anim_key('WaitEmote_1Enter'): anim_pose.anim_key('WaitEmote_1Exit'),
+    anim_pose.anim_key('WaitEmote_2Enter'): anim_pose.anim_key('WaitEmote_2Exit'),
+    anim_pose.anim_key('WelcomeEmote_1Enter'): anim_pose.anim_key('WelcomeEmote_1Exit'),
+    anim_pose.anim_key('WelcomeEmote_2Enter'): anim_pose.anim_key('WelcomeEmote_2Exit'),
+    anim_pose.anim_key('WindPoseEmote_1Enter'): anim_pose.anim_key('WindPoseEmote_1Exit'),
+    anim_pose.anim_key('WindPoseEmote_2Enter'): anim_pose.anim_key('WindPoseEmote_2Exit'),
+    anim_pose.anim_key('WriteEmote_1Enter'): anim_pose.anim_key('WriteEmote_1Exit'),
+    anim_pose.anim_key('WriteEmote_2Enter'): anim_pose.anim_key('WriteEmote_2Exit'),
+}
+
+
+def _solo_action(function):
+    """单人持续表情的非阻塞动作屏障；没有单人事件时原方法直接运行。"""
+    from functools import wraps
+
+    @wraps(function)
+    def guarded(self, *args, **kwargs):
+        def invoke():
+            if function.__name__ == "_air_start":
+                return self._air_ground_start(function, args, kwargs)
+            return function(self, *args, **kwargs)
+
+        # 已有社交连锁的锁顺序/结束分支完全由旧方法负责。
+        if self.social is not None or self._active_running():
+            return invoke()
+        # _apply 的外观/转向设置不算换动作；社交命令始终由原代码处理。
+        if function.__name__ == "_apply" and args and args[0].get("pose") in (
+                "face", "voice", "outfit", "cancel_active_offer"):
+            return invoke()
+        if function.__name__ == "walk_to" and (args[1] if len(args) > 1 else kwargs.get("label")) == "bounded_pilot":
+            gate = getattr(self, "_solo_gate", None)
+            if gate is not None or isinstance(self.event, anim_pose.ContinuousEmoteEvent):
+                adapter = getattr(self, "_terrain_adapter", None)
+                prepared = getattr(adapter, "_prepared", None)
+                with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+                    # 只拒绝这次等活动屏障的提交；收尾结束后的新调用完全走原入口。
+                    if prepared is not getattr(adapter, "_prepared", None):
+                        return False
+                    if self._solo_defer(function, args, kwargs):
+                        return None
+                    return invoke()
+        event = self.event
+        solo_play = (function.__name__ == "play" and args and
+                     (anim_pose.anim_key(args[0]) if isinstance(args[0], str) else args[0]) in SOLO_EMOTE_EXITS)
+        if (not solo_play and not isinstance(event, anim_pose.ContinuousEmoteEvent)
+                and getattr(self, "_solo_gate", None) is None):
+            return invoke()
+        lock = self.__dict__.setdefault("_solo_lock", threading.RLock())
+        with lock:
+            if function.__name__ in ("switch_map", "reset", "relocate"):
+                return self._solo_lifecycle(function, args, kwargs)
+            if self._solo_defer(function, args, kwargs):
+                return True if function.__name__ in ("_air_start", "_sit_direct") else None
+            return invoke()
+    return guarded
+
+
+def _home_seat_action(function):
+    """遇境座位事务沿用 solo RLock；非遇境不加锁、不改原方法。"""
+    from functools import wraps
+
+    @wraps(function)
+    def guarded(self, *args, **kwargs):
+        if function.__name__ == "_apply":
+            cmd = args[0] if args else kwargs.get("cmd", {})
+            home_wander_sit = (cmd.get("pose") == "sit" and ("home_seat_context" in cmd
+                               or (cmd.get("src") == "wander" and self._is_home_map())))
+            if cmd.get("pose") == "_sit_now" and ("home_request" in cmd or self._is_home_map()):
+                # 旧到达回调必须在 solo/active/command_seq/route 的任何副作用之前丢弃。
+                with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+                    pending = getattr(self, "_home_sit_pending", None)
+                    if (not self._is_home_map() or pending is None
+                            or cmd.get("home_request") != pending["request"]):
+                        self.log("sit_arrival_ignored", reason="stale_home_request", seat=cmd.get("seat"))
+                        return
+                    if self._home_sit_taken_over():
+                        return
+                    return self._sit_now(cmd["seat"], cmd["info"], home_request=cmd["home_request"])
+            if home_wander_sit or (self._is_home_map() and cmd.get("pose") not in ("shout", "voice")):
+                with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+                    if home_wander_sit and not self._home_wander_context_matches(cmd.get("home_seat_context")):
+                        self._reject_home_wander_sit("遇境座位状态未确认或房间已变化")
+                        return
+                    self._home_command_generation = getattr(self, "_home_command_generation", 0) + 1
+                    command_generation = self._home_command_generation
+                    self._home_cancel_sit()
+                kwargs = dict(kwargs, _home_command=command_generation)
+            return function(self, *args, **kwargs)
+        if not self._is_home_map():
+            return function(self, *args, **kwargs)
+        if function.__name__ == "_home_sit_tick" and self._prop_seat_dynamic_work():
+            lock = self.__dict__.setdefault("_solo_lock", threading.RLock())
+            if not lock.acquire(False):
+                return False
+            try:
+                return function(self, *args, **kwargs)
+            finally:
+                lock.release()
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            if function.__name__ == "_sit_now":
+                seat, info = args[:2]
+                pending = getattr(self, "_home_sit_pending", None)
+                if pending is None or kwargs.get("home_request") != pending["request"]:
+                    self.log("sit_arrival_ignored", reason="stale_home_request", seat=seat)
+                    return
+                if self._home_sit_taken_over():
+                    return
+                # 名单/epoch 更新与坐姿提交共享 tracker.lock，消除检查后换人的空窗。
+                if not self._prop_seat_arrival_check():
+                    return False
+                if not self.tracker.lock.acquire(False):
+                    return self._prop_seat_defer_commit(seat, info, kwargs.get("home_request"))
+                try:
+                    reason = self._home_sit_invalid(seat, info, locked=True)
+                    if reason is None:
+                        return function(self, *args, **dict(kwargs, _tracker_locked=True))
+                finally:
+                    self.tracker.lock.release()
+                self._home_sit_failed("seat_taken", seat, reason, expected=pending)
+                return
+            return function(self, *args, **kwargs)
+    return guarded
+
+
+class PoseController(SeatTiltControllerMixin, threading.Thread):
     def __init__(self, control_path, seed, tracker, log, stop, account=None):
         super().__init__(daemon=True, name="pose-control")
         # 2026-11-07 Claude：CONTROL_DIR 原来按 room_pose.py 所在位置推成 release-v20-hop-trial/control，
@@ -789,6 +1140,7 @@ class PoseController(threading.Thread):
         clip = Path(__file__).with_name("walk_clip.json")
         self.walk_clip = anim_pose.WalkClip(clip) if clip.exists() else None
         self.after_arrive = None           # 到达后要执行的命令（dict，同控制文件格式）
+        self._home_sit_pending = None      # 仅遇境：走路到落座期间固定现场凭据
         self.follow = None                 # 跟随：{"target": uuid/slot, "distance": 米}；每秒检查一次
         self.arrival = None                # 换图后“到达贴身”：{"map_id", "leader", "since"...}，见 arrival_snap
         self.seats = {}                    # 座位号 -> {"origin": 玩家坐标, "yaw": 6 位偏航}（install 按地图加载）
@@ -823,8 +1175,237 @@ class PoseController(threading.Thread):
         self._active_result = None     # latest command result; never replaces a live ticket
         self._active_seen = set()
 
+    def _solo_lifecycle(self, function, args, kwargs):
+        """换房接口保持同步；旧房已关闭时在新种子上完成 Exit，不恢复旧命令。"""
+        event = self.event
+        gate = getattr(self, "_solo_gate", None)
+        owned = isinstance(event, anim_pose.ContinuousEmoteEvent) or (
+            gate is not None and event is gate["event"])
+        if (not owned or getattr(self, "_solo_lifecycle_depth", 0)
+                or self.social is not None or self._active_running()):
+            return function(self, *args, **kwargs)
+        if isinstance(event, anim_pose.ContinuousEmoteEvent):
+            event = anim_pose.EmoteExitEvent(event.exit_key, event.stamp(), time.monotonic())
+        self._solo_revision = getattr(self, "_solo_revision", 0) + 1
+        self._solo_gate = None
+        self.event = event
+        self._solo_lifecycle_depth = 1
+        try:
+            return function(self, *args, **kwargs)
+        finally:
+            self._solo_lifecycle_depth = 0
+            if (self.social is None and not self._active_running()
+                    and (self.event is None or self.event is event)):
+                # 房间相位时钟已换；旧 pending 不跨房，generation 不重复递增。
+                event.start = None
+                self.event = event
+                self._solo_gate = {"event": event, "pending": None, "first_frame": None, "worker": False}
+                self._set_override(self.base)
+                self.state = {"pose": "anim", "phase": "solo_exit"}
+
+    def _solo_defer(self, function, args, kwargs):
+        """只结束自己的持续表情；等待实际构造完 Exit 帧后才执行后续动作。"""
+        if self.social is not None or self._active_running():
+            return False
+        event = self.event
+        gate = getattr(self, "_solo_gate", None)
+        if isinstance(event, anim_pose.ContinuousEmoteEvent):
+            # 重复同一 Enter 不重播、不自发退出。
+            if function.__name__ == "play" and args:
+                key = anim_pose.anim_key(args[0]) if isinstance(args[0], str) else args[0]
+                if key == event.key:
+                    return True
+            if function.__name__ == "_apply" and args and args[0].get("pose") == "anim":
+                if anim_pose.anim_key(args[0].get("name", "")) == event.key:
+                    return True
+            event = anim_pose.EmoteExitEvent(event.exit_key, event.stamp(), time.monotonic())
+            self._solo_revision = getattr(self, "_solo_revision", 0) + 1
+            self.event = event
+            gate = {"event": event, "pending": None, "first_frame": None, "worker": False}
+            self._solo_gate = gate
+            self._set_override(self.base)
+            self.state = {"pose": "anim", "phase": "solo_exit"}
+            self.log("solo_emote_exit", generation=event.gen)
+        if gate is None or self.event is not gate["event"]:
+            return False
+        # 换图/重进房优先于旧房间命令；手动命令优先于自动跟随重规划。
+        name = function.__name__
+        if name == "_solo_retry_walk" or (name == "walk_to" and (
+                args[1] if len(args) > 1 else kwargs.get("label")) == "bounded_pilot"):
+            # 地面层实例 wrapper 只排逻辑目标；这里是准备完成后的持许可起步。
+            # 屏障拒绝后若留下 _prepared，entry 会永远认为还有请求待消费。
+            # 必须经公开 cancel 撤销 request/lease，不能延迟重放这个旧许可。
+            self._solo_cancel_ground()
+            function = type(self)._solo_retry_walk
+        priority = 3 if name in ("switch_map", "reset", "relocate") else 2 if name in (
+            "_apply", "play", "_accept_offer", "_request_active_offer") else 1
+        if name == "_apply" and args and args[0].get("src") == "wander":
+            priority = 0
+        if gate["pending"] is None or priority >= gate["pending"][3]:
+            # 调用方可复用/修改 cmd，屏障必须持有当时的命令快照。
+            gate["pending"] = (function, copy.deepcopy(args), copy.deepcopy(kwargs), priority)
+        return True
+
+    def _solo_cancel_ground(self):
+        """只撤销单人屏障期间的路线许可，不改变地面层的任何校验。"""
+        if getattr(self, "_solo_gate", None) is None:
+            return
+        cancel = getattr(getattr(self, "_terrain_adapter", None), "cancel", None)
+        if callable(cancel):
+            cancel("solo_emote_exit")
+            self.log("solo_emote_ground_retry", reason="solo_emote_exit")
+
+    def _solo_ground_dispatch(self, dispatch, target, speed):
+        """同锁保护地面/独立小跳的准备提交；非单人状态执行原分流一次。"""
+        gate = getattr(self, "_solo_gate", None)
+        active = gate is not None or isinstance(self.event, anim_pose.ContinuousEmoteEvent)
+        adapter = getattr(self, "_terrain_adapter", None)
+        prepared = getattr(adapter, "_prepared", None)
+        # 锁顺序始终 solo -> air，避免 resume(跳跃) 与 ready(walk_to) 互等。
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            if active and prepared is not getattr(adapter, "_prepared", None):
+                return "blocked_start"
+            if self._solo_defer(type(self)._solo_retry_walk, (target,), {"speed": speed}):
+                return "waiting_for_solo_exit"
+            # 不再使用历史 revision/lock 判断屏障；无活动事务不拦截、不撤销。
+            return self._air_ground_dispatch(dispatch)
+
+    def _air_ground_start(self, function, args, kwargs):
+        """AirMotion 接管事务：与 ready 地面提交互斥，不属于单人收尾屏障。"""
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()), self.__dict__.setdefault("_air_ground_lock", threading.RLock()):
+            # 复核快速入口与取锁之间新建的单人事件；完整 Exit 后再起跳。
+            if self._solo_defer(function, args, kwargs):
+                return True
+            result = function(self, *args, **kwargs)
+            air = getattr(self, "_air_motion", None)
+            if air is not None and self.motion is air:
+                # 原 invalidate 只清 scope/generation，不清 prepared/lease。
+                # 起跳既已接管，旧地面请求必须走原 cancel 生命周期，落地再申请。
+                cancel = getattr(getattr(self, "_terrain_adapter", None), "cancel", None)
+                if callable(cancel):
+                    cancel("air_start")
+            return result
+
+    def _air_ground_dispatch(self, dispatch):
+        """防止 ready 与 AirMotion 起跳竞争；没有空中所有者时原分流执行一次。"""
+        with self.__dict__.setdefault("_air_ground_lock", threading.RLock()):
+            air = getattr(self, "_air_motion", None)
+            if air is not None and self.motion is air:
+                adapter = getattr(self, "_terrain_adapter", None)
+                if getattr(adapter, "_prepared", None) is not None:
+                    adapter.cancel("air_motion_owned")
+                return "waiting_for_air"
+            return dispatch()
+
+    def _solo_retry_walk(self, target, label="", face=None, speed=anim_pose.WALK_SPEED):
+        """收尾后重走实例逻辑入口，申请新路线；绝不复用 bounded_pilot 许可。"""
+        return self.walk_to(target, "follow" if self.follow else "movement", face=face, speed=speed)
+
+    def _solo_frame_begin(self):
+        """Exit 时钟从首个真实 post 帧开始；没有帧时不偷偷跳过收尾。"""
+        gate = getattr(self, "_solo_gate", None)
+        if gate is None:
+            return
+        with self._solo_lock:
+            if getattr(self, "_solo_gate", None) is not gate:
+                return
+            if self.social is not None or self._active_running() or self.event is not gate["event"]:
+                # 社交/其它所有者抢占后绝不执行旧的单人命令。
+                self._solo_gate = None
+                return
+            if gate["first_frame"] is None:
+                gate["first_frame"] = gate["event"].t0 = time.monotonic()
+            return gate
+
+    def _solo_frame_end(self, rendered_gate, body, now):
+        """本帧已完成普通 idle 写法；异步执行后续动作，不阻塞发包线程。"""
+        gate = getattr(self, "_solo_gate", None)
+        if gate is None or gate is not rendered_gate:
+            return
+        with self._solo_lock:
+            if getattr(self, "_solo_gate", None) is not gate:
+                return
+            if (self.event is gate["event"] and gate["first_frame"] is not None
+                    and gate["event"].phase(now)[0] == "idle"
+                    and not gate["worker"]):
+                fields = anim_pose.read(body)
+                if any(fields.get(k) != v for k, v in {
+                        "key": gate["event"].key, "gen": gate["event"].gen,
+                        "mode": 0, "code90": 7}.items()):
+                    return
+                gate["worker"] = True
+                threading.Thread(target=self._solo_resume, args=(gate,), daemon=True,
+                                 name="solo-emote-next").start()
+
+    def _solo_resume(self, gate):
+        with self._solo_lock:
+            if getattr(self, "_solo_gate", None) is not gate:
+                return
+            if (self.stop.is_set() or self.event is not gate["event"]
+                    or self.social is not None or self._active_running()):
+                self._solo_gate = None
+                return
+            # 慢冷任务可能直到 Exit 结束还没调用 bounded_pilot。先撤销，
+            # 防止旧 follow 准备结果抢在新探索/座位等逻辑请求之前起步。
+            self._solo_cancel_ground()
+            # 完整 Exit 末帧已实际构造；保留普通 AnimEvent idle 的写入集合，
+            # 但当前 key 退到 0，避免 T23-4 落地恢复 event 时重写已完成的 Exit。
+            idle = anim_pose.AnimEvent(0, gate["event"].stamp(), time.monotonic() - 1.0, seconds=0.0)
+            idle.start = gate["event"].start
+            self.event = idle
+            self._solo_gate = None
+            action = gate["pending"]
+            if self.state.get("phase") == "solo_exit":
+                self.state = {"pose": "idle"}
+            if action is not None:
+                function, args, kwargs, _priority = action
+                # 外层传入的显式 now 属于排队前，空中/坐下计时从执行时重建。
+                if function.__name__ in ("_air_start", "_sit_direct") and len(args) > 1:
+                    args = (args[0], time.monotonic(), *args[2:])
+                if "now" in kwargs:
+                    kwargs["now"] = time.monotonic()
+                try:
+                    if function.__name__ == "_air_start":
+                        # 重新进入实例入口，完整 Exit 后才进行空中接管事务。
+                        self._air_start(*args, **kwargs)
+                    elif function.__name__ == "_apply":
+                        # 外层 HopCommandBinding 必须看到实际执行后的新 follow，
+                        # 不能绕过它只恢复 room_pose 正文而留下旧 follow_ref。
+                        # 房间内部代次属于排队前的包装调用；重放结构化命令时
+                        # 由遇境入口重新生成，不泄漏给只收cmd的外层许可包装。
+                        kwargs = {k: v for k, v in kwargs.items() if k != "_home_command"}
+                        self._apply(*args, **kwargs)
+                    else:
+                        function(self, *args, **kwargs)
+                except Exception as exc:
+                    self.log("solo_emote_next_failed", action=function.__name__, error=str(exc)[:200])
+
+    def _solo_start(self, key, label):
+        """返回 True 表示目录里的单人持续动作已处理；完全没有超时收尾。"""
+        exit_key = SOLO_EMOTE_EXITS.get(key)
+        if exit_key is None or self.social is not None or self._active_running():
+            return False
+        lock = self.__dict__.setdefault("_solo_lock", threading.RLock())
+        with lock:
+            if self.motion is not None or self.sitting is not None:
+                self.log("anim_skipped", anim=label, reason="solo_emote_moving_or_sitting")
+                return True
+            # play() 启动线程后若已经收到新的动作，不准把 Exit 覆盖回 Enter。
+            if getattr(self, "_solo_gate", None) is not None:
+                return True
+            previous = self.event.stamp() if self.event is not None else anim_pose.read(self.seed)
+            self.event = anim_pose.ContinuousEmoteEvent(key, exit_key, previous, time.monotonic())
+            self._set_override(self.base)
+            self.state = {"pose": "anim", "anim": label, "continuous": True}
+            self.log("anim_start", anim=label, generation=self.event.gen, continuous=True)
+            return True
+
     def _post(self, body):
         """组合后处理：动画事件 + 当前位置（走动中按时间插值）。"""
+        if getattr(self, "_home_sit_pending", None) is not None:
+            self._home_sit_tick()
+        body = self._prop_seat_frame_begin(body)
+        solo_gate = self._solo_frame_begin()
         if self.motion is not None:
             self._air_last_moving = time.monotonic()   # T23-5：卡住判断用（每帧记一次最后在动的时间）
         # Consume a received supported acceptance before rendering this Actor rather
@@ -852,6 +1433,9 @@ class PoseController(threading.Thread):
         self._terrain_sync()
         terrain_stopped = terrain_owned_before_sync and self.motion is None
         now = time.monotonic()
+        from air_follow_runtime import observe_frame as _observe_air_follow
+        _observe_air_follow(self, now)
+        self._once_before_frame(now)
         air_early = getattr(self, "_air_motion", None)
         if (air_early is not None and self.motion is air_early
                 and (self.social is not None or self.sitting is not None
@@ -953,6 +1537,7 @@ class PoseController(threading.Thread):
                     values = anim_pose.rotate_pose(values, heading - self.seed_heading)
                 body = anim_pose.write_pose_fields(body, values)
             body = anim_pose.write_facing(body, heading)
+        body = self._prop_seat_frame_end(body, now)
         if soc is not None and soc["kind"] == "carry":
             body = social_pose.force_carry(body)
         self._terrain_last_position = tuple(pos)  # Constructed position, not a send/ACK claim.
@@ -996,6 +1581,7 @@ class PoseController(threading.Thread):
         # Legacy motion and social-owned publication keep their existing rules.
         if terrain_sample is not None and heading is not None and not self._terrain_social_owns():
             self.heading = heading
+        self._solo_frame_end(solo_gate, body, now)
         return body
 
     def _fresh_peer_y(self):
@@ -1215,6 +1801,7 @@ class PoseController(threading.Thread):
                 c["wm"] = None
         return c["wm"]
 
+    @_solo_action
     def _explore(self, toward=None):
         """沿可走地面逛到附近的随机点（或 toward 那人附近）。"""
         import random
@@ -1615,6 +2202,8 @@ class PoseController(threading.Thread):
                  override_origin=self._override_origin(), **self._landing_diag())
         return True
 
+    @_solo_action
+    @upright_action
     def switch_map(self, seed, map_id, *, ground_ref=None, variant=None, source=None):
         """跟着换图/同图换命名落点：换成目标种子，状态清空。
 
@@ -1624,6 +2213,8 @@ class PoseController(threading.Thread):
         同图换落点时立刻按真实地形校正高度，跨图则等新房间的坐标到了再由
         _reground_tick 校正。
         """
+        if self._is_home_map():
+            self._clear_home_seats()
         same_map = map_id == getattr(self, "map_id", None)
         self._voice_gen = getattr(self, "_voice_gen", 0) + 1   # T23-7：换图套用 control/voice 时作废旧计时器
         self._seed_source = source or ("switch_map_variant" if variant is not None else "switch_map")
@@ -1637,7 +2228,7 @@ class PoseController(threading.Thread):
         self.map_id = map_id
         self.variant = variant
         self._placement_ref_y = ground_ref
-        self.seat_file = xg_paths.BOT_DATA / f"seats_{map_id}.json"
+        self.seat_file = None if map_id == HOME_MAP_ID else (xg_paths.BOT_DATA / f"seats_{map_id}.json")
         self.sitting = self.stand_spot = None
         arrival_snap.arm(self, map_id)           # 换图后最多等 60 秒把人贴身放过去；reset 会清 social/follow，先记
         # 先登记新落点再 reset：命名落点的 reset 直接强制写回目标种子，
@@ -1685,6 +2276,8 @@ class PoseController(threading.Thread):
         except Exception:
             return {}
 
+    @_solo_action
+    @upright_action
     def relocate(self, seed, map_id, *, variant=None, ground_ref=None):
         """同图换命名落点：换种子 + 真实地形贴地 + 原生 AvatarTeleportRpc。
 
@@ -1800,6 +2393,8 @@ class PoseController(threading.Thread):
             self.reset("post_error")
             return body
 
+    @_solo_action
+    @upright_action
     def reset(self, why="new_room", *, keep_pose=False, keep_seat=None):
         """回到干净状态。``keep_pose`` = 同一张图/同一房间重新校验：不传回出生点。
 
@@ -1810,6 +2405,9 @@ class PoseController(threading.Thread):
         ``goal_support_missing``，sit 永远到不了座位。同图重校验必须保留位置/
         朝向：坐着且座位还在就继续坐着，否则站起在座位旁，状态和实际一致。
         """
+        if self._is_home_map():
+            self._clear_home_seats()
+        self._stuck_reset_intent()
         saved = None
         self._voice_gen = getattr(self, "_voice_gen", 0) + 1   # T23-7：换图/复位后作废还没补的叫声计数
         if keep_pose:
@@ -1879,7 +2477,7 @@ class PoseController(threading.Thread):
             if saved["heading"] is not None:
                 self.heading = saved["heading"]
             seat = saved["sitting"]
-            seat_known = (seat is not None
+            seat_known = (not self._is_home_map() and seat is not None
                           and (bool(keep_seat) or seat in self.seats
                                or isinstance(saved["event"], anim_pose.SitEvent)))
             if seat is not None and seat_known:
@@ -2103,20 +2701,20 @@ class PoseController(threading.Thread):
             stop = self.__dict__.setdefault("_terrain_stop", [RLock(), 0, False, None])
         reason = reason if isinstance(reason, str) and 0 < len(reason) <= 96 and all(
             c.isascii() and (c.isalnum() or c in "_-.: ") for c in reason) else "terrain_blocked"
-        # T23-1：记录“同一跟随目标从什么时候开始连续失败”。walk_to 成功会清掉；
-        # 目标换了重新计时。planner 只在 >=2 s 且距离够远时才考虑飞。
-        if self.follow:
-            target = (self.follow or {}).get("target")
-            now = time.monotonic()
-            # 线上 walk_to 被地形层包装（只排队目标），下面 walk_to 里“成功清零”不会执行：
-            # 记首次/最近一次失败，最近一次超过 3 s 就当失败窗口已结束、重新计时。
-            if (self._air_failed_target != target or self._air_failed_at is None
-                    or now - (getattr(self, "_air_failed_last", None) or now) > 3.0):
-                self._air_failed_at, self._air_failed_target = now, target
-            self._air_failed_last = now
         with stop[0]:
             if expected is not None and self.motion is not expected:
                 return False
+            # Keep diagnostic failure timing only for an accepted current stop.
+            # Idle duration is never permission to bypass verified ground routing.
+            if self.follow:
+                target = (self.follow or {}).get("target")
+                now = time.monotonic()
+                # 线上 walk_to 被地形层包装（只排队目标），下面 walk_to 里“成功清零”不会执行：
+                # 记首次/最近一次失败，最近一次超过 3 s 就当失败窗口已结束、重新计时。
+                if (self._air_failed_target != target or self._air_failed_at is None
+                        or now - (getattr(self, "_air_failed_last", None) or now) > 3.0):
+                    self._air_failed_at, self._air_failed_target = now, target
+                self._air_failed_last = now
             owned = getattr(self, "_terrain_motion", None)
             if (owned is not None and self.motion is owned) or stop[3] is not None:
                 stop[1] += 1
@@ -2139,12 +2737,15 @@ class PoseController(threading.Thread):
         self._set_override(map_long_engine.POSE_OVERRIDE.get("seed") or self.base)
         return True
 
+    @_solo_action
+    @upright_action
     def walk_to(self, target, label="", face=None, speed=anim_pose.WALK_SPEED):
         """Common movement factory. Terrain is opt-in; disabled preserves legacy Motion.
 
         座位走路的稳定参照放在实例属性 ``_walk_ref``（喊她坐下的人）；不新增
         位置参数，旧调用/旧测试的 lambda 不会被关键字参数弄坏。
         """
+        self._stuck_note_walk(target, label, face, speed)
         if label != "seat":
             self._walk_ref = None             # 只有座位走路带参照，别的走路不继承
         now = time.monotonic()
@@ -2201,6 +2802,7 @@ class PoseController(threading.Thread):
                 return False
             self._terrain_motion = (motion if terrain is not None
                 and getattr(decision, "status", None) == "ready" and decision.motion is motion else None)
+            self._once_before_motion("walk")
             self.motion = motion
             stop[1] += 1
             stop[2], stop[3] = False, self._terrain_motion
@@ -2213,14 +2815,309 @@ class PoseController(threading.Thread):
         self.log("walk_start", to=[round(v, 3) for v in target], seconds=round(self.motion.seconds, 1), why=label)
         return True if terrain is not None and getattr(adapter, "enabled", False) else None
 
+    @_solo_action
     def play(self, name_or_key, seconds=TAKE_CANDLE_SECONDS):
-        """播一段一次性动画（线上时间表：mode7 播放 → 恢复 code90 → gate）。"""
-        key = anim_pose.anim_key(name_or_key) if isinstance(name_or_key, str) else name_or_key
-        threading.Thread(target=self._play, args=(key, float(seconds), str(name_or_key)), daemon=True).start()
+        """持续表情原路；一次性动画保存请求代次，旧启动线程不抢新动作。"""
+        key=anim_pose.anim_key(name_or_key) if isinstance(name_or_key,str) else name_or_key
+        if key in SOLO_EMOTE_EXITS and self.social is None and not self._active_running():
+            self._solo_revision=getattr(self,"_solo_revision",0)+1
+            return self._play(key,float(seconds),str(name_or_key),self._solo_revision)
+        revision=getattr(self,"_solo_revision",0)
+        threading.Thread(target=self._play,args=(key,float(seconds),str(name_or_key),revision,
+            getattr(self,"_command_seq",0)),daemon=True).start()
+
+    def _is_home_map(self):
+        map_id = getattr(self, "map_id", None)
+        return map_id is not None and map_id == HOME_MAP_ID
+
+    @_home_seat_action
+    def _home_cancel_sit(self):
+        self._prop_seat_pending_air = None
+        self._prop_seat_cancel_approach("command_replaced")
+        self._home_sit_pending = None
+        self._sit_pending = None
+
+    def _home_sit_taken_over(self):
+        # 自动接受社交也可能直接调用旧入口，不经过 _apply；旧座位请求不能夺回动作。
+        if self.social is not None or self._active_running() or self.follow or self.holding:
+            self._home_cancel_sit()
+            return True
+        return False
+
+    def _home_wander_context_matches(self, context):
+        """仅自动坐下的跨进程房间凭据；主人不带 context 的指令不走此门禁。"""
+        if not self._is_home_map() or not isinstance(context, dict):
+            return False
+        if (not isinstance(context.get("home_session"), str)
+                or type(context.get("room_generation")) is not int
+                or type(context.get("seat_epoch")) is not int):
+            return False
+        with self.tracker.lock:
+            tracker = self.tracker
+            return bool(tracker.ready and tracker.confirmed_map_id == HOME_MAP_ID
+                        and context["home_session"] == tracker.home_session
+                        and context["room_generation"] == tracker.room_generation
+                        and context["seat_epoch"] == tracker.seat_epoch)
+
+    def _reject_home_wander_sit(self, detail):
+        # 过期控制文件不能取消当前路线/社交/主人请求；仅发布失败原因。
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            if (getattr(self, "_home_sit_pending", None) is None
+                    and getattr(self, "_sit_pending", None) is None):
+                self._last_sit_failure = {"reason": "no_seat", "seat": None,
+                                          "at": time.time(), "detail": str(detail)}
+        self.log("sit_failed", reason="no_seat", seat=None, detail=str(detail),
+                 src="wander", ignored=True)
+
+    def _home_seat_public_state(self):
+        """发布可跨进程校验的资格摘要；room 快照期间换房/换名单则保守计零。"""
+        tracker = self.tracker
+        with tracker.lock:
+            before = (tracker.home_session, tracker.room_generation, tracker.seat_epoch)
+        room = tracker.snapshot()
+        with tracker.lock:
+            current = (tracker.home_session, tracker.room_generation, tracker.seat_epoch)
+            free, book, _proofs, _rejected = self._home_seat_snapshot(locked=True)
+            coherent = (before == current and self._is_home_map()
+                        and room.get("map_id") == HOME_MAP_ID
+                        and room.get("room_generation") == tracker.room_generation
+                        and room.get("connected") and tracker.ready
+                        and room.get("slots") == {hex(s): u for s, u in tracker.slots.items()})
+            if not coherent:
+                free = {}
+            now, mono = time.time(), time.monotonic()
+            expires_at = min((min(book[sid][2] + HOME_SEAT_MAX_AGE,
+                                  now + HOME_SEAT_MAX_AGE - (mono - tracker.seat_witnesses[sid][5]))
+                              for sid in free), default=now)
+            summary = {"schema": "home-seat-live-v1", "map_id": HOME_MAP_ID,
+                       "home_session": tracker.home_session,
+                       "room_generation": tracker.room_generation, "seat_epoch": tracker.seat_epoch,
+                       "count": len(free), "observed_at": now, "expires_at": expires_at}
+        return room, summary
+
+    @_home_seat_action
+    def _clear_home_seats(self):
+        """仅清遇境本次房间的观测；epoch 阻止 reset 前尚在解码的帧写回来。"""
+        self._home_sit_pending = None
+        self._home_command_generation = getattr(self, "_home_command_generation", 0) + 1
+        with self.tracker.lock:
+            for name in ("seat_book", "seat_witnesses", "seated", "seat_checked"):
+                getattr(self.tracker, name, {}).clear()
+            self.tracker.seat_epoch = getattr(self.tracker, "seat_epoch", 0) + 1
+
+    def _home_seat_snapshot(self, *, locked=False):
+        """候选与身份凭据一次取样；不读文件、不推断相邻座号。"""
+        if not locked:
+            with self.tracker.lock:
+                return self._home_seat_snapshot(locked=True)
+        tracker = self.tracker
+        book = dict(tracker.seat_book)
+        witnesses = dict(getattr(tracker, "seat_witnesses", {}))
+        slots = dict(tracker.slots)
+        versions = dict(getattr(tracker, "_slot_versions", {}))
+        occupied = set(tracker.seated.values())
+        generation = tracker.room_generation
+        epoch = getattr(tracker, "seat_epoch", 0)
+        ready = tracker.ready and tracker.confirmed_map_id == HOME_MAP_ID
+        free, observed, proofs, rejected = {}, {}, {}, {}
+        now, mono = time.time(), time.monotonic()
+        since = getattr(self, "room_since", 0.0)
+        for sid, (origin, yaw, seen) in book.items():
+            witness = witnesses.get(sid)
+            reason = None
+            if not ready or witness is None or seen < since:
+                reason = "本次进房后没有实时确认过"
+            else:
+                identity, slot, version, room, seat_epoch, observed_mono = witness
+                if identity == getattr(tracker, "own_uuid", None):
+                    reason = "自己的坐姿不能确认现场椅子"
+                elif room != generation or seat_epoch != epoch:
+                    reason = "座位记录来自旧房间"
+                elif slots.get(slot) != identity or versions.get(slot) != version:
+                    reason = "坐过这里的玩家已离开或房间名单已换人"
+                elif not (0 <= mono - observed_mono <= HOME_SEAT_MAX_AGE
+                          and 0 <= now - seen <= HOME_SEAT_MAX_AGE):
+                    reason = f"超过 {HOME_SEAT_MAX_AGE / 60:g} 分钟未实时确认"
+                elif sid in occupied:
+                    reason = "座位当前有人坐"
+            if reason is not None:
+                rejected[sid] = reason
+                continue
+            free[sid] = (tuple(origin), yaw, "live")
+            observed[sid] = (tuple(origin), yaw, seen)
+            proofs[sid] = witness[:5]
+        return free, observed, proofs, rejected
+
+    def _home_no_seat_reason(self, rejected=None):
+        if rejected is None:
+            rejected = self._home_seat_snapshot()[3]
+        detail = "；".join(dict.fromkeys(rejected.values()))
+        return "附近没有能坐的椅子（" + (detail or "只认本次进房后实时看到有人坐过的座位") + "）"
+
+    def _home_pick_seat(self, near):
+        free, _book, _proofs, rejected = self._home_seat_snapshot()
+        if not free:
+            raise LookupError(self._home_no_seat_reason(rejected))
+        # root 旧分支没有距离过滤；新增限制只作用于遇境。
+        usable = {sid: info for sid, info in free.items()
+                  if sum((float(info[0][i]) - float(near[i])) ** 2 for i in (0, 2)) <= HOME_SEAT_PICK_RANGE ** 2
+                  and abs(float(info[0][1]) - float(near[1])) <= HOME_SEAT_PICK_DY}
+        if not usable:
+            raise LookupError("附近没有能坐的椅子（实时座位距离太远或不在同一层）")
+        seat = min(usable, key=lambda sid: _dist(usable[sid][0], near))
+        return seat, usable[seat]
+
+    @_home_seat_action
+    def _home_prepare_sit(self, seat, info, *, context=None):
+        free, _book, proofs, rejected = self._home_seat_snapshot()
+        if free.get(seat) != info:
+            self._home_sit_failed("no_seat", seat, rejected.get(seat, "座位在选座时已经变化"))
+            return False
+        if context is not None and (context.get("home_session") != self.tracker.home_session
+                or (context.get("room_generation"), context.get("seat_epoch")) != proofs[seat][3:5]):
+            self._reject_home_wander_sit("选座期间房间已变化，放弃自动坐下")
+            return False
+        self._home_sit_sequence = getattr(self, "_home_sit_sequence", 0) + 1
+        self._home_sit_pending = {"seat": seat, "info": info, "proof": proofs[seat],
+                                  "request": self._home_sit_sequence}
+        self._last_sit_failure = None
+        return True
+
+    def _home_sit_invalid(self, seat=None, info=None, *, locked=False):
+        pending = getattr(self, "_home_sit_pending", None)
+        if pending is None or (seat is not None and pending["seat"] != seat):
+            return "本次坐下请求已失效"
+        seat = pending["seat"]
+        free, _book, proofs, rejected = self._home_seat_snapshot(locked=locked)
+        if seat not in free:
+            return rejected.get(seat, "现场座位记录已清空")
+        if proofs[seat] != pending["proof"]:
+            return "走过去途中坐过座位的玩家已换人"
+        if free[seat] != pending["info"] or (info is not None and info != pending["info"]):
+            return "走过去途中座位位置或朝向已变化"
+        return None
+
+    @_home_seat_action
+    def _home_sit_failed(self, reason, seat, detail, *, expected=None):
+        if expected is not None and getattr(self, "_home_sit_pending", None) is not expected:
+            return
+        if reason == "seat_taken" and detail != "座位当前有人坐":
+            reason = "no_seat"
+        self._home_sit_pending = None
+        # 取消地形 worker 的已准备请求，避免下一帧又接回旧路线。
+        self._terrain_invalidate(clear_prepared=True)
+        self.route = []
+        if hasattr(self, "_sit_failed"):
+            self._sit_failed(reason, seat=seat, stop=True, detail=detail)
+            self._last_sit_failure["detail"] = str(detail)
+        else:
+            self.motion = self.after_arrive = None
+            self._last_sit_failure = {"reason": str(reason), "seat": seat,
+                                      "at": time.time(), "detail": str(detail)}
+            self.state = {"pose": "idle", "sit_failed": dict(self._last_sit_failure)}
+            self.log("sit_failed", reason=str(reason), seat=seat, detail=str(detail))
+
+    @_home_seat_action
+    def _home_sit_tick(self):
+        pending = getattr(self, "_home_sit_pending", None)
+        if pending is None:
+            return False
+        if self._home_sit_taken_over():
+            return True
+        if not self.tracker.lock.acquire(blocking=not self._prop_seat_dynamic_work()):
+            return False
+        try:
+            reason = self._home_sit_invalid(locked=True)
+        finally:
+            self.tracker.lock.release()
+        if reason is None:
+            return False
+        self._home_sit_failed("seat_taken", pending["seat"], reason, expected=pending)
+        return True
+
+    @_home_seat_action
+    def _apply_home_sit(self, cmd, command_generation):
+        if ((cmd.get("src") == "wander" or "home_seat_context" in cmd)
+                and not self._home_wander_context_matches(cmd.get("home_seat_context"))):
+            self._reject_home_wander_sit("遇境座位状态已失效，放弃排队中的自动坐下")
+            return
+        if (command_generation != getattr(self, "_home_command_generation", None)
+                or self.social is not None or self._active_running()):
+            self.log("sit_command_ignored", reason="home_action_replaced")
+            return
+        if self.sitting is not None:
+            return
+        air = getattr(self, "_air_motion", None)
+        if air is not None and self.motion is air:
+            # TASK-j：保留新坐下意图，当前安全飞行继续，落地后有界重试。
+            return self._prop_seat_queue_after_air(cmd)
+        here = self.motion.pos(time.monotonic()) if self.motion else self.position
+        near_slot, near = (self.tracker.resolve(cmd["near"]) if cmd.get("near")
+                           else (None, here))
+        # T23-8：座位走路的参照对象固定成“喊她坐下的人”（near），不再让
+        # 地形层用会随新鲜度切换的 _idle_target；找不到 UUID 时留空，由地形
+        # 层沿用旧兜底，不改变校验强度。
+        ref = None
+        if near_slot is not None:
+            try:
+                with self.tracker.lock:
+                    ref = self.tracker.slots.get(near_slot)
+            except Exception:
+                ref = None
+        try:
+            seat, info = self._pick_seat(near)
+        except LookupError as exc:
+            # 找不到空座位：状态里写 sit_failed，聊天侧不能再说“坐下了”。
+            if self._is_home_map():
+                self._home_sit_failed("no_seat", None, str(exc)[:120])
+            else:
+                self._sit_failed("no_seat", detail=str(exc)[:120])
+            return
+        if self._is_home_map() and not self._home_prepare_sit(seat, info, context=cmd.get("home_seat_context")):
+            return
+        if self._prop_seat_try_interact(seat, info, here, takeover=True):
+            return
+        (x, y, z), _yaw, src = info
+        if src == "guess":
+            # 只知道同桌别人的位置：走到那人身边离 0.8 米（朝小光这侧）站好，坐下时客户端按座位号吸附
+            d = max(((here[0] - x) ** 2 + (here[2] - z) ** 2) ** 0.5, 1e-6)
+            x, z = x + (here[0] - x) / d * 0.8, z + (here[2] - z) / d * 0.8
+        # 走到座位旁的高度是“站地面”，不是座位面：参考座位 y - SEAT_HEIGHT 查真实地形。
+        g = self.terrain_ground(x, z, y - SEAT_HEIGHT)
+        stand = (x, g if g is not None else y - SEAT_HEIGHT, z)
+        try:
+            stand = self._prop_seat_approach(seat, info, stand, here)
+        except (ValueError, TypeError, KeyError) as exc:
+            self._home_sit_failed("unsafe_approach", seat, str(exc)[:120])
+            return
+        self.follow, self.holding, self.candle = None, False, None
+        self.after_arrive = {"pose": "_sit_now", "seat": seat, "info": info}
+        if self._is_home_map():
+            self.after_arrive["home_request"] = self._home_sit_pending["request"]
+        self._set_override(self.base)
+        self._walk_ref = ref
+        started = self.walk_to(stand, "seat")
+        if started is False:
+            if self._is_home_map():
+                self._home_sit_pending = None
+            self._sit_failed("walk_rejected", seat=seat)
+            return
+        # target/info 留着给 1.5 s 直走兜底：地形层不启动也能自己走到座位旁。
+        self._sit_pending = {"since": time.monotonic(), "seat": seat, "near": tuple(near),
+                             "target": tuple(stand), "info": info, "ref": ref,
+                             "command_seq": self._command_seq, "direct_checked": False}
+        self._last_sit_failure = None
+        if self.motion is not None:
+            self.state = {"pose": "walk", "to_seat": seat}
+        self.log("seat_pick", seat=seat, source=src, near=[round(v, 2) for v in near])
+        return
 
     def _seat_candidates(self):
         """空座位 {座位号: (估计坐标, 偏航码, 来源)}。来源：live = 刚看到有人坐过；file = 抓包记录；
         guess = 同桌推断（客户端按座位号吸附，坐标大致对就行）。正被别人坐着的座位不在里面。"""
+        if self._is_home_map():
+            free, book, _proofs, _rejected = self._home_seat_snapshot()
+            return free, book
         with self.tracker.lock:
             occupied, book = set(self.tracker.seated.values()), dict(self.tracker.seat_book)
         since = getattr(self, "room_since", 0.0)
@@ -2253,6 +3150,8 @@ class PoseController(threading.Thread):
         （线上 seats_3526133726.json 里混进了雨林/暮土的座位坐标），下次
         在遇境就可能按别人的坐标坐下。map 不匹配时整轮跳过。
         """
+        if self._is_home_map():
+            return
         with self.tracker.lock:
             if (not self.tracker.ready or self.map_id is None
                     or self.tracker.confirmed_map_id != self.map_id):
@@ -2292,6 +3191,8 @@ class PoseController(threading.Thread):
         座位表混进了雨林/暮土的坐标（y=70/217），旧代码永远选“最近的
         一个”，会把人送到别的图的层高上，看起来在很深的地底。
         """
+        if self._is_home_map():
+            return self._home_pick_seat(near)
         free, book = self._seat_candidates()
         if not free:
             raise LookupError("附近没有空座位（这张图还没见过椅子，或都坐满了）")
@@ -2307,16 +3208,24 @@ class PoseController(threading.Thread):
         sid = min(usable, key=score)
         return sid, usable[sid]
 
-    def _sit_now(self, seat, info):
+    @_solo_action
+    @_home_seat_action
+    def _sit_now(self, seat, info, *, home_request=None, _tracker_locked=False):
         """已走到座位旁：吸附到座位、朝座位方向，开始 GoSit2 保持。走的路上被人占了就就近换一个。"""
-        free, _book = self._seat_candidates()
-        near = self.position
-        if seat not in free or not self._seat_in_range(free[seat][0], near):
-            seat, info = self._pick_seat(near)
-            self.log("seat_taken_repick", seat=seat)
+        if not self._is_home_map():
+            free, _book = self._seat_candidates()
+            near = self.position
+            if seat not in free or not self._seat_in_range(free[seat][0], near):
+                seat, info = self._pick_seat(near)
+                self.log("seat_taken_repick", seat=seat)
         origin, yaw, src = info
+        ready, prop_seat_binding = self._prop_seat_prepare_for_commit(
+            seat, info, locked=_tracker_locked, home_request=home_request)
+        if not ready:
+            return False
         prev = self.event.stamp() if self.event is not None else {k: anim_pose.read(self.seed)[k] for k in ("gen", "key", "start")}
-        self.stand_spot = self.position
+        event = anim_pose.SitEvent(seat, prev, time.monotonic())
+        self.stand_spot = self._prop_seat_saved_return(self.position)
         x, y, z = origin
         # 座位是真人坐上去的坐标（椅面高度），不是地面：直接用真人的 y，不查地形、不加偏移。
         # （查地形会拿到椅子底下的地面，遇境座位 0.996 → 0.802，坐下会陷进椅子）
@@ -2324,20 +3233,27 @@ class PoseController(threading.Thread):
         if yaw is not None:
             self.heading = anim_pose.yaw_heading(yaw)
         self.sitting = seat
-        self.event = anim_pose.SitEvent(seat, prev, time.monotonic())
+        self.event = event
+        self._prop_seat_begin(prop_seat_binding, seat)
         self._set_override(self.base)
         self.state = {"pose": "sit", "seat": seat}
+        self._home_sit_pending = None
         self._sit_pending = None
         self._last_sit_failure = None
         self.log("sit", seat=seat, source=src, at=[round(v, 3) for v in self.position],
                  heading=None if self.heading is None else round(self.heading))
+        self._prop_seat_commit_complete()
 
+    @_home_seat_action
     def _sit_failed(self, reason, *, seat=None, stop=False, **fields):
         """记一次坐下失败：写状态 + 打 ``sit_failed``，聊天侧据此不再说“坐下了”。
 
         ``stop=True`` 用于 20 s 超时：放弃还没坐下的座位路线，停在当前位置，
         不继续走向一个到不了的座位。
         """
+        self._prop_seat_cancel_approach("sit_" + str(reason))
+        if self._is_home_map():
+            self._home_sit_pending = None
         pending = getattr(self, "_sit_pending", None)
         if seat is None and pending is not None:
             seat = pending.get("seat")
@@ -2346,6 +3262,12 @@ class PoseController(threading.Thread):
         if (isinstance(self.after_arrive, dict)
                 and self.after_arrive.get("pose") == "_sit_now"):
             self.after_arrive = None
+        air = getattr(self, "_air_motion", None)
+        if (stop and air is not None and self.motion is air and air.plan.get("stuck_recovery")):
+            # 座位失效立即撤销坐下意图，但不能把新的脱困动画硬停在半空。
+            # 已验证的固定近邻落点继续完成；落地后 _stuck_current 拒绝旧座位续接。
+            stop = False
+            self.log("stuck_recovery_intent_cancelled", reason="seat_" + str(reason))
         if stop and self.motion is not None:
             try:
                 self.position = tuple(self.motion.pos(time.monotonic()))
@@ -2411,6 +3333,9 @@ class PoseController(threading.Thread):
             goal_y = h
         return True, None, goal_y, count + 1, max_step
 
+    @_solo_action
+    @_home_seat_action
+    @upright_action
     def _sit_direct(self, pending, now):
         """地形层 1.5 s 没起步时的兜底：按真人走路姿态直接走到座位旁。
 
@@ -2418,6 +3343,9 @@ class PoseController(threading.Thread):
         情况；走到后仍走原来的 ``after_arrive = _sit_now`` 坐下。走不了就
         返回 False，保留原来的 10 s 等待和 ``sit_failed``。
         """
+        if self._is_home_map():
+            if getattr(self, "_home_sit_pending", None) is None or self._home_sit_tick():
+                return False
         seat, info = pending.get("seat"), pending.get("info")
         draw = pending.get("target")
         if self.motion is not None:
@@ -2435,6 +3363,8 @@ class PoseController(threading.Thread):
             return False
         ok, reason, goal_y, samples, max_step = self._direct_seat_path(start, draw)
         if not ok:
+            if reason == "blocked":
+                pending["stuck_blocked"] = True
             self.log("sit_direct_walk", ok=False, seat=seat, reason=reason,
                      distance=round(distance, 2), elapsed=round(now - pending.get("since", now), 2))
             return False
@@ -2444,6 +3374,8 @@ class PoseController(threading.Thread):
         self._terrain_motion = None
         self.motion = motion
         self.after_arrive = {"pose": "_sit_now", "seat": seat, "info": info}
+        if self._is_home_map():
+            self.after_arrive["home_request"] = self._home_sit_pending["request"]
         self.state = {"pose": "walk", "to_seat": seat}
         self.log("sit_direct_walk", ok=True, seat=seat, reason="walk_not_started",
                  distance=round(distance, 2), elapsed=round(now - pending.get("since", now), 2),
@@ -2451,17 +3383,37 @@ class PoseController(threading.Thread):
                  start=[round(v, 3) for v in start], to=[round(v, 3) for v in goal])
         return True
 
+    @_home_seat_action
     def _sit_tick(self, now=None):
         """坐下超时/中途丢失的兜底：最迟 SIT_TIMEOUT 秒放弃并写 sit_failed。"""
+        now = time.monotonic() if now is None else now
+        if self._prop_seat_air_tick(now):
+            return False
+        if self._prop_seat_rollback_tick(now):
+            return True
+        if self._prop_seat_commit_tick(now):
+            return False
         pending = getattr(self, "_sit_pending", None)
         if pending is None:
             return False
+        if self._prop_seat_approach_air_wait(pending):
+            return False
+        if self._is_home_map() and self._home_sit_tick():
+            return True
         if self.sitting is not None:
             self._sit_pending = None
             self._last_sit_failure = None
             return False
         now = time.monotonic() if now is None else now
+        if getattr(self, "_stuck_flight", None) is not None:
+            return False  # 由 AirMotion 连续落地；不在半空执行座位超时的 stop。
+        if self._prop_seat_pending_owner_guard(pending):
+            return False
+        here = self.motion.pos(now) if self.motion else self.position
+        if self._prop_seat_try_interact(pending["seat"], pending["info"], here):
+            return False
         elapsed = now - pending.get("since", now)
+        ground_elapsed = now - pending.get("stuck_ground_since", pending.get("since", now))
         # 下一个命令把 after_arrive 清掉/换掉了：这次 sit 已经没人执行，立即记失败。
         nxt = self.after_arrive
         if isinstance(nxt, dict) and nxt.get("pose") != "_sit_now":
@@ -2472,21 +3424,28 @@ class PoseController(threading.Thread):
             return True
         # T23-8：座位已选好、地形层 1.5 s 还没起步（没有 motion）：
         # 先用真实地形确认最近这段能走，能走就自己走过去；走不了继续原等待。
-        if (self.motion is None and elapsed >= SIT_DIRECT_GRACE
+        if (self.motion is None and ground_elapsed >= SIT_DIRECT_GRACE
+                and self._prop_seat_approach_jump(pending, now)):
+            return False
+        if (self.motion is None and ground_elapsed >= SIT_DIRECT_GRACE
                 and not pending.get("direct_checked")
+                and getattr(self, "_prop_seat_transaction", None) is None
                 and pending.get("command_seq") == getattr(self, "_command_seq", 0)):
             pending["direct_checked"] = True
             if self._sit_direct(pending, now):
                 return False
         # 地面层一直没给出行走对象（路线被挡/规划失败）：超过宽限期就记失败，
         # 不要挂着一个 after_arrive 等到 20 s 才放弃。
-        if self.motion is None and elapsed >= SIT_WALK_GRACE:
+        if self.motion is None and ground_elapsed >= SIT_WALK_GRACE:
             self._sit_failed("walk_not_started", stop=True)
             return True
         return False
 
     def _stand(self):
         """站起：播 GetUpL（mode 7 约 1.2 秒），回到坐下前的站位。"""
+        if getattr(self, "_prop_seat_state", None) is not None:
+            self._prop_seat_exit("stand")
+            return
         if self.sitting is None:
             return
         prev = self.event.stamp()
@@ -2499,42 +3458,173 @@ class PoseController(threading.Thread):
         self._set_override(self.base)
         self.state = {"pose": "idle"}
 
-    def _play(self, key, seconds, label):
-        air = getattr(self, "_air_motion", None)
+    def _play(self, key, seconds, label, _solo_revision=None, _once_request=None):
+        air=getattr(self,"_air_motion",None)
         if air is not None and self.motion is air:
-            # T23-4：空中不能播鞠躬/表情；空中动画只能由 AirMotion 的 clip 写。
-            self.log("anim_skipped", anim=label, reason="air")
-            return
+            self.log("anim_skipped",anim=label,reason="air");return
         if self.sitting is not None:
-            self.log("anim_skipped", anim=label, reason="坐着不做表情")
-            return
+            self.log("anim_skipped",anim=label,reason="坐着不做表情");return
         if not self.anim_lock.acquire(blocking=False):
-            self.log("anim_skipped", anim=label, reason="上一个动画还没播完")
-            return
+            self.log("anim_skipped",anim=label,reason="上一个动画还没播完");return
+        action=None
         try:
-            # “上一个动画”：有过事件就用它的记录，否则用种子里的当前动画
-            if self.event is not None:
-                prev = self.event.stamp()
-            else:
-                f = anim_pose.read(self.seed)
-                prev = {"gen": f["gen"], "key": f["key"], "start": f["start"]}
-            self.event = anim_pose.AnimEvent(key, prev, time.monotonic(), seconds)
-            self._set_override(self.base)
-            self.state = {"pose": "anim", "anim": label}
-            self.log("anim_start", anim=label, generation=self.event.gen, seconds=round(seconds, 2))
-            self.stop.wait(seconds + 0.45 + ANIM_GATE_SECONDS)
-            self.state = {"pose": "idle", "last_anim": label}
-            self.log("anim_done", anim=label, generation=self.event.gen, start=self.event.start)
-        except Exception as exc:
-            self.log("anim_error", anim=label, error=str(exc)[:200])
+            with self.__dict__.setdefault("_solo_lock",threading.RLock()):
+                if _solo_revision is not None and _solo_revision!=getattr(self,"_solo_revision",0):return
+                if self._solo_start(key,label):return
+                prev=self.event.stamp() if self.event is not None else anim_pose.read(self.seed)
+                ev=anim_pose.AnimEvent(key,prev,time.monotonic(),seconds)
+                action=self._once_begin(ev,"anim",label,_once_request)
+                if action is None:return
+                self.log("anim_start",anim=label,generation=ev.gen,seconds=round(seconds,2))
+            complete=self._once_wait(action,ev.t0+seconds+.45+ANIM_GATE_SECONDS)
+            if complete or action["cancel"].is_set() or self.stop.is_set():
+                self.log("anim_done",anim=label,generation=ev.gen,start=ev.start,cut=not complete)
+        except Exception as exc:self.log("anim_error",anim=label,error=str(exc)[:200])
         finally:
-            self.anim_lock.release()
+            if action is not None:self._once_finish(action,"done_or_cancelled")
+            else:self.anim_lock.release()
 
     # ------------------------------------------------------------------ #
     # T23-2 shout: short / long / medium calls.  Command path: control
     # {"pose":"shout","kind":"short"|"long"|"medium","count":1..5}.  Idle
     # path is opt-in through <control>/shout.json (missing file = never).
     # ------------------------------------------------------------------ #
+    def _once_begin(self, event, kind, label, expected_seq=None):
+        """一次性动作只借用动画字段；不抹掉地面移动/跟随意图。"""
+        from threading import Event
+        lock=self.__dict__.setdefault("_once_lock",threading.RLock())
+        with lock:
+            if expected_seq is not None and expected_seq!=getattr(self,"_command_seq",0):
+                self.log("once_action_skipped",reason="stale_command",kind=kind)
+                return None
+            previous=dict(self.state)
+            previous_event,previous_state=self.event,self.state
+            previous_override=dict(map_long_engine.POSE_OVERRIDE)
+            action=dict(event=event,kind=kind,label=label,previous_state=previous,
+                follow=self.follow,command_seq=getattr(self,"_command_seq",0),
+                room_generation=getattr(self.tracker,"room_generation",None),
+                cancel=Event(),lock_owned=True)
+            self._once_action=action
+            self.event=event
+            if self.follow is not None:
+                self.state=dict(pose="follow",target=str(self.follow.get("target",""))[:8])
+            elif self.motion is not None or previous.get("pose")=="walk":
+                self.state=previous if previous.get("pose")=="walk" else dict(pose="walk")
+            else:
+                self.state=dict(pose="shout" if kind=="shout" else "anim",anim=label)
+            action["display_state"]=self.state
+            try:
+                self._set_override(self.base)
+            except Exception:
+                # begin未返回给调用方；由调用方释放刚取得的anim_lock，绝不留半发布owner。
+                if getattr(self,"_once_action",None) is action:
+                    owns_override=self.event is event and self.state is action["display_state"]
+                    self._once_action=None
+                    if self.event is event:self.event=previous_event
+                    if self.state is action["display_state"]:self.state=previous_state
+                    if owns_override:
+                        map_long_engine.POSE_OVERRIDE.clear();map_long_engine.POSE_OVERRIDE.update(previous_override)
+                action["cancel"].set();action["lock_owned"]=False
+                raise
+            return action
+
+    def _once_release(self, action):
+        if action is None:return
+        with self.__dict__.setdefault("_once_lock",threading.RLock()):
+            if action.get("lock_owned"):
+                action["lock_owned"]=False
+                self.anim_lock.release()
+
+    def _once_idle_event(self, event):
+        """工程化收尾：普通idle字段/底板，不重放已结束ShoutCharge或鞠躬。"""
+        base=self.base
+        previous=event.stamp()
+        module=globals().get("shout_mod")
+        class IdleAfterOnce(anim_pose.AnimEvent):
+            def __init__(self):
+                super().__init__(0,previous,time.monotonic()-1.,seconds=0.)
+                self._ordinary=anim_pose.read(base)
+                self._pose=anim_pose.pose_values(base)
+                self._shout_values=({module.FLAG_TOKEN:module._read_value(base,module.FLAG_TOKEN),
+                    module.TYPE_TOKEN:module._read_value(base,module.TYPE_TOKEN)} if module else None)
+            def post(self, body, now):
+                body=super().post(body,now)
+                present=anim_pose.read(body)
+                values=dict(emote_hold=0,emote_state=0,h_key=0)
+                for name in ("code_f48","code_f70"):
+                    if name in self._ordinary:values[name]=self._ordinary[name]
+                body=anim_pose.write(body,**{k:v for k,v in values.items() if k in present})
+                body=anim_pose.write_pose_fields(body,self._pose)
+                if self._shout_values is not None:body=module._patch_values(body,self._shout_values)
+                return body
+        return IdleAfterOnce()
+
+    def _once_finish(self, action, reason="done"):
+        if action is None:return False
+        lock=self.__dict__.setdefault("_once_lock",threading.RLock())
+        with lock:
+            # Timer返回不代表动画时钟已到；首帧时钟未推进时保留给帧门收尾。
+            if (reason=="done_or_cancelled" and getattr(self,"_once_action",None) is action
+                    and not action["cancel"].is_set() and not self.stop.is_set()
+                    and time.monotonic()<action.get("deadline",-float("inf"))):
+                return False
+            action.setdefault("finish_reason",reason)
+            action["cancel"].set()
+            current=getattr(self,"_once_action",None) is action
+            try:
+                if current:
+                    self._once_action=None
+                    owned=self.event is action["event"]
+                    same_room=action["room_generation"]==getattr(self.tracker,"room_generation",None)
+                    if owned and not same_room:self.event=None
+                    if owned and same_room:
+                        self.event=self._once_idle_event(action["event"])
+                        if self.state is action["display_state"]:
+                            if self.follow is not None:
+                                self.state=dict(pose="follow",target=str(self.follow.get("target",""))[:8])
+                            elif self.motion is not None or reason=="movement:walk":
+                                self.state=dict(pose="walk")
+                            elif action["command_seq"]==getattr(self,"_command_seq",0):
+                                prior=action["previous_state"]
+                                self.state=dict(prior) if prior.get("pose") not in ("shout","anim") else dict(pose="idle")
+                            else:self.state=dict(pose="idle")
+                        self._set_override(self.base)
+                    self.log("once_action_finished",kind=action["kind"],reason=reason,
+                        restored=bool(owned and same_room),follow=self.follow is not None)
+            except Exception as exc:
+                if current and self.event is action["event"]:self.event=None
+                self.log("once_cleanup_error",kind=action["kind"],error=str(exc)[:160])
+            finally:self._once_release(action)
+            return current
+
+    def _once_wait(self, action, deadline):
+        action["deadline"]=deadline
+        if action["cancel"].is_set():return action.get("finish_reason")=="frame_deadline"
+        stopped=self.stop.wait(max(0.,deadline-time.monotonic()))
+        if action["cancel"].is_set():return action.get("finish_reason")=="frame_deadline"
+        return not stopped and time.monotonic()>=deadline
+
+    def _once_before_motion(self, source="walk"):
+        action=getattr(self,"_once_action",None)
+        if action is not None:self._once_finish(action,"movement:"+source)
+
+    def _once_command(self, cmd):
+        if cmd.get("pose") in ("follow","walk","explore","approach","sit","_sit_now",
+                "stand","stop","idle","candle","accept_offer","active_offer","release"):
+            self._once_before_motion(str(cmd.get("pose")))
+
+    def _once_before_frame(self, now):
+        action=getattr(self,"_once_action",None)
+        if action is None:return
+        if (self.event is not action["event"]
+                or action["room_generation"]!=getattr(self.tracker,"room_generation",None)):
+            self._once_finish(action,"owner_changed")
+        elif self.motion is not None or self.social is not None or self._active_running() or self.sitting is not None:
+            self._once_finish(action,"movement_or_social")
+        elif (action.get("remaining",1)<=1
+                and now>=action["event"].t0+action["event"].seconds+(.35 if action["kind"]=="shout" else .45+ANIM_GATE_SECONDS)):
+            self._once_finish(action,"frame_deadline")
+
     def _shout_config(self):
         """control/shout.json -> dict 或 None（文件不存在/没开 idle_enabled）。"""
         now = time.monotonic()
@@ -2604,104 +3694,84 @@ class PoseController(threading.Thread):
             return "short", random.choice((2, 3))
         return "short", 1
 
+    @_solo_action
     def _shout(self, kind, count=1, source="command", now=None):
-        """开始一组叫声（非阻塞）。成功返回 True；跳过打 shout_skipped。"""
-        now = time.monotonic() if now is None else now
-        reason = self._shout_busy_reason()
+        """一次性叫声，不覆盖跟随意图；移动/新动作可有界中断。"""
+        now=time.monotonic() if now is None else now
+        reason=self._shout_busy_reason()
         if reason is not None:
-            self.log("shout_skipped", kind=kind, count=count, source=source, reason=reason)
+            self.log("shout_skipped",kind=kind,count=count,source=source,reason=reason)
             return False
         if not self.anim_lock.acquire(blocking=False):
-            self.log("shout_skipped", kind=kind, count=count, source=source, reason="anim_busy")
+            self.log("shout_skipped",kind=kind,count=count,source=source,reason="anim_busy")
             return False
-        started = False
+        action=None;started=False
         try:
-            if self.event is not None:
-                prev = self.event.stamp()
-            else:
-                f = anim_pose.read(self.seed)
-                prev = {"gen": f["gen"], "key": f["key"], "start": f["start"]}
-            ev = shout_mod.ShoutEvent(kind, prev, now)
-            self._shout_spawn(kind)
-            self.event = ev
-            self._set_override(self.base)
-            self.state = {"pose": "shout", "kind": kind, "count": count, "source": source}
-            self._last_shout_at = now
-            self.log("shout_start", kind=kind, index=1, count=count, source=source,
-                     generation=ev.gen, seconds=round(ev.seconds, 2))
-            threading.Thread(target=self._shout_run, args=(ev, kind, count, source),
-                             daemon=True, name="shout").start()
-            started = True
+            prev=self.event.stamp() if self.event is not None else anim_pose.read(self.seed)
+            ev=shout_mod.ShoutEvent(kind,prev,now)
+            action=self._once_begin(ev,"shout",kind)
+            if action is None:return False
+            action["remaining"]=count
+            self._shout_spawn(kind,action)
+            self._last_shout_at=now
+            self.log("shout_start",kind=kind,index=1,count=count,source=source,generation=ev.gen,seconds=round(ev.seconds,2))
+            threading.Thread(target=self._shout_run,args=(ev,kind,count,source,action),daemon=True,name="shout").start()
+            started=True
             return True
         except Exception as exc:
-            self.log("shout_error", kind=kind, error=str(exc)[:200])
+            self.log("shout_error",kind=kind,error=str(exc)[:200])
             return False
         finally:
             if not started:
-                self.anim_lock.release()
+                if action is not None:self._once_finish(action,"start_error")
+                else:self.anim_lock.release()
 
-    def _shout_spawn(self, kind):
-        """发 SpawnShout（光晕+叫声音效）。大叫在蓄力结束、真正叫出来时发。失败只记日志，不影响动画。"""
+    def _shout_spawn(self, kind, action=None):
+        """延迟光晕沿用原时序；已取消事件的Timer不再发旧SpawnShout。"""
+        def current():
+            return action is None or (getattr(self,"_once_action",None) is action
+                and not action["cancel"].is_set() and self.event is action["event"])
         def send():
+            if not current():return
             try:
-                with self.tracker.lock:
-                    own = self.tracker._own_social_binding_locked()
-                epoch = LAST_EPOCH
+                with self.tracker.lock:own=self.tracker._own_social_binding_locked()
+                epoch=LAST_EPOCH
                 if own is None or epoch is None:
-                    self.log("shout_spawn_skipped", kind=kind, own=own, epoch=epoch)
+                    self.log("shout_spawn_skipped",kind=kind,own=own,epoch=epoch)
                     return
-                game = shout_mod.send_spawn_shout(epoch, own, kind)
-                self.log("shout_spawn", kind=kind, own=own, body=game[-8:].hex())
-            except Exception as exc:
-                self.log("shout_spawn_error", kind=kind, error=str(exc)[:160])
-        if kind == "long":
-            threading.Timer(shout_mod.CHARGE_SECONDS, send).start()
-        else:
-            send()
+                if not current():return
+                game=shout_mod.send_spawn_shout(epoch,own,kind)
+                self.log("shout_spawn",kind=kind,own=own,body=game[-8:].hex())
+            except Exception as exc:self.log("shout_spawn_error",kind=kind,error=str(exc)[:160])
+        if kind=="long":threading.Timer(shout_mod.CHARGE_SECONDS,send).start()
+        else:send()
 
-    def _shout_run(self, first, kind, count, source):
-        """按真人时间表播 count 声。
-
-        短/中叫是“上一声开始后 0.3–0.6 s 就接下一声”（真人连叫会重新起动画，
-        不是等上一段完全播完）；大叫是完整 1.2+3.6 s 后再接下一声。
-        """
-        ev, started = first, time.monotonic()
+    def _shout_run(self, first, kind, count, source, action=None):
+        """按原叫声时序播放；过期worker只释放自己的锁，不恢复旧意图。"""
+        action=action or getattr(self,"_once_action",None)
+        if action is None:return
+        ev,started=first,first.t0
         try:
-            for index in range(1, count + 1):
-                if index < count:
-                    gap = random.uniform(*SHOUT_CHAIN_GAP)
-                    wait = (ev.seconds + shout_mod.GATE_SECONDS + gap if kind == "long"
-                            else max(0.0, started + gap - time.monotonic()))
-                    if self.stop.wait(wait):
-                        break
-                    # 上一声还没有完全结束就被下一声替换：记一次 cut=True 的 done。
-                    self.log("shout_done", kind=kind, index=index, count=count,
-                             generation=ev.gen, start=ev.start, cut=kind != "long")
-                    reason = self._shout_busy_reason()
-                    if reason is not None and reason != "anim_busy":
-                        self.log("shout_skipped", kind=kind, index=index + 1, source=source, reason=reason)
-                        break
-                    prev = self.event.stamp() if self.event is not None else ev.stamp()
-                    ev = shout_mod.ShoutEvent(kind, prev, time.monotonic())
-                    self._shout_spawn(kind)
-                    self.event = ev
-                    started = time.monotonic()
+            for index in range(1,count+1):
+                action["remaining"]=count-index+1
+                gap=random.uniform(*SHOUT_CHAIN_GAP) if index<count else 0.
+                duration=(ev.seconds+shout_mod.GATE_SECONDS+gap if kind=="long" or index==count else gap)
+                complete=self._once_wait(action,started+duration)
+                self.log("shout_done",kind=kind,index=index,count=count,generation=ev.gen,start=ev.start,
+                    cut=not complete or (index<count and kind!="long"))
+                if not complete or index==count:break
+                with self.__dict__.setdefault("_once_lock",threading.RLock()):
+                    if getattr(self,"_once_action",None) is not action or self.event is not ev:break
+                    reason=self._shout_busy_reason()
+                    if reason is not None and reason!="anim_busy":break
+                    ev=shout_mod.ShoutEvent(kind,ev.stamp(),time.monotonic())
+                    action["event"]=self.event=ev;started=ev.t0
                     self._set_override(self.base)
-                    self.state = {"pose": "shout", "kind": kind, "count": count,
-                                  "source": source, "index": index + 1}
-                    self.log("shout_start", kind=kind, index=index + 1, count=count, source=source,
-                             generation=ev.gen, seconds=round(ev.seconds, 2))
-                    continue
-                if self.stop.wait(max(0.0, started + ev.seconds + shout_mod.GATE_SECONDS - time.monotonic())):
-                    break
-                self.log("shout_done", kind=kind, index=index, count=count,
-                         generation=ev.gen, start=ev.start, cut=False)
-            if not self.stop.is_set():
-                self.state = {"pose": "idle", "last_shout": kind}
-        except Exception as exc:
-            self.log("shout_error", kind=kind, error=str(exc)[:200])
-        finally:
-            self.anim_lock.release()
+                    self.log("shout_start",kind=kind,index=index+1,count=count,source=source,
+                        generation=ev.gen,seconds=round(ev.seconds,2))
+                self._shout_spawn(kind,action)
+        except Exception as exc:self.log("shout_error",kind=kind,error=str(exc)[:200])
+        finally:self._once_finish(action,"done_or_cancelled")
 
     def _shout_idle_ready(self, now, min_gap):
         """独自叫的前提：没人管、没跟随、在 explore/idle、房间里有别人。"""
@@ -2791,6 +3861,7 @@ class PoseController(threading.Thread):
             except Exception as exc:
                 self.log("shout_idle_error", error=str(exc)[:200])
             try:
+                self._prop_seat_tick()
                 self._sit_tick()
             except Exception as exc:
                 self.log("sit_tick_error", error=str(exc)[:200])
@@ -2826,6 +3897,7 @@ class PoseController(threading.Thread):
         g = self.terrain_ground(ex, ez, ty)
         return (ex, g if g is not None else ty, ez), (tx, ty, tz), d
 
+    @_solo_action
     def _aim_candle(self, target, slot, origin):
         """按目标当前位置重建举烛姿态（瞄准点 = 目标位置），身体转向目标。"""
         body, _ = candle_pose.build(self.base, target_slot=slot, target_origin=origin)
@@ -2958,6 +4030,9 @@ class PoseController(threading.Thread):
                     diag[slot] = now
                     self.log("candle_seen_no_reply", slot=hex(slot), why=why, dist=round(d, 1))
                 continue
+            with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+                if self._solo_defer(type(self)._candle_reply_tick, (), {}):
+                    return
             cd[slot] = now
             who = slots[slot]
             self._aim_candle(who, slot, tuple(o[:3]))
@@ -3022,6 +4097,670 @@ class PoseController(threading.Thread):
     # T23-1 air follow.  Everything here is inert unless
     # <control>/air_follow.json says {"enabled": true, "follow": true}.
     # ------------------------------------------------------------------ #
+    def _stuck_binding(self):
+        return (getattr(self, "map_id", None),
+                getattr(self.tracker, "room_generation", None),
+                getattr(self, "_command_seq", 0))
+
+    def _stuck_reset_intent(self):
+        # reset/switch_map/relocate 的旧点目标不能复活；保留中的空中动画仍由原逻辑落地。
+        self._stuck_intent = self._stuck_tracker = None
+        self._stuck_request = self._stuck_cold_wait = self._stuck_poll = None
+        self._stuck_resume = self._stuck_flight = None
+        self._stuck_goal_seen = self._stuck_follow_safe_goal = None
+        self._stuck_unknown_support = self._stuck_support_observers = None
+
+    def _stuck_note_walk(self, goal, label="", face=None, speed=anim_pose.WALK_SPEED):
+        """只记录逻辑目标；不把 bounded_pilot 分段许可当成新意图。"""
+        if label == "bounded_pilot" or stuck_recovery is None:
+            return
+        try:
+            goal = tuple(float(v) for v in goal)
+            if len(goal) != 3 or not all(math.isfinite(v) for v in goal):
+                return
+        except (TypeError, ValueError, OverflowError):
+            return
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            follow = self.follow or {}
+            kind = label if label in ("follow", "seat") else "movement"
+            subject = follow.get("target") if kind == "follow" else kind
+            key = (self._stuck_binding(), kind, subject)
+            previous = getattr(self, "_stuck_intent", None)
+            if previous is not None and previous["key"] == key:
+                tracker = getattr(self, "_stuck_tracker", None)
+                if (tracker is not None and tracker.exhausted and kind == "movement"
+                        and label not in ("seat_exit", "seat_rollback")
+                        and _dist(previous["goal"], goal) > .05):
+                    self._stuck_tracker = None
+                    self._stuck_limit_logged = False
+                    self._stuck_rejected_landings = []
+                    self.log("stuck_recovery_rearmed", reason="new_movement_goal")
+                previous.update(goal=goal, label=label, face=face, speed=speed)
+                return
+            old_tracker = getattr(self, "_stuck_tracker", None)
+            if (previous is not None and old_tracker is not None and old_tracker.exhausted
+                    and previous["binding"][:2] == self._stuck_binding()[:2]
+                    and previous["binding"][2] != self._stuck_binding()[2]):
+                self.log("stuck_recovery_rearmed", reason="new_movement_command", intent=label)
+            self._stuck_intent = dict(key=key, binding=self._stuck_binding(), goal=goal,
+                                     label=label, face=face, speed=speed,
+                                     command_started_at=time.monotonic())
+            self._stuck_tracker = None
+            self._stuck_limit_logged = False
+            self._stuck_rejected_landings = []
+
+    def _stuck_request_bind(self, runtime):
+        intent = getattr(self, "_stuck_intent", None)
+        self._stuck_request = (runtime, getattr(runtime, "_request_id", None),
+                               None if intent is None else intent["key"],
+                               getattr(getattr(runtime, "backend", None), "last_route_diagnostic", None))
+        self._stuck_cold_wait = (runtime, self._stuck_request[2], time.monotonic())
+
+    def _stuck_current(self, intent):
+        if intent is None or intent["binding"] != self._stuck_binding():
+            return False
+        current = getattr(self, "_stuck_intent", None)
+        if current is None or current["key"] != intent["key"]:
+            return False
+        if intent["label"] == "follow":
+            return bool(self.follow and self.follow.get("target") == intent["key"][2])
+        if intent["label"] == "seat":
+            pending = getattr(self, "_sit_pending", None)
+            return bool(pending and pending.get("command_seq") == self._command_seq)
+        return True
+
+    def _stuck_deferred(self, reason):
+        if reason != getattr(self, "_stuck_deferred_reason", None):
+            self._stuck_deferred_reason = reason
+            self.log("stuck_recovery_deferred", reason=reason)
+
+    def _stuck_pause(self, runtime, now):
+        intent, tracker = getattr(self, "_stuck_intent", None), getattr(self, "_stuck_tracker", None)
+        if intent is not None and tracker is not None:
+            tracker.observe(intent["key"], self.position, now, moving=False)
+        self._stuck_seen_prepare = (runtime, getattr(runtime, "last_prepare_decision", None))
+        self._stuck_cold_wait = self._stuck_poll = None
+
+    def _stuck_goal_geometry_revision(self):
+        revision = getattr(self.tracker, "props_revision", None)
+        if callable(revision):
+            try:
+                return revision()
+            except Exception:
+                return None
+        terrain = self._air_terrain()
+        return ("static", id(getattr(terrain, "surface", None))) if terrain is not None else None
+
+    def _stuck_safe_follow_goal(self, goal):
+        """缓存只属于当前原目标；道具/位置/指令变化立即失效。"""
+        cached = getattr(self, "_stuck_follow_safe_goal", None)
+        if cached is None:
+            return goal
+        revision = self._stuck_goal_geometry_revision()
+        if (cached["binding"] != self._stuck_binding() or not self.follow
+                or cached["target"] != self.follow.get("target")
+                or time.monotonic() >= cached["until"] or revision is None
+                or revision != cached["geometry_revision"] or _dist(goal, cached["original"]) > .25):
+            self._stuck_follow_safe_goal = None
+            return goal
+        return cached["goal"]
+
+    def _stuck_invalid_goal(self, runtime, label=None, desired=None, now=None):
+        """目的地失败交回选点，不取得空中/座位/社交所有权。"""
+        now = time.monotonic() if now is None else now
+        if stuck_recovery is None:
+            return None
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            intent = getattr(self, "_stuck_intent", None)
+            if (not self._stuck_current(intent) or self._terrain_social_owns()
+                    or self._air_motion is not None or self._air_block_reason(now) is not None
+                    or getattr(self, "_solo_gate", None) is not None
+                    or isinstance(self.event, anim_pose.ContinuousEmoteEvent)):
+                return None
+            permission = getattr(runtime, "_permission", None)
+            if not callable(permission) or permission() is None:
+                return None
+            decision = getattr(runtime, "last_prepare_decision", None)
+            if decision is None or getattr(decision, "status", None) == "ready":
+                return None
+            seen = getattr(self, "_stuck_goal_seen", None)
+            if seen is not None and seen[0] is runtime and seen[1] is decision:
+                return None
+            bound = getattr(self, "_stuck_request", None)
+            if (bound is None or bound[0] is not runtime or bound[2] != intent["key"]
+                    or bound[1] != getattr(runtime, "_future_request", None)):
+                return None
+            reason = getattr(decision, "reason", "") or ""
+            diagnostic = getattr(getattr(runtime, "backend", None), "last_route_diagnostic", None)
+            if (reason == "worker_prepare_failed" and isinstance(diagnostic, dict)
+                    and diagnostic is not bound[3] and diagnostic.get("operation") == "preparePlan"
+                    and diagnostic.get("status") in ("blocked", "unavailable")):
+                reason = diagnostic.get("reason") or reason
+            if stuck_recovery.classify_failure(reason) != "invalid_goal":
+                return None
+            self._stuck_goal_seen = (runtime, decision)
+            tracker = getattr(self, "_stuck_tracker", None)
+            if tracker is not None:
+                tracker.note_failure(reason, now, token=(id(runtime), bound[1]))
+            result = dict(action="await_new_goal", goal=None, reason=reason, label=intent["label"])
+            if intent["label"] == "seat":
+                result["action"] = "seat_existing_policy"
+            elif intent["label"] == "follow":
+                try:
+                    original, face, _ = self._spot_near(self.follow["target"], self.follow["distance"])
+                    revision = self._stuck_goal_geometry_revision()
+                    selected = stuck_recovery.nearest_supported_goal(self._air_terrain(), original)
+                    if (not self._stuck_current(intent) or permission() is None
+                            or self._terrain_social_owns() or self._air_motion is not None
+                            or self._air_block_reason(now) is not None):
+                        return None
+                    if revision is None or revision != self._stuck_goal_geometry_revision():
+                        selected = dict(goal=None, reason="goal_geometry_changed", tested=0, candidates=0)
+                    goal = selected["goal"]
+                    self._stuck_follow_safe_goal = dict(binding=self._stuck_binding(),
+                        target=self.follow["target"], original=tuple(original), goal=goal,
+                        geometry_revision=revision, until=math.inf if goal is not None else now + 2.0)
+                    result.update(action="follow_near_support", goal=goal, original_goal=tuple(original), face=face,
+                                  selected_reason=selected["reason"], tested=selected["tested"])
+                except (LookupError, KeyError, ValueError, TypeError):
+                    result["action"] = "follow_target_unavailable"
+            elif getattr(self, "_explore_active", False) or intent["label"] in ("route", "target"):
+                result["action"] = "reselect_explore"
+            log_key = (intent["key"], reason, result["action"])
+            logged = getattr(self, "_stuck_goal_log", None)
+            if logged is None or logged[0] != log_key or now-logged[1] >= 5.0:
+                self._stuck_goal_log = (log_key, now)
+                self.log("ground_goal_invalid", reason=reason, intent=intent["label"],
+                         action=result["action"], old_goal=list(intent["goal"]),
+                         new_goal=list(result["goal"]) if result["goal"] is not None else None,
+                         recovery_started=False)
+            return result
+
+    def _stuck_unknown_prop_support(self, now):
+        """短时疑似支撑只压住误触发；从不把观测点拼成可行走大面。"""
+        reader=getattr(self.tracker,'props_snapshot',None)
+        if not callable(reader):return None
+        binding=self._stuck_binding()[:2]
+        old=getattr(self,'_stuck_unknown_support',None)
+        try:snapshot=reader()
+        except Exception:snapshot=None
+        if snapshot is None:
+            return (old['value'] if old and old['binding']==binding
+                    and 0<=now-old['at']<=.25 and _dist(self.position,old['position'])<=.05 else None)
+        if (not snapshot.get('validated') or snapshot.get('room_generation')!=binding[1]
+                or snapshot.get('map_id')!=binding[0]):
+            self._stuck_unknown_support=None
+            return None
+        props=list(snapshot.get('props',[]))+list(snapshot.get('unmodeled_props',[]))
+        if not props:
+            self._stuck_unknown_support=None
+            return None
+        previous=getattr(self,'_stuck_support_observers',None) or {}
+        observers=[];samples={}
+        for row in snapshot.get('support_observers',[])[:64]:
+            if not isinstance(row,dict):continue
+            at=row.get('observed_mono');point=row.get('position');slot=row.get('slot')
+            if (type(at) not in (int,float) or not 0<=now-at<=2.5
+                    or not isinstance(point,(list,tuple)) or len(point)!=3):continue
+            identity=(binding,slot,row.get('uuid'),row.get('version'))
+            before=previous.get(identity)
+            stationary=bool(before and .15<=at-before[0]<=2.5 and _dist(point,before[1])<=.05)
+            samples[identity]=(at,point)
+            observers.append(dict(row,stationary=stationary))
+        self._stuck_support_observers=samples
+        terrain=self._air_terrain()
+        value=stuck_recovery.unmodeled_support_observation(terrain,self.position,
+            props,observers)
+        self._stuck_unknown_support=(dict(value=value,binding=binding,at=now,
+            position=tuple(self.position)) if value else None)
+        return value
+
+    def _stuck_ground_tick(self, runtime, label=None, desired=None, now=None):
+        """Actor 线程的独立脱困通道：不伪造旧 groundFailure，不改正常行走。"""
+        now = time.monotonic() if now is None else now
+        if stuck_recovery is None:
+            return False
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            if getattr(self, "_stuck_flight", None) is not None:
+                if (self._air_motion is not None and self.motion is self._air_motion
+                        and self._stuck_flight.get("air") is self._air_motion):
+                    return True
+                flight, self._stuck_flight = self._stuck_flight, None
+                flight["tracker"].failed(now, "air_owner_lost")
+                self.log("stuck_recovery_failed", reason="air_owner_lost", attempt=flight["tracker"].attempts)
+            resume = getattr(self, "_stuck_resume", None)
+            if resume is not None:
+                self._stuck_resume = None
+                self._stuck_resume_ground(resume, now)
+            self._prop_seat_ground_confirm(runtime, label, desired, now)
+            intent = getattr(self, "_stuck_intent", None)
+            if not self._stuck_current(intent):
+                return False
+            if not self._air_enabled():
+                self._stuck_pause(runtime, now)
+                return False
+            config = (self._air_config() or {}).get("stuck_recovery", {})
+            if not isinstance(config, dict) or config.get("enabled", True) is not True:
+                self._stuck_pause(runtime, now)
+                return False
+            tracker = getattr(self, "_stuck_tracker", None)
+            if tracker is None:
+                try:
+                    fields = stuck_recovery.RecoveryPolicy.__dataclass_fields__
+                    policy = stuck_recovery.RecoveryPolicy(**{k: v for k, v in config.items() if k in fields})
+                except (TypeError, ValueError):
+                    self._stuck_deferred("invalid_config")
+                    return False
+                tracker = self._stuck_tracker = stuck_recovery.RecoveryTracker(policy)
+            busy = (self._terrain_social_owns() or self._air_motion is not None
+                    or self._air_block_reason(now) is not None
+                    or getattr(self, "_solo_gate", None) is not None
+                    or isinstance(self.event, anim_pose.ContinuousEmoteEvent))
+            # 沿用当前准入，过期目标/换房/冷加载不被解释成地形卡住。
+            permission = getattr(runtime, "_permission", None)
+            if busy or not callable(permission) or permission() is None:
+                tracker.observe(intent["key"], self.position, now, moving=False)
+                self._stuck_seen_prepare = (runtime, getattr(runtime, "last_prepare_decision", None))
+                self._stuck_poll = (intent["key"], now, False)
+                return False
+            if intent["label"] == "seat" and self._is_home_map() and self._home_sit_tick():
+                return False
+            goal = intent["goal"]
+            if intent["label"] == "follow":
+                try:
+                    goal, _who, _distance = self._spot_near(self.follow["target"], self.follow["distance"])
+                    intent["goal"] = tuple(goal)
+                except (LookupError, KeyError):
+                    tracker.observe(intent["key"], self.position, now, moving=False)
+                    return False
+            moving = _dist(self.position, goal) > (getattr(self, "_terrain_follow_slack", .6)
+                                                  if intent["label"] == "follow" else .35)
+            unknown=self._stuck_unknown_prop_support(now)
+            explicit_departure=bool(unknown and intent['label'] not in ('seat','seat_rollback')
+                and 0<=now-intent.get('command_started_at',-float('inf'))<=2.
+                and (_dist(self.position,goal)>1.5 or goal[1]<self.position[1]-.25))
+            if unknown and not explicit_departure:
+                tracker.observe(intent['key'],self.position,now,moving=False)
+                self._stuck_seen_prepare=(runtime,getattr(runtime,'last_prepare_decision',None))
+                if now-getattr(self,'_stuck_unknown_logged_at',-float('inf'))>=3.:
+                    self._stuck_unknown_logged_at=now
+                    self.log('unknown_prop_support_wait',**unknown)
+                return False
+            waiting = getattr(runtime, "_future", None) is not None
+            poll = getattr(self, "_stuck_poll", None)
+            cold = getattr(self, "_stuck_cold_wait", None)
+            since = None
+            if cold is not None and cold[0] is runtime and cold[1] == intent["key"]:
+                since = cold[2]
+                self._stuck_cold_wait = (runtime, cold[1], now) if waiting else None
+            if poll is not None and poll[0] == intent["key"] and (waiting or poll[2]):
+                since = poll[1] if since is None else min(since, poll[1])
+            if (since is not None and tracker.intent == intent["key"]
+                    and tracker.last_progress is not None):
+                # 只冻结无进展时钟，不清失败计数；冷准备完成的最后一段也扣除。
+                tracker.last_progress = min(now, tracker.last_progress + max(0., now - since))
+            self._stuck_poll = (intent["key"], now, waiting)
+            tracker.observe(intent["key"], self.position, now, moving=moving)
+            if not moving:
+                return False
+            if tracker.rearm_after_cooldown(now, self.position):
+                self._stuck_limit_logged = False
+                self._stuck_rejected_landings = []
+                # Keep receipt identity and tracker tokens: a cached worker
+                # failure cannot become fresh evidence after the cooldown.
+                self.log("stuck_recovery_rearmed", reason="exhausted_cooldown",
+                         cycle=tracker.cycles,
+                         cooldown=max(tracker.policy.exhausted_cooldown_seconds,
+                                      2*tracker.policy.cooldown_seconds))
+            decision = getattr(runtime, "last_prepare_decision", None)
+            seen = getattr(self, "_stuck_seen_prepare", None)
+            if unknown is not None:
+                self._stuck_seen_prepare=(runtime,decision)
+            if unknown is None and decision is not None and (seen is None or seen[0] is not runtime or seen[1] is not decision):
+                self._stuck_seen_prepare = (runtime, decision)
+                bound = getattr(self, "_stuck_request", None)
+                if (bound is not None and bound[0] is runtime and bound[1] == getattr(runtime, "_future_request", None)
+                        and bound[2] == intent["key"] and getattr(decision, "status", None) != "ready"):
+                    reason = getattr(decision, "reason", "") or ""
+                    diagnostic = getattr(getattr(runtime, "backend", None), "last_route_diagnostic", None)
+                    if (reason == "worker_prepare_failed" and isinstance(diagnostic, dict)
+                            and diagnostic is not bound[3] and diagnostic.get("operation") == "preparePlan"
+                            and diagnostic.get("status") in ("blocked", "unavailable")):
+                        reason = diagnostic.get("reason") or reason
+                    if ((stuck_recovery.classify_failure(reason)=='invalid_start'
+                            or 'nearest_polygon_missing' in str(reason).lower())
+                            and 'start_overlaps_collision' not in str(reason).lower()
+                            and stuck_recovery.dynamic_support_valid(self._air_terrain(),self.position)):
+                        tracker.observe(intent['key'],self.position,now,moving=False)
+                        tracker.observe(intent['key'],self.position,now,moving=True)
+                        if now-getattr(self,'_stuck_platform_logged_at',-float('inf'))>=3.:
+                            self._stuck_platform_logged_at=now
+                            self.log('dynamic_prop_support_wait',reason='navigation_start_missing_not_support',
+                                     route_reason=reason,at=list(self.position))
+                        return False
+                    category = tracker.note_failure(reason, now, token=(id(runtime), bound[1]))
+                    if category != "ignore":
+                        # Count every fresh receipt; log the first two, then one summary per five seconds.
+                        log_key = (intent["key"], category, reason)
+                        logged = getattr(self, "_stuck_failure_log", None)
+                        count = logged[2]+1 if logged and logged[0] == log_key else 1
+                        if logged is None or logged[0] != log_key or count <= 2 or now-logged[1] >= 5.0:
+                            self._stuck_failure_log = (log_key, now, count)
+                            self.log("stuck_ground_failure", category=category, reason=reason,
+                                     failures=tracker.failures, invalid_failures=tracker.invalid_failures,
+                                     intent=intent["label"])
+                        else:
+                            self._stuck_failure_log = (log_key, logged[1], count)
+                    else:
+                        # worker/生命周期错误中断连续几何失败，不能借旧证据乱跳。
+                        tracker.observe(intent["key"], self.position, now, moving=False)
+                        tracker.observe(intent["key"], self.position, now, moving=True)
+                elif getattr(decision, "status", None) == "ready":
+                    tracker.observe(intent["key"], self.position, now, moving=False)
+                    tracker.observe(intent["key"], self.position, now, moving=True)
+            # blocked 直走是真实几何证据，但同一检查只能计一次，不按帧伪造连续失败。
+            pending = getattr(self, "_sit_pending", None)
+            if intent["label"] == "seat" and pending and pending.get("stuck_blocked"):
+                tracker.note_failure("blocked", now, token=("seat_direct", id(pending)))
+            reason = 'unknown_prop_departure' if explicit_departure else tracker.trigger(now)
+            if tracker.exhausted:
+                if not getattr(self, "_stuck_limit_logged", False):
+                    self._stuck_limit_logged = True
+                    self.log("stuck_recovery_stopped", reason="attempt_limit", attempts=tracker.attempts,
+                             intent=intent["label"])
+                return False
+            if reason is None or getattr(runtime, "_future", None) is not None:
+                return False
+            # 等待冷启动/身份验证不是无进展；只有实际地面运动或几何失败允许这一触发。
+            if reason not in ("invalid_start","unknown_prop_departure"):
+                active_route = self.motion is not None and self.motion is getattr(self, "_terrain_motion", None)
+                if (not active_route or tracker.last_progress is None
+                        or now - tracker.last_progress < tracker.policy.stall_seconds):
+                    return False
+                reason = "no_progress"
+            clips, terrain = self._air_clips(), self._air_terrain()
+            if clips is None or not clips.ok or terrain is None:
+                self._stuck_deferred("no_air_clips" if clips is None or not clips.ok else "no_terrain")
+                return False
+            if not tracker.begin_attempt(now):
+                return False
+            try:
+                rejected = getattr(self, "_stuck_rejected_landings", [])
+                plan = stuck_recovery.plan_recovery(terrain, self.position, goal, policy=tracker.policy,
+                    escape_near_prop=(reason=='invalid_start'),
+                    reject=lambda point: any(_dist(point, old) < .5 for old in rejected))
+            except Exception as exc:
+                tracker.failed(now, "geometry_error")
+                self.log("stuck_recovery_failed", reason="geometry_error", error=str(exc)[:160],
+                         attempt=tracker.attempts)
+                return False
+            if plan.get("kind") not in ("jump", "fly"):
+                why = plan.get("reason", "no_safe_landing")
+                tracker.failed(now, why)
+                self.log("stuck_recovery_failed", reason=why, attempt=tracker.attempts)
+                return False
+            # 几何搜索之后再次检查所有者；_air_start 仍经既有 solo -> air 双锁事务。
+            if (not self._stuck_current(intent) or permission() is None
+                    or self._air_block_reason(now) is not None or getattr(self, "_solo_gate", None) is not None):
+                tracker.failed(now, "owner_changed")
+                return False
+            flight = dict(intent=dict(intent), tracker=tracker, started=now,
+                          route=copy.deepcopy(self.route), after=copy.deepcopy(self.after_arrive),
+                          landing=tuple(plan["landing"]))
+            if intent["label"] == "seat" and pending:
+                flight["after"] = {"pose": "_sit_now", "seat": pending["seat"], "info": pending["info"]}
+                if self._is_home_map():
+                    flight["after"]["home_request"] = self._home_sit_pending["request"]
+            plan["stuck_recovery"] = True
+            plan["recovery_intent"] = intent["label"]
+            self._stuck_flight = flight
+            started = self._air_start(plan, now)
+            if not started or self._air_motion is None or self.motion is not self._air_motion:
+                self._stuck_flight = None
+                tracker.failed(now, "air_start_rejected")
+                self.log("stuck_recovery_failed", reason="air_start_rejected", attempt=tracker.attempts)
+                return False
+            flight["air"] = self._air_motion
+            self.__dict__.setdefault("_stuck_rejected_landings", []).append(flight["landing"])
+            self._stuck_deferred_reason = None
+            self.log("stuck_recovery_start", reason=reason, kind=plan["kind"], attempt=tracker.attempts,
+                     start=list(plan["start"]), landing=list(plan["landing"]), intent=intent["label"])
+            return True
+
+    def _stuck_after_land(self, air, now):
+        flight = getattr(self, "_stuck_flight", None)
+        if flight is None or flight.get("air") is not air:
+            return
+        self._stuck_flight = None
+        tracker = flight["tracker"]
+        terrain = self._air_terrain()
+        clearance = air.plan.get("prop_exterior_landing")
+        if (getattr(air, "cancelled", False) or
+                not stuck_recovery.landing_valid(terrain, self.position, policy=tracker.policy)
+                or clearance and not stuck_recovery.prop_exterior_valid(
+                    terrain, self.position, clearance=clearance, policy=tracker.policy)):
+            tracker.failed(now, "landing_not_validated")
+            self.__dict__.setdefault("_stuck_rejected_landings", []).append(flight["landing"])
+            self.log("stuck_recovery_failed", reason="landing_not_validated", attempt=tracker.attempts)
+            self._prop_seat_recovery_landing_failed(flight, now, "landing_not_validated")
+            return
+        tracker.landed(now, self.position)
+        flight["landed_at"] = now
+        # 下一 Actor 才续接，确保真实 landing 帧先经过原有 post 提交；不复用旧 lease。
+        self._stuck_resume = flight
+        self.log("stuck_recovery_landed", at=list(self.position), attempt=tracker.attempts,
+                 intent=flight["intent"]["label"])
+
+    def _stuck_overlap_frame_guard(self, air, now):
+        """Only this recovery's owned AirMotion gets the local-contact proof."""
+        if air.plan.get("static_overlap_escape") and self._air_motion is air and self.motion is air:
+            why = None
+            try:
+                if getattr(air, "_static_overlap_binding", None) != self._stuck_binding()[:2]:
+                    why = "static_overlap_room_changed"
+                else:
+                    terrain = self._air_terrain()
+                    if terrain is None:
+                        why = "static_overlap_geometry_unavailable"
+                    elif not prop_motion_guard.covers(getattr(self, "_terrain_adapter", None), air.plan):
+                        why = "static_overlap_coverage_changed"
+                    else:
+                        state, why = stuck_recovery.static_overlap_frame(
+                            terrain, air, self.position, now-air.t0,
+                            getattr(air, "_static_overlap_frame", None))
+                        if why is None:
+                            air._static_overlap_frame = state
+            except Exception as exc:
+                why = "static_overlap_frame_error"
+                self.log("static_overlap_frame_error", error=str(exc)[:160])
+            if why is not None:
+                if self._air_motion is air and self.motion is air:
+                    self._air_motion = self.motion = self._air_phase = None
+                    self._terrain_last_position = self.position
+                    flight = getattr(self, "_stuck_flight", None)
+                    if flight is not None and flight.get("air") is air:
+                        self._stuck_flight = None
+                        flight["resume_cancelled"] = True
+                        flight["tracker"].failed(now, why)
+                    self.log("air_static_overlap_interrupted", reason=why, at=list(self.position))
+                return False
+        seat_approach=air.plan.get('prop_seat_approach')
+        platform=air.plan.get('prop_platform_transfer') or seat_approach
+        if platform and self._air_motion is air and self.motion is air:
+            why=None
+            try:
+                if tuple(platform.get('binding',()))!=self._stuck_binding()[:2]:
+                    why='prop_platform_room_changed'
+                else:
+                    terrain=self._air_terrain()
+                    if terrain is None:why='prop_platform_geometry_unavailable'
+                    else:
+                        check=(stuck_recovery.prop_seat_approach_frame if seat_approach else stuck_recovery.prop_platform_frame)
+                        state,why=check(terrain,air,self.position,
+                            now-air.t0,getattr(air,'_prop_platform_frame',None))
+                        if why is None:air._prop_platform_frame=state
+            except Exception as exc:
+                why='prop_platform_frame_error'
+                self.log('prop_platform_frame_error',error=str(exc)[:160])
+            if why is not None:
+                if self._air_motion is air and self.motion is air:
+                    self._air_motion=self.motion=self._air_phase=None
+                    self._terrain_last_position=self.position
+                    self.log('prop_platform_interrupted',reason=why,at=list(self.position))
+                return False
+            return True
+        flight = getattr(self, "_stuck_flight", None)
+        if (flight is None or flight.get("air") is not air
+                or self._air_motion is not air or self.motion is not air
+                or not air.plan.get("prop_overlap_escape")):
+            return True
+        why, next_state = None, None
+        try:
+            if flight["intent"]["binding"][:2] != self._stuck_binding()[:2]:
+                why = "prop_overlap_room_changed"
+            else:
+                before = (self._stuck_goal_geometry_revision(),
+                          prop_motion_guard.selection(getattr(self, "_terrain_adapter", None)))
+                terrain = self._air_terrain()
+                if terrain is None:
+                    why = "prop_overlap_geometry_unavailable"
+                elif not prop_motion_guard.covers(getattr(self, "_terrain_adapter", None), air.plan):
+                    why = "prop_overlap_coverage_changed"
+                else:
+                    next_state, why = stuck_recovery.prop_overlap_frame(
+                        terrain, air, self.position, now-air.t0,
+                        flight.get("overlap_frame"), policy=flight["tracker"].policy)
+                    after = (self._stuck_goal_geometry_revision(),
+                             prop_motion_guard.selection(getattr(self, "_terrain_adapter", None)))
+                    if before != after:
+                        why = "prop_overlap_geometry_changed_during_frame"
+        except Exception as exc:
+            why = "prop_overlap_frame_error"
+            self.log("stuck_recovery_frame_error", error=str(exc)[:160])
+        if why is None:
+            flight["overlap_frame"] = next_state
+            return True
+        # Hold the last emitted position. Never render/cancel into an unchecked
+        # new trajectory, and never clear another social/air owner's state.
+        if (self._stuck_flight is flight and self._air_motion is air and self.motion is air):
+            self._stuck_flight = None
+            self._air_motion = self.motion = self._air_phase = None
+            flight["resume_cancelled"] = True
+            if getattr(self, "_stuck_resume", None) is flight:
+                self._stuck_resume = None
+            self._terrain_last_position = self.position
+            flight["tracker"].failed(now, why)
+            self.log("stuck_recovery_interrupted", reason=why, at=list(self.position),
+                     attempt=flight["tracker"].attempts)
+        return False
+
+    def _stuck_seat_rollback(self, goal, now=None):
+        """Control-tick rollback of a failed seat; never revive its sit event."""
+        now = time.monotonic() if now is None else now
+        if stuck_recovery is None:
+            return False
+        with self.__dict__.setdefault("_solo_lock", threading.RLock()):
+            if (not self._air_enabled() or self._terrain_social_owns()
+                    or self._air_motion is not None or self._air_block_reason(now) is not None
+                    or getattr(self, "_solo_gate", None) is not None
+                    or isinstance(self.event, anim_pose.ContinuousEmoteEvent)):
+                return False
+            terrain = self._air_terrain()
+            if terrain is None:
+                return False
+            if stuck_recovery.landing_valid(terrain, self.position):
+                self._stuck_rollback_tracker = None
+                return True
+            clips = self._air_clips()
+            if clips is None or not clips.ok:
+                return False
+            binding = self._stuck_binding()
+            key = (binding, "seat_rollback", tuple(goal))
+            saved = getattr(self, "_stuck_rollback_tracker", None)
+            if saved is None or saved[0] != key:
+                saved = (key, stuck_recovery.RecoveryTracker())
+                self._stuck_rollback_tracker = saved
+            tracker = saved[1]
+            tracker.observe(key, self.position, now, moving=True)
+            if tracker.rearm_after_cooldown(now, self.position):
+                self.log("stuck_recovery_rearmed", reason="seat_rollback_cooldown", cycle=tracker.cycles)
+            if not tracker.begin_attempt(now):
+                return False
+            try:
+                plan = stuck_recovery.plan_recovery(terrain, self.position, goal, policy=tracker.policy)
+            except Exception as exc:
+                tracker.failed(now, "seat_rollback_geometry_error")
+                self.log("stuck_recovery_failed", reason="seat_rollback_geometry_error", error=str(exc)[:160])
+                return False
+            if plan.get("kind") not in ("jump", "fly"):
+                tracker.failed(now, plan.get("reason", "no_safe_landing"))
+                self.log("stuck_recovery_failed", reason=plan.get("reason"), intent="seat_rollback",
+                         attempt=tracker.attempts)
+                return False
+            if (binding != self._stuck_binding() or self._terrain_social_owns()
+                    or self._air_motion is not None or self._air_block_reason(now) is not None):
+                tracker.failed(now, "owner_changed")
+                return False
+            intent = dict(key=key, binding=binding, goal=tuple(goal), label="seat_rollback",
+                          face=None, speed=anim_pose.WALK_SPEED)
+            flight = dict(intent=intent, tracker=tracker, started=now, route=[], after=None,
+                          landing=tuple(plan["landing"]), seat_rollback=True)
+            plan.update(stuck_recovery=True, recovery_intent="seat_rollback")
+            self._stuck_flight = flight
+            if not self._air_start(plan, now) or self._air_motion is None or self.motion is not self._air_motion:
+                self._stuck_flight = None
+                tracker.failed(now, "air_start_rejected")
+                return False
+            flight["air"] = self._air_motion
+            self.log("stuck_recovery_start", reason="seat_rollback_invalid_stand", kind=plan["kind"],
+                     start=list(plan["start"]), landing=list(plan["landing"]), intent="seat_rollback",
+                     attempt=tracker.attempts)
+            return True
+
+    def _stuck_resume_ground(self, flight, now):
+        if self._prop_seat_resume_after_recovery(flight):
+            if getattr(self,'_stuck_resume',None) is flight:
+                self._stuck_resume=None
+            return
+        if flight.get("seat_rollback"):
+            latest = getattr(self, "_stuck_intent", None)
+            if (not self._stuck_current(latest) or latest["label"] in ("seat", "seat_rollback")
+                    or flight.get("resume_cancelled")):
+                self.log("stuck_recovery_resume_skipped", reason="seat_rollback_no_new_movement")
+                return
+            # Read the latest intent, not the failed seat's saved continuation.
+            flight = dict(flight, intent=dict(latest), route=[], after=None)
+        if self._prop_seat_recovery_resume(flight, now):
+            return
+        intent = flight["intent"]
+        if (flight.get("resume_cancelled") or not self._stuck_current(intent) or self._terrain_social_owns()
+                or self._air_motion is not None or not self._air_enabled()):
+            self.log("stuck_recovery_resume_skipped", reason="intent_or_owner_changed")
+            return
+        goal = intent["goal"]
+        if intent["label"] == "follow":
+            try:
+                goal, face, _ = self._spot_near(self.follow["target"], self.follow["distance"])
+                intent["face"] = face
+            except (LookupError, KeyError):
+                self.log("stuck_recovery_resume_skipped", reason="target_lost")
+                return
+        if intent["label"] == "seat":
+            if self._is_home_map() and self._home_sit_tick():
+                return
+            pending = self._sit_pending
+            pending["stuck_ground_since"] = now
+            pending["direct_checked"] = False
+            pending.pop("stuck_blocked", None)
+            self._walk_ref = pending.get("ref")
+        result = self.walk_to(goal, intent["label"], face=intent["face"], speed=intent["speed"])
+        if result is not False and self._stuck_current(intent):
+            self.route, self.after_arrive = flight["route"], flight["after"]
+            self.log("stuck_recovery_replan", intent=intent["label"], at=list(self.position),
+                     goal=list(goal), old_lease_reused=False)
+        else:
+            self.log("stuck_recovery_failed", reason="ground_requeue_rejected", attempt=flight["tracker"].attempts)
+
     def _air_config(self):
         now = time.monotonic()
         if now - self._air_cfg_at < 1.0:
@@ -3044,10 +4783,37 @@ class PoseController(threading.Thread):
         adapter = getattr(self, "_terrain_adapter", None)
         if air_terrain is None or adapter is None:
             return None
-        key = (id(adapter), bool(getattr(adapter, "enabled", False)))
+        key = (id(adapter), bool(getattr(adapter, "enabled", False)),
+               prop_motion_guard.selection(adapter))
+        revision_reader = getattr(getattr(self, "tracker", None), "props_revision", None)
+        revision = None
+        if callable(revision_reader):
+            try:
+                revision = revision_reader()
+            except Exception:
+                revision = None
+            if (type(revision) is not tuple or len(revision) != 2
+                    or any(type(value) is not int or value < 0 for value in revision)):
+                # 未取得当前房间版本时不能继续用旧桌面，也不能把忙当作有效空表。
+                self._air_terrain_key = self._air_terrain_view = None
+                return None
+            key += revision
         if key != self._air_terrain_key or not getattr(self._air_terrain_view, "has_hits", False):
-            self._air_terrain_key = key
-            self._air_terrain_view = air_terrain.terrain_view(adapter)
+            view = air_terrain.terrain_view(adapter)
+            if prop_motion_guard.selection(adapter) != key[2]:
+                self._air_terrain_key = self._air_terrain_view = None
+                return None
+            if callable(revision_reader):
+                try:
+                    after = revision_reader()
+                except Exception:
+                    after = None
+                if (type(after) is not tuple or len(after) != 2
+                        or any(type(value) is not int or value < 0 for value in after)
+                        or after != revision):
+                    self._air_terrain_key = self._air_terrain_view = None
+                    return None
+            self._air_terrain_key, self._air_terrain_view = key, view
         return self._air_terrain_view
 
     def _air_clips(self):
@@ -3114,6 +4880,10 @@ class PoseController(threading.Thread):
 
     def _air_tick(self, now):
         """While an air plan owns movement: cancel on interrupt, else keep it."""
+        from air_follow_runtime import tick as _tick_air_follow
+        follow_result = _tick_air_follow(self, now)
+        if follow_result is not None:
+            return follow_result
         air = self._air_motion
         if air is None:
             return False
@@ -3131,6 +4901,13 @@ class PoseController(threading.Thread):
                 or self.candle is not None or self._active_running()):
             self._air_cancel("social", now)
             return True
+        if air.plan.get("stuck_recovery"):
+            flight = getattr(self, "_stuck_flight", None)
+            if flight is None or not self._stuck_current(flight["intent"]):
+                # 目标取消只取消续接：短程静态落点已经验证，不因座位/点目标失效悬停。
+                if flight is not None:
+                    flight["resume_cancelled"] = True
+            return True  # 固定就近落点；不追着跟随目标改航，也不要求 seat/explore 有 follow。
         follow = self.follow or {}
         if not follow:
             self._air_cancel("no_follow", now)
@@ -3208,8 +4985,14 @@ class PoseController(threading.Thread):
             return "hop_active"
         return None
 
+    @_solo_action
+    @upright_action
     def _air_start(self, plan, now):
         """Create AirMotion from a planner result and take movement ownership."""
+        self._once_before_motion('air')
+        if not prop_motion_guard.covers(getattr(self, "_terrain_adapter", None), plan):
+            self._air_log_plan(now, kind="none", reason="props_path_coverage_missing")
+            return False
         # T23-4：AirMotion 和旧 hop 不能同时驱动。这里先 hard-cancel hop 再接管；
         # hop 是旧的“小跳补台阶”实现，AirMotion 是本次跟随的完整轨迹，保留
         # AirMotion 才能保证位置/落地连续，hop 的半步只会在空中抢帧。
@@ -3220,9 +5003,12 @@ class PoseController(threading.Thread):
         # Actor back while the air motion is driving.
         if getattr(self, "_terrain_adapter", None) is not None:
             self._terrain_invalidate()
-        motion = air_motion.AirMotion(
+        from air_follow_runtime import motion_type as _air_motion_type
+        motion = _air_motion_type(plan, air_motion.AirMotion)(
             plan, now, clips=self._air_clips(), walk_clip=self.walk_clip,
             terrain=self._air_terrain(), log=self.log)
+        if plan.get("static_overlap_escape"):
+            motion._static_overlap_binding = self._stuck_binding()[:2]
         stop = self.__dict__.get("_terrain_stop")
         if stop is None:
             from threading import RLock
@@ -3260,6 +5046,9 @@ class PoseController(threading.Thread):
             self._air_log_plan(now, kind="none", reason="no_clips",
                                dist=round(distance, 2))
             return False
+        if not prop_motion_guard.focus(getattr(self, "_terrain_adapter", None), self.position, who):
+            self._air_log_plan(now, kind="none", reason="props_focus_unavailable")
+            return False
         terrain = self._air_terrain()
         follow = self.follow or {}
         target_key = follow.get("target")
@@ -3269,13 +5058,21 @@ class PoseController(threading.Thread):
             self._air_log_plan(now, kind="none", reason="no_terrain",
                                start=[round(v, 2) for v in start], dist=round(distance, 2))
             return False
+        from air_follow_runtime import maybe_start as _start_air_follow
+        if _start_air_follow(self, terrain, who, now):
+            return True
         settled, why = self._air_target_settled(who, terrain, now)
         if not settled:
             self._air_log_plan(now, kind="none", reason=why, dist=round(distance, 2))
             return False
         failed = self._air_fail_seconds(target_key)
         result = air_planner.plan(terrain, start, who, follow.get("distance", 1.2),
-                                  terrain_failed_seconds=failed)
+                                  # A stop/timeout is not a bound groundFailure receipt.
+                                  # Preserve height-driven jump/drop/fly, not timer-driven flat flight.
+                                  terrain_failed_seconds=0.0)
+        result = stuck_recovery.plan_prop_transfer(terrain,start,result)
+        if result.get('prop_platform_transfer'):
+            result['prop_platform_transfer']['binding']=self._stuck_binding()[:2]
         summary = air_planner.describe(result)
         self._air_log_plan(now, dist=round(distance, 2), failed=round(failed, 2), **summary)
         if result.get("kind") not in ("jump", "drop", "fly"):
@@ -3283,25 +5080,22 @@ class PoseController(threading.Thread):
         return self._air_start(result, now)
 
     def _air_step_maybe(self, spot, who, now):
-        """地上跟随卡住（没在走、离站位还有 >1.2 m、持续 >=1 s）时，看前方有没有石块台阶，
-        有就直接跳上/跳下（air_plan reason=stone_step），不等地面寻路。"""
+        """Do not turn idle/cold-planning time into an unproved air route.
+
+        Real obstacle hops remain owned by FollowHopCoordinator and its bound
+        groundFailure receipt. Height-driven air plans use _air_maybe. This
+        compatibility entry only records why the old timeout rescue is deferred.
+        """
         if self._air_motion is not None:
             return True
-        blocked = self._air_block_reason(now)
-        if blocked is not None:
-            self._air_stall_since = None
-            return False
-        if (self.motion is not None or self.sitting is not None or self.holding or self.candle is not None
+        if (self.motion is not None or self._air_block_reason(now) is not None
+                or self.sitting is not None or self.holding or self.candle is not None
                 or self.social is not None or self._active_running()):
             self._air_stall_since = None
             return False
         if _dist(self.position, spot) <= 1.2:
             self._air_stall_since = None
             return False
-        # 2026-11-07 T23-5（哥哥：遇到障碍物还是有延时）：地面寻路冷规划 0.8–1.3 s、目标脚下没地面还要
-        # 失败重试。改为看“最后一次在动是多久前”（_post 每帧记），停住 >=0.5 s 就处理：
-        #   先看前方石块台阶（stone_step）；没有台阶且离站位 <=4 m 直接小跳到站位（stall_hop）；
-        #   更远且停住 >=1.5 s 按地面走不通飞过去（terrain_failed）。
         last = getattr(self, "_air_last_moving", None)
         since = getattr(self, "_air_stall_since", None)
         if since is None:
@@ -3309,25 +5103,13 @@ class PoseController(threading.Thread):
         if last is not None and last > since:
             since = self._air_stall_since = last
         stall = now - since
-        if stall < 0.5:
-            return False
-        terrain = self._air_terrain()
-        if terrain is None:
-            return False
-        follow_distance = (self.follow or {}).get("distance", 1.2)
-        result = air_planner.plan_step_jump(terrain, self.position, who, follow_distance)
-        if result is None and _dist(self.position, spot) <= 4.0:
-            result = air_planner.plan_stall_hop(terrain, self.position, spot, who)
-        if result is None and stall >= 1.5:
-            result = air_planner.plan(terrain, self.position, who, follow_distance,
-                                      terrain_failed_seconds=stall + 2.0)
-            if result.get("kind") not in ("jump", "drop", "fly"):
-                result = None
-        if result is None:
-            return False
-        self._air_stall_since = None
-        self._air_log_plan(now, stall=round(stall, 2), **air_planner.describe(result))
-        return self._air_start(result, now)
+        if stall >= 0.5:
+            logged = getattr(self, "_air_rescue_deferred_at", None)
+            if logged is None or now - logged >= 30.0:
+                self._air_rescue_deferred_at = now
+                self.log("air_rescue_deferred", reason="ground_failure_proof_required",
+                         stall=round(stall, 2), policy="bounded_ground_failure_only")
+        return False
 
     def _air_after_land(self):
         """Hand movement back to the ground layer at the new position."""
@@ -3342,6 +5124,12 @@ class PoseController(threading.Thread):
 
     def _air_render(self, air, body, now):
         """Render one air frame; owns position/heading and the landing handoff."""
+        from air_follow_runtime import frame as _frame_air_follow
+        follow_result = _frame_air_follow(self, air, body, now)
+        if follow_result is not None:
+            return follow_result
+        if not self._stuck_overlap_frame_guard(air, now):
+            return air._stand(body), self.position, self.heading
         if air.arrived(now):
             body = air.render(body, now)
             pos, heading = air.b, air.final_heading
@@ -3355,6 +5143,7 @@ class PoseController(threading.Thread):
                      at=[round(v, 2) for v in pos],
                      seconds=round(now - air.t0, 2))
             self._air_after_land()
+            self._stuck_after_land(air, now)
             return body, pos, heading
         pos = air.pos(now)
         heading = air.heading if air.heading is not None else self.heading
@@ -3371,6 +5160,8 @@ class PoseController(threading.Thread):
 
     def _follow_tick(self):
         """跟随：目标离开当前站位/目的地超过一定距离就重新追过去；离得远小跑。"""
+        from air_follow_runtime import maintenance as _maintain_air_follow
+        _maintain_air_follow(self, time.monotonic())
         try:
             self._walk_record_tick()
         except Exception as exc:
@@ -3498,6 +5289,8 @@ class PoseController(threading.Thread):
             return "paired_exit"
         return "other"
 
+    @_solo_action
+    @upright_action
     def _request_active_offer(self, cmd):
         request = cmd.get("request_id")
         requester, target = cmd.get("requester"), cmd.get("target")
@@ -4003,6 +5796,8 @@ class PoseController(threading.Thread):
             active["trace_command"] = {"pose":pose if type(pose) is str and pose in poses else "other",
                 "src":source if type(source) is str and source in sources else "unspecified_or_other", "at":time.time()}
 
+    @_solo_action
+    @upright_action
     def _accept_offer(self, who, offer_type):
         """接受双人互动：确认对方此刻仍在邀请小光，进入对应状态，再发 SocialAcceptOfferRpc。
         once（拥抱类）：挪到对方面前，“互动对象”结构保持约 1 秒；hold（牵手）/ carry（背背、公主抱）：一直保持到结束。"""
@@ -4257,10 +6052,18 @@ class PoseController(threading.Thread):
         self.last_mtime = mtime
         self._apply(json.loads(self.path.read_text(encoding="utf-8")))
 
-    def _apply(self, cmd):
+    @_home_seat_action
+    @_solo_action
+    @seat_command
+    def _apply(self, cmd, *, _home_command=None):
+        if (cmd.get("pose") == "sit" and "home_seat_context" in cmd
+                and not self._home_wander_context_matches(cmd["home_seat_context"])):
+            self._reject_home_wander_sit("执行前房间已变化，放弃自动坐下")
+            return
         if getattr(self, "_active_offer", None) is not None:
             self._active_note_command(cmd)
         pose = cmd.get("pose")
+        self._once_command(cmd)
         if cmd.get("src") != "wander":
             # 自己逛是“没人管”的一部分，不算外部命令；否则逛起来永远不会偶尔叫。
             self._last_command_at = time.monotonic()
@@ -4292,7 +6095,7 @@ class PoseController(threading.Thread):
             self.log("wander_cmd_ignored", pose=pose, why="正忙（回应举烛/牵手/坐着/跟随）")
             return
         if pose == "_sit_now":                 # 走到座位旁后的内部步骤
-            return self._sit_now(cmd["seat"], cmd["info"])
+            return self._sit_now(cmd["seat"], cmd["info"], home_request=cmd.get("home_request"))
         if self.sitting is not None and pose not in ("anim", "sit"):
             self._stand()                      # 坐着时要走/举烛/停下等：先站起来
             if pose in ("stand", "stop", "idle"):
@@ -4305,15 +6108,14 @@ class PoseController(threading.Thread):
             return self._end_social("release")
         if self.social is not None and pose not in ("anim",):
             self._end_social("other_command")
+        if pose == "sit" and (self._is_home_map() or "home_seat_context" in cmd):
+            return self._apply_home_sit(cmd, _home_command)
         if pose == "sit":
             if self.sitting is not None:
                 return
             air = getattr(self, "_air_motion", None)
             if air is not None and self.motion is air:
-                # T23-4：空中不开始坐；落地后再说，也不要把 sit 命令挂到空中。
-                self.log("sit_skipped", reason="air")
-                self._sit_failed("air", stop=False)
-                return
+                return self._prop_seat_queue_after_air(cmd)
             here = self.motion.pos(time.monotonic()) if self.motion else self.position
             near_slot, near = (self.tracker.resolve(cmd["near"]) if cmd.get("near")
                                else (None, here))
@@ -4331,7 +6133,14 @@ class PoseController(threading.Thread):
                 seat, info = self._pick_seat(near)
             except LookupError as exc:
                 # 找不到空座位：状态里写 sit_failed，聊天侧不能再说“坐下了”。
-                self._sit_failed("no_seat", detail=str(exc)[:120])
+                if self._is_home_map():
+                    self._home_sit_failed("no_seat", None, str(exc)[:120])
+                else:
+                    self._sit_failed("no_seat", detail=str(exc)[:120])
+                return
+            if self._is_home_map() and not self._home_prepare_sit(seat, info, context=cmd.get("home_seat_context")):
+                return
+            if self._prop_seat_try_interact(seat, info, here, takeover=True):
                 return
             (x, y, z), _yaw, src = info
             if src == "guess":
@@ -4341,12 +6150,21 @@ class PoseController(threading.Thread):
             # 走到座位旁的高度是“站地面”，不是座位面：参考座位 y - SEAT_HEIGHT 查真实地形。
             g = self.terrain_ground(x, z, y - SEAT_HEIGHT)
             stand = (x, g if g is not None else y - SEAT_HEIGHT, z)
+            try:
+                stand = self._prop_seat_approach(seat, info, stand, here)
+            except (ValueError, TypeError, KeyError) as exc:
+                self._sit_failed("unsafe_approach", seat=seat, stop=True, detail=str(exc)[:120])
+                return
             self.follow, self.holding, self.candle = None, False, None
             self.after_arrive = {"pose": "_sit_now", "seat": seat, "info": info}
+            if self._is_home_map():
+                self.after_arrive["home_request"] = self._home_sit_pending["request"]
             self._set_override(self.base)
             self._walk_ref = ref
             started = self.walk_to(stand, "seat")
             if started is False:
+                if self._is_home_map():
+                    self._home_sit_pending = None
                 self._sit_failed("walk_rejected", seat=seat)
                 return
             # target/info 留着给 1.5 s 直走兜底：地形层不启动也能自己走到座位旁。
@@ -4431,13 +6249,23 @@ class PoseController(threading.Thread):
         self.log("pose_set", **self.state)
 
     def _write_state(self):
-        try:
-            seats_here = len(self._seat_candidates()[0])
-        except Exception:
-            seats_here = 0
-        room = self.tracker.snapshot()
+        home_seat_status = None
+        if self._is_home_map():
+            room, home_seat_status = self._home_seat_public_state()
+            seats_here = home_seat_status["count"]
+        else:
+            try:
+                seats_here = len(self._seat_candidates()[0])
+            except Exception:
+                seats_here = 0
+            room = self.tracker.snapshot()
         state = dict(self.state, room=room, offers=self.tracker.offers_to_me(), seats_here=seats_here,
                      ts=time.strftime("%H:%M:%S"), generated_at=room["generated_at"])
+        if home_seat_status is not None:
+            state["home_seat_status"] = home_seat_status
+            failure = getattr(self, "_last_sit_failure", None)
+            if failure is not None and self.sitting is None:
+                state["sit_failed"] = dict(failure)
         # T23-4：pose/sitting 必须和真实 sitting 字段一致，聊天进程只看这里。
         # 坐着时 state["pose"] 永远是 "sit"；已经站起来时绝不会残留 "sit"。
         if self.sitting is not None:
@@ -4496,7 +6324,7 @@ OUTFIT_GROUP_TOKENS = len(OUTFIT_ACTOR_SLOTS) * OUTFIT_RECORD_TOKENS + OUTFIT_TA
 
 
 OUTFIT_COUNTER = "0x21df464|1"       # 装扮块外的 raw4：外观变了就 +1（哥哥换站姿时 6→7 与 attitude 同一帧）
-CONTROL_DIR = Path(__file__).resolve().parent.parent / "control"   # control/attitude、control/outfit.json、control/outfit_counter
+CONTROL_DIR = xg_paths.CONTROL   # control/attitude、control/outfit.json、control/outfit_counter
 
 
 def _actor_obs(body):
@@ -4769,6 +6597,8 @@ def set_outfit_counter(body, fingerprint=None):
 
 def load_seats(map_id):
     """bot/seats_<map_id>.json（seat_scan.py 从抓包生成）：{座位号: {"origin": [x,y,z], "yaw": n}}。"""
+    if map_id == HOME_MAP_ID:
+        return {}
     path = xg_paths.BOT_DATA / f"seats_{map_id}.json"
     if map_id is None or not path.exists():
         return {}
@@ -4778,6 +6608,7 @@ def load_seats(map_id):
 SNAPSHOT_HOOKS = []
 ROSTER_HOOKS = []
 SOCIAL_RPC_HOOKS = []
+PLACEABLE_RPC_HOOKS = []
 LAST_EPOCH = None
 
 
@@ -4805,6 +6636,15 @@ def _hook_engine_roster():
                     hook(engine, bytes(payload))
                 except Exception:
                     pass
+        if outer_type == 14 and not engine._closed:
+            for hook in list(globals().get("PLACEABLE_RPC_HOOKS", ())):
+                # 此钩子自身处理输入错误并记限速日志，不影响原社交钩子。
+                try:
+                    hook(engine, bytes(payload))
+                except Exception as exc:
+                    tracker = getattr(hook, "__self__", None)
+                    if tracker is not None:
+                        tracker._placeable_notice([{"reason": "prop_hook_error", "error": type(exc).__name__}])
         return result
     handle._claudework_roster_hooked = True
     map_long_engine.MapLongEngine.handle = handle
@@ -4885,7 +6725,7 @@ def _apply_validated_room(tracker, ctl, engine, body):
         return False
     new_map = getattr(tracker, "confirmed_map_id", None)
     same_room = bool(was_ready and old_map is not None and new_map == old_map)
-    keep_seat = bool(old_sitting is not None and (
+    keep_seat = bool(new_map != HOME_MAP_ID and old_sitting is not None and (
         old_sitting in getattr(ctl, "seats", {})
         or old_sitting in old_seat_book
         or isinstance(old_event, anim_pose.SitEvent)))
@@ -4904,6 +6744,7 @@ def _apply_validated_room(tracker, ctl, engine, body):
 def install(control_path, seed, log, stop, map_id=None, own_uuid=None,
             ground_ref=None, variant=None, account=None):
     tracker = RoomTracker()
+    tracker.placeable_log = log
     tracker.own_uuid = own_uuid
     tracker.begin_segment(map_id)
     pump_mod.CLAUDEWORK_LISTENERS.append(tracker)
@@ -4913,6 +6754,7 @@ def install(control_path, seed, log, stop, map_id=None, own_uuid=None,
     SNAPSHOT_HOOKS[:] = [tracker.on_snapshot]   # 每次重连新建追踪器，只留最新的
     ROSTER_HOOKS[:] = [tracker._roster]
     SOCIAL_RPC_HOOKS[:] = [tracker.on_social_rpc]
+    PLACEABLE_RPC_HOOKS[:] = [tracker.on_placeable_rpc]
     ctl = PoseController(control_path, seed, tracker, log, stop, account=account)
     def on_room(engine, body):
         _apply_validated_room(tracker, ctl, engine, body)
@@ -4926,7 +6768,7 @@ def install(control_path, seed, log, stop, map_id=None, own_uuid=None,
     ctl._reground("install", ground_ref=ground_ref,
                   allow_player_fallback=False)   # 地形还没挂时是 no-op，首个 tick 再补
     ctl.seats = load_seats(map_id)
-    if map_id is not None:
+    if map_id is not None and map_id != HOME_MAP_ID:
         ctl.seat_file = xg_paths.BOT_DATA / f"seats_{map_id}.json"
     log("seats_loaded", map_id=map_id, seats=sorted(ctl.seats))
     log("pose_install", map_id=map_id, variant=variant, ground_ref=ground_ref,

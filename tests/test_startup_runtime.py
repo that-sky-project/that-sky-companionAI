@@ -30,7 +30,7 @@ class PlatformValidationTests(unittest.TestCase):
 
     def account(self,platform):
         return {'id':'fixture-owned-account','renew':{'broker_account_id':'fixture-owned-account'},
-                'channel':'netease','platform':platform,'user_uuid':'00000000-0000-4000-8000-000000000001',
+                'channel':'netease','platform':platform,'user_uuid':'10000000-0000-4000-8000-000000000001',
                 'session':'01'*16,'session2':'fixture-session2'}
 
     def test_ios_and_android_keep_original_platform_and_session(self):

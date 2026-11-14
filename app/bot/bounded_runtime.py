@@ -506,11 +506,16 @@ class BoundedPilotRuntime:
                     return 'blocked_prepare_stale'
                 # Cancellation can still happen here. choose_motion rechecks
                 # request id, generation and scope before/after the hot plan.
-                from hop_follow_runtime_v20 import is_hop_selection, activate_runtime_hop
-                if is_hop_selection(prepared):
-                    return activate_runtime_hop(self, prepared, pending)
-                return ('moving' if c.walk_to(pending[3], 'bounded_pilot', speed=pending[4])
-                        else 'blocked_start')
+                def start_prepared():
+                    from hop_follow_runtime_v20 import is_hop_selection, activate_runtime_hop
+                    if is_hop_selection(prepared):
+                        return activate_runtime_hop(self, prepared, pending)
+                    return ('moving' if c.walk_to(pending[3], 'bounded_pilot', speed=pending[4])
+                            else 'blocked_start')
+                solo_dispatch = getattr(c, '_solo_ground_dispatch', None)
+                if callable(solo_dispatch):
+                    return solo_dispatch(start_prepared, pending[3], pending[4])
+                return start_prepared()
         with self._lock:
             intent = self._intent
         if intent is None:

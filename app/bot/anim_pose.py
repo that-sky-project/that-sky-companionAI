@@ -20,6 +20,9 @@ from qfsky.long0167.actor_codec.bit_stream import BitWriter
 CURRENT, ANIM_BLOCK = "0x21def88", "0x21defc0"
 POSE90, CLOCK, POSE_END = "0x1715ed0", "0x1715e80", "0x1716a94"
 GEN, KEY, START, MODE = "0x21ddbe0", "0x21ddbf0", "0x21ddc10", "0x21ddc88"
+# 单人持续表情专用字段；只在 Enter/Exit 过渡中接管当前姿态。
+EMOTE_HOLD, EMOTE_STATE = "0x21ddc40", "0x1f80844"
+POSE_F48, POSE_F70 = "0x1715f48", "0x1715f70"
 # 朝向（2026-10-30 用路人 0x4f 的 351 个移动帧拟合）：heading = atan2(dx, dz)，0° 朝 +z
 YAW1, YAW2, FWD = "0x21dd1dc", "0x21dd234", "0x21dd350"
 # 速度：0x21dd298 三个 8 位 = 127 + 0.9·v（x, y, z，单位/秒）；客户端靠它播走路腿部动作
@@ -79,10 +82,13 @@ def _locate(o):
     loc = {
         "gen": tok(only(GEN), "raw", 4), "key": tok(only(KEY), "raw", 8),
         "start": tok(only(START), "bits", 12), "mode": tok(only(MODE), "raw", 1),
+        "emote_hold": tok(only(EMOTE_HOLD), "raw", 1),
+        "emote_state": tok(only(EMOTE_STATE), "raw", 1),
     }
     counts = dict(o._counts)
     # A valid Actor may carry no current POSE. Do not borrow the history POSE.
-    for name, label, width in (("code90", POSE90, 3), ("clock", CLOCK, 12)):
+    for name, label, width in (("code90", POSE90, 3), ("clock", CLOCK, 12),
+                               ("code_f48", POSE_F48, 3), ("code_f70", POSE_F70, 3)):
         positions = [p for p in bounds.get(label, ()) if cur <= p < blk]
         if len(positions) != counts["pose_records"]:
             raise ValueError("anim_pose_count_shape")
@@ -127,7 +133,8 @@ def _locate(o):
 FLOATS = {"ox", "oy", "oz", "ax", "ay", "az"}   # 其余字段按整数（raw 小端 / bits）读写
 FIELD_NAMES = frozenset(FLOATS | {"gen", "key", "start", "mode", "code90", "clock",
     "h_gen", "h_key", "h_start", "yaw1", "yaw2", "yaw3", "fx", "fy", "fz",
-    "vx", "vy", "vz", "seated", "sit_enter", "seat", "avatar_state"})
+    "vx", "vy", "vz", "seated", "sit_enter", "seat", "avatar_state",
+    "emote_hold", "emote_state", "code_f48", "code_f70"})
 # Native inclusive ranges can be smaller than the storage code's bit capacity.
 FIELD_MAXIMUM = {"seat": 6657, "avatar_state": 25}
 
@@ -496,6 +503,60 @@ class AnimEvent:
     def stamp(self):
         """事件结束后作为“上一个动画”的记录（供下一次事件写历史）。"""
         return {"gen": self.gen, "key": self.key, "start": self.start or 0}
+
+
+# 真人蝴蝶抓包：Enter 首帧后约 0.135 秒进入保持；Exit 的两个恢复边界。
+# 这些时间仅用于事件内部字段过渡，不会触发持续表情自动结束。
+EMOTE_ENTER_SECONDS = 0.135
+EMOTE_EXIT_MODE7_SECONDS = 0.65
+EMOTE_EXIT_SECONDS = 1.03
+
+
+class ContinuousEmoteEvent(AnimEvent):
+    """单人 Enter 无限保持；只有动作切换显式创建 Exit 才结束。"""
+
+    def __init__(self, key, exit_key, previous, started):
+        super().__init__(key, previous, started)
+        self.exit_key = exit_key
+
+    def phase(self, now):
+        return ("entering", 1) if now - self.t0 < EMOTE_ENTER_SECONDS else ("holding", 0)
+
+    def post(self, body, now):
+        if self.start is None:
+            self.start = _required_clock(body)
+            # 首帧可能晚于命令线程；Enter 过渡从实际构造首帧开始计时。
+            self.t0 = now
+        phase, code90 = self.phase(now)
+        other = 4 if phase == "entering" else 0
+        return write(body, gen=self.gen, key=self.key, start=self.start, mode=8,
+                     code90=code90, code_f48=other, code_f70=other,
+                     emote_hold=1, emote_state=2,
+                     h_gen=self.prev["gen"], h_key=self.prev["key"], h_start=self.prev["start"] >> 3)
+
+
+class EmoteExitEvent(AnimEvent):
+    """单人持续表情收尾；结束后完全使用普通 AnimEvent 的 idle 写入集合。"""
+
+    def __init__(self, key, previous, started):
+        super().__init__(key, previous, started, seconds=EMOTE_EXIT_MODE7_SECONDS)
+
+    def phase(self, now):
+        age = now - self.t0
+        if age < EMOTE_EXIT_MODE7_SECONDS:
+            return "mode7", 0
+        if age < EMOTE_EXIT_SECONDS:
+            return "restoring", 2
+        return "idle", 7
+
+    def post(self, body, now):
+        # 调用原 post 可保证 idle 不碰 f48/f70、历史姿态或额外状态字段。
+        body = super().post(body, now)
+        phase, _code90 = self.phase(now)
+        if phase == "idle":
+            return body
+        other = 0 if phase == "mode7" else 5
+        return write(body, emote_hold=0, emote_state=2, code_f48=other, code_f70=other)
 
 
 class ClearEvent:

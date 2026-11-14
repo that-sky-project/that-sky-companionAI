@@ -100,6 +100,14 @@ class SubmitResult:
     request_id: str | None
     submitted: bool
     reason: str
+    issued_at: float | None = None
+    expires_at: float | None = None
+
+@dataclass(frozen=True)
+class AcceptanceResult:
+    request_id: str
+    accepted: bool
+    reason: str
 
 @dataclass(frozen=True)
 class Decision:
@@ -107,6 +115,51 @@ class Decision:
     reply: str | None = None
     remaining: tuple | None = None
     reason: str | None = None
+    reply_guard: Callable[[], bool] | None = None
+    receiver_accepted: bool = False
+
+def _acceptance_message(reason):
+    # Receiver errors are codes, never arbitrary exceptions, paths or log text.
+    return {
+        'destination_capture_unavailable': '本账号缺少目的地图目录，请到资源页重新构建。',
+        'ack_timeout': '带路尚未确认，暂时不承诺出发。',
+        'execution_disabled': '带路还没接好，暂时不会出发。',
+        'stale_command': '这次带路请求过期了，请再说一次。',
+        'command_expired': '这次带路请求过期了，请再说一次。',
+        'destination_mismatch': '目的地还没核对好，这次没有接下带路。',
+        'destination_variant_mismatch': '目的落点还没核对好，这次没有接下带路。',
+        'runtime_failed': '这次带路没接上，稍后再试试。',
+    }.get(reason, '这次带路没有被接下，稍后再试试。')
+
+
+def guard_model_departure(text, payloads=()):
+    """Only definite first-person departure promises in a current travel turn.
+
+    The model branch never submits escort commands. Keep candidate names and
+    normal/conditional/quoted descriptions; do not treat generated text as input.
+    """
+    if not isinstance(text,str):return text
+    protected=set()
+    for payload in payloads or ():
+        if not isinstance(payload,dict):continue
+        for row in payload.get('maps',[]) if isinstance(payload.get('maps'),list) else ():
+            if not isinstance(row,dict):continue
+            if isinstance(row.get('名称'),str):protected.add(row['名称'].strip())
+            aliases=row.get('其它叫法',[])
+            if isinstance(aliases,list):protected.update(x.strip() for x in aliases if isinstance(x,str))
+    promise=re.compile(r'^(?:好(?:呀|啊|的|哒)?[，,\s]*)?(?:'
+        r'(?:牵好|背好|抱好)(?:了)?(?:就回遇境|再出发|就出发|出发)'
+        r'|(?:我|我们)(?:现在|马上|这就|就|已经|准备){0,2}(?:出发|动身)(?:去.{1,32})?'
+        r'|(?:现在|马上|这就)出发(?:去.{1,32})?'
+        r'|我(?:现在|马上|这就|就|已经){0,2}(?:带|牵|背|抱)你(?:去|回|到).{1,32}'
+        r')[啦了咯呀吧～~\s]*$')
+    parts=re.split(r'([。！？!?\n])',text)
+    for i in range(0,len(parts),2):
+        body=parts[i].strip()
+        if body not in protected and promise.fullmatch(body):
+            parts[i]='还没确认带路，先选好目的地吧'
+    return ''.join(parts)
+
 
 def _read_json(path,limit):
     with Path(path).open('rb') as stream:raw=stream.read(limit+1)
@@ -136,10 +189,11 @@ class PoseControlPort:
     """One atomic escort envelope only; default flag absent/disabled means no write.
     Receiver must recheck sender/scene/deadline and allocate its real revision before effects.
     """
-    def __init__(self,root,*,clock=time.time):
+    def __init__(self,root,*,clock=time.time,monotonic=time.monotonic,sleep=time.sleep):
         self.root=Path(root);self.directory=self.root/'control';self.path=self.directory/'pose.json'
         self.state_path=self.directory/'pose.state.json';self.flag=self.directory/'escort_travel.enabled.json'
-        self.clock=clock;self.lock=threading.Lock()
+        self.feedback_path=self.directory/'escort_travel.feedback.json'
+        self.clock=clock;self.monotonic=monotonic;self.sleep=sleep;self.lock=threading.Lock()
     def _config(self):
         try:cfg=_read_json(self.flag,4096)
         except (OSError,ValueError,TypeError):return None
@@ -177,7 +231,9 @@ class PoseControlPort:
             command={'pose':'escort_travel' if intent.operation=='start' else 'escort_cancel',
                      'request_id':request_id,'requester':origin.speaker_uuid,'target':origin.speaker_uuid,
                      'raw_command':origin.raw_message,'line_id':origin.line_id,'issued_at':now,
-                     'expires_at':min(now+180,cfg['session_deadline']),'src':'chat'}
+                     'expires_at':min(now+180,cfg['session_deadline']),'src':'chat',
+                     'feedback_version':1,'chat_session':origin.chat_session,
+                     'ingress_revision':origin.ingress_revision,'channel':origin.channel}
             if intent.operation=='start':command.update(scene=destination.scene,map_id=destination.map_id,arrival='scene_spawn',carry_kind=intent.carry_kind)
             if intent.operation=='start' and getattr(destination,'variant',None) is not None:
                 command['variant']=destination.variant
@@ -193,11 +249,65 @@ class PoseControlPort:
                 os.replace(pending,self.path)
             finally:
                 if pending.exists():pending.unlink()
-            return SubmitResult(request_id,True,'queued_not_arrived')
+            return SubmitResult(request_id,True,'queued_not_arrived',now,command['expires_at'])
+
+    def _acceptance(self,origin,receipt):
+        now=self.clock()
+        if not finite(receipt.issued_at) or not finite(receipt.expires_at):return None
+        try:doc=_read_json(self.feedback_path,65536)
+        except (OSError,ValueError,TypeError,UnicodeError):return None
+        if (doc.get('version')!=1 or type(doc.get('version')) is not int
+                or not finite(doc.get('generated_at')) or not 0<=now-doc['generated_at']<=15
+                or not re.fullmatch('[0-9a-f]{32}',str(doc.get('runtime_id','')))
+                or type(doc.get('results')) is not list or len(doc['results'])>16):return None
+        binding={'request_id':receipt.request_id,'requester':origin.speaker_uuid,
+                 'issued_at':receipt.issued_at,'chat_session':origin.chat_session,
+                 'ingress_revision':origin.ingress_revision,'channel':origin.channel,
+                 'operation':'escort_travel'}
+        for row in reversed(doc['results']):
+            if type(row) is not dict or any(type(row.get(k)) is not type(v) or row.get(k)!=v for k,v in binding.items()):continue
+            if (not finite(row.get('observed_at')) or not receipt.issued_at<=row['observed_at']<=now
+                    or not finite(row.get('expires_at')) or not now<row['expires_at']<=row['observed_at']+15):continue
+            status=row.get('status')
+            if status=='accepted':
+                revision=row.get('controller_revision')
+                if (type(revision) is not int or revision<=0 or doc.get('active_request_id')!=receipt.request_id
+                        or type(doc.get('active_revision')) is not int or doc['active_revision']!=revision):
+                    return AcceptanceResult(receipt.request_id,False,'superseded')
+                try:command=_read_json(self.path,65536)
+                except (OSError,ValueError,TypeError,UnicodeError):return None
+                # A newer action already queued must invalidate the old optimistic
+                # reply even before the receiver reaches its next one-second poll.
+                if any(command.get(k)!=v for k,v in binding.items() if k!='operation') or command.get('pose')!='escort_travel':
+                    return AcceptanceResult(receipt.request_id,False,'superseded')
+                if self._config() is None or now>=receipt.expires_at:
+                    return AcceptanceResult(receipt.request_id,False,'execution_disabled')
+                return AcceptanceResult(receipt.request_id,True,'runtime_accepted')
+            if status in ('rejected','superseded'):
+                reason=row.get('reason') if type(row.get('reason')) is str else 'runtime_rejected'
+                return AcceptanceResult(receipt.request_id,False,'superseded' if status=='superseded' else reason)
+        return None
+
+    def await_acceptance(self,origin,receipt,*,still_current,timeout=4.0):
+        # Submission's file lock is released before waiting; no runtime/controller
+        # lock is shared or held here. Never retry a command after timeout.
+        end=self.monotonic()+max(0.0,min(float(timeout),4.0))
+        while True:
+            if not still_current():return AcceptanceResult(receipt.request_id,False,'superseded')
+            result=self._acceptance(origin,receipt)
+            if result is not None:
+                return result if still_current() else AcceptanceResult(receipt.request_id,False,'superseded')
+            if self.monotonic()>=end:return AcceptanceResult(receipt.request_id,False,'ack_timeout')
+            self.sleep(0.05)
+
+    def acceptance_current(self,origin,receipt):
+        result=self._acceptance(origin,receipt)
+        return isinstance(result,AcceptanceResult) and result.accepted is True
 
 class Router:
     def __init__(self,*,resolver=None,port=None,clock=time.monotonic):
         self.resolver=resolver;self.port=port;self.clock=clock;self._consumed=set();self.last_submitted=None
+        self.choice_proposals={}  # speaker/channel-scoped, 120-second destination choices
         self.proposal=None   # 2026-11-06：地名纠错后等确认的提议
     def route(self,origin,intent,*,still_current):
         if not isinstance(origin,Origin) or not canonical_uuid(origin.speaker_uuid) or not canonical_uuid(origin.chat_session):return Decision(True,None,reason='invalid_origin')
@@ -218,7 +328,11 @@ class Router:
             try:destination=self.resolver(intent.destination_query)
             except Exception:return Decision(True,'这个地点还没确认好，你再说具体一点？',reason='resolver_error')
             if destination is None:
-                guess=_closest(intent.destination_query)
+                choices=_find_choices(self,intent.destination_query)
+                if len(choices)>1:
+                    _remember_choices(self,origin,choices,intent.carry_kind)
+                    return Decision(True,_choice_listing(choices),reason='destination_choices')
+                guess=choices[0]['query'] if choices else _closest(intent.destination_query)
                 if guess:
                     self.proposal={'speaker':origin.speaker_uuid,'channel':origin.channel,'kind':intent.carry_kind,
                                    'alias':guess,'expires':now+60}
@@ -234,13 +348,29 @@ class Router:
         if not isinstance(receipt,SubmitResult) or receipt.submitted is not True or not re.fullmatch('[0-9a-f]{32}',receipt.request_id or ''):
             return Decision(True,'这次没接上，先等等我。',reason=receipt.reason if isinstance(receipt,SubmitResult) else 'invalid_receipt')
         self.last_submitted=(origin,receipt.request_id)
+        guard=None
+        if intent.operation=='start':
+            waiter=getattr(self.port,'await_acceptance',None)
+            try:accepted=waiter(origin,receipt,still_current=still_current) if callable(waiter) else None
+            except Exception:accepted=None
+            if not still_current():return Decision(True,None,reason='superseded_after_submit')
+            if not (isinstance(accepted,AcceptanceResult) and accepted.request_id==receipt.request_id and accepted.accepted is True):
+                reason=accepted.reason if isinstance(accepted,AcceptanceResult) else 'ack_timeout'
+                return Decision(True,None if reason=='superseded' else _acceptance_message(reason),reason=reason,
+                                reply_guard=still_current)
+            current=getattr(self.port,'acceptance_current',None)
+            def guard():
+                try:return still_current() and callable(current) and current(origin,receipt) is True
+                except Exception:return False
+            if not guard():return Decision(True,None,reason='superseded_after_accept')
         home=getattr(destination,'map_id',None)==3526133726
         go='就回遇境' if home else '再出发'
         reply='好，先停下。' if intent.operation=='cancel' else ('好呀，牵好'+go+'。' if intent.carry_kind=='handhold' else '好呀，背好'+go+'。' if intent.carry_kind=='piggyback' else '好呀，抱好'+go+'。')
-        return Decision(True,reply,reason='submitted_not_completed')
+        return Decision(True,reply,reason='submitted_not_completed',reply_guard=guard,
+                        receiver_accepted=intent.operation=='start')
 
 def _suggest(query):
-    """地点没对上：同名多张就列出各自简称；不认识就给几个名字里互相包含的候选。"""
+    """可执行候选已在路由中处理；这里仅解释未绑定地图的地标或未知名称。"""
     try:
         from destination_resolver_v25 import load_default, _key
         r=load_default();res=r.resolve(query)
@@ -248,18 +378,6 @@ def _suggest(query):
         if dest.get('kind')=='landmark' and not dest.get('sceneName'):
             # 2026-11-07 T18：只有“已经绑定场景+变体”的地标才可执行；其余地标仍只是资料。
             return f'{dest.get("displayName") or query}是图里的一个地方，我还不知道在哪张图～你说一下地图名，我带你过去？'
-        if res.get('status')=='ambiguous':
-            names=[c.get('displayName') for c in res.get('candidates',[]) if c.get('displayName')]
-            if names:return f'{query}有好几张：'+'、'.join(names[:8])+'，你想去哪张？'
-        q=_key(query or '')
-        names=[]
-        reach=_reachable_scenes()
-        for row in getattr(r,'_records',{}).values() if isinstance(getattr(r,'_records',None),dict) else getattr(r,'_records',[]):
-            if row.get('kind')!='scene' or (reach and row.get('sceneName') not in reach):continue
-            n=row.get('displayName') or ''
-            k=_key(n)
-            if q and k and (q in k or k in q) and n not in names:names.append(n)
-        if names:return '你是说'+'、'.join(names[:5])+'吗？说一下具体是哪张～'
     except Exception:
         pass
     return '你说的是哪个具体地点呀？'
@@ -395,7 +513,254 @@ def _confirm_proposal(bot,sender,ch,rows):
     def current():return getattr(bot,'_travel_chat_session',None)==synth.chat_session and getattr(bot,'_travel_ingress_revision',None)==synth.ingress_revision
     return router.route(synth,intent,still_current=current)
 
+# Choices are identity-only proposals. Movement still goes through Router.route,
+# the exact same ingress checks and the configured control port as explicit commands.
+CHOICE_TTL = 120
+CHOICE_LIMIT = 8
+# The catalogue uses the official English event family, not the colloquial Chinese
+# season name. Keep this translation tied to its scene family, never to a guessed ID.
+CHOICE_SERIES = {'万圣节': 'Event_DaysOfMischief', '万圣': 'Event_DaysOfMischief'}
+
+
+def _choice_records():
+    try:
+        from destination_resolver_v25 import load_default
+        return list(load_default()._records.values())
+    except Exception:
+        return []
+
+
+def _choice_catalogue(router):
+    if router.resolver is None:return []
+    out=[];seen=set()
+    for row in _choice_records():
+        name=row.get('displayName');scene=row.get('sceneName')
+        if not isinstance(name,str) or not name or not scene:continue
+        if row.get('kind')!='scene' and not (row.get('kind')=='landmark' and row.get('spawnVariant')):continue
+        aliases=tuple(dict.fromkeys(x for x in [name,*row.get('aliases',[]),row.get('id')]
+                                   if isinstance(x,str) and x))
+        for query in aliases:
+            try:ref=router.resolver(query)
+            except Exception:continue
+            if (isinstance(ref,DestinationRef) and ref.valid() and ref.scene==scene
+                    and ref.variant==row.get('spawnVariant')):break
+        else:continue
+        if ref in seen:continue
+        seen.add(ref)
+        out.append({'name':name,'query':query,'aliases':aliases,'ref':ref})
+    return out
+
+
+def _choice_query(query):
+    q=_loose(TAIL.sub('',query or ''))
+    # Strip request classifiers, not arbitrary characters from destination names.
+    return re.sub(r'(?:的)?(?:地图|系列|相关地图|相关的图|的图|图)$','',q)
+
+
+def _find_choices(router,query):
+    q=_choice_query(query)
+    if not q:return []
+    catalogue=_choice_catalogue(router)
+    prefix=CHOICE_SERIES.get(q)
+    if prefix:
+        return [c for c in catalogue if c['ref'].scene==prefix or c['ref'].scene.startswith(prefix+'_')][:CHOICE_LIMIT]
+    # Ambiguous aliases and series aliases are included here too. Preserve catalogue
+    # order so the numbers in the response and the pending proposal always agree.
+    return [c for c in catalogue if any(q in _loose(a) or _loose(a) in q for a in c['aliases']
+                                        if len(_loose(a))>=2)][:CHOICE_LIMIT]
+
+
+def _choice_key(origin):return (origin.speaker_uuid,origin.channel)
+
+
+def _remember_choices(router,origin,candidates,kind='handhold'):
+    now=router.clock()
+    router.choice_proposals={key:p for key,p in router.choice_proposals.items() if p['expires']>now}
+    router.choice_proposals[_choice_key(origin)]={
+        'speaker':origin.speaker_uuid,'channel':origin.channel,'session':origin.chat_session,
+        'candidates':tuple(candidates),'kind':kind or 'handhold','expires':now+CHOICE_TTL,'asked':False}
+    # A newer list supersedes an older correction for this conversation only.
+    if router.proposal and router.proposal['speaker']==origin.speaker_uuid and router.proposal['channel']==origin.channel:
+        router.proposal=None
+
+
+def _choice_listing(candidates):
+    return '可以去：'+'；'.join(f'{i}、{c["name"]}' for i,c in enumerate(candidates,1))+'。你想去哪个？'
+
+
+def _choice_origin_current(bot,router,origin,sender,ch):
+    return (isinstance(origin,Origin) and canonical_uuid(origin.speaker_uuid)
+            and canonical_uuid(origin.chat_session) and origin.speaker_uuid==sender and origin.channel==ch
+            and type(origin.channel) is str and type(origin.raw_message) is str
+            and len(origin.raw_message)<=320 and SLASH.match(origin.raw_message) is not None
+            and type(origin.ingress_revision) is int and origin.ingress_revision>0
+            and type(origin.line_id) in (str,int) and bool(origin.line_id)
+            and finite(origin.observed_mono) and 0<=router.clock()-origin.observed_mono<=30
+            and getattr(bot,'_travel_chat_session',None)==origin.chat_session
+            and getattr(bot,'_travel_ingress_revision',None)==origin.ingress_revision
+            and (origin.chat_session,origin.ingress_revision) not in router._consumed)
+
+
+def _choice_explicit(raw):
+    m=SLASH.match(raw)
+    if not m:return False
+    text=m.group(1).strip();body=LEAD.sub('',text,count=1)
+    return bool(CANCEL.fullmatch(text) or START.fullmatch(body) or _parse_want(text) is not None)
+
+
+def _choice_declines(text):
+    bare=re.sub(r'[\s，,!！。～~…]+$','',LEAD.sub('',text,count=1))
+    return re.fullmatch(r'(?:不去(?:了|啦)?|算了|都不要|都不去|不要了|不用了|取消|不是|不对|不要|哪也不去)(?:吧|呀|呗|哦)?',bare) is not None
+
+
+def _choice_matches(text,candidates):
+    # Questions, reported speech and negated mentions are chat, not consent to go.
+    if (QUERY_BLOCK.search(text) or RESOURCE.search(text)
+            or re.search(r'[?？]|(?:不|没|别|莫)(?:想|要|用)?(?:去|选|带|背|抱|牵)|不选|不要|'
+                         r'在哪|哪里|怎么|什么|好玩|好看|喜欢|听说|介绍|聊聊|记得|昨天|能去吗|能不能',text)):
+        return []
+    cleaned=TAIL.sub('',text).strip()
+    hits=set()
+    ordinal={'一':0,'二':1,'两':1,'三':2,'四':3,'五':4,'六':5,'七':6,'八':7}
+    for match in re.finditer(r'第([一二两三四五六七八1-8])(?:个|张|处)',cleaned):
+        n=match.group(1);index=int(n)-1 if n.isdigit() else ordinal[n]
+        if index<len(candidates):hits.add(index)
+    for token,index in [('前面那个',0),('前一个',0),('最后那个',len(candidates)-1),
+                        ('最后一个',len(candidates)-1),('后面那个',len(candidates)-1),('后一个',len(candidates)-1)]:
+        if token in cleaned:hits.add(index)
+    key=_loose(cleaned)
+    for i,c in enumerate(candidates):
+        if any(len(_loose(a))>=2 and _loose(a) in key for a in c['aliases']):hits.add(i)
+    if hits:
+        frame=_loose(cleaned)
+        for alias in sorted({a for i in hits for a in candidates[i]['aliases']},key=len,reverse=True):
+            frame=frame.replace(_loose(alias),'')
+        frame=re.sub(r'第[一二两三四五六七八1-8](?:个|张|处)|前面那个|前一个|最后那个|最后一个|后面那个|后一个','',frame)
+        frame=re.sub(r'我想要|我想|我要|想要|那就|就|还是|选择|选|我|去|到|前往|那个|这个|那一个|这一个|那张|这张|'
+                     r'好了|或者|或|和|与|都|吧|呀|呗|嘛|啦|呢|哦|好|[\s，,、。.!！～~]','',frame)
+        return sorted(hits) if not frame else []
+    # Short unique names such as “就密室那个” and “螃蟹那个吧”. Only remove
+    # selection framing: unrelated prose that happens to mention a place stays chat.
+    core=LEAD.sub('',cleaned,count=1)
+    core=re.sub(r'^(?:(?:我)?(?:想要|想|要)|就|还是|选择|选|去|到|前往)+','',core)
+    core=re.sub(r'(?:那个|这个|那一个|这一个|那张|这张|地图|的图|好了)+$','',core)
+    q=_loose(core)
+    if len(q)<2:return []
+    return [i for i,c in enumerate(candidates) if any(q in _loose(a) for a in c['aliases'])]
+
+
+def _select_choice(bot,sender,ch,rows):
+    router=getattr(bot,'escort_travel_router',None)
+    if not isinstance(router,Router):return None
+    last=rows[-1] if rows else None
+    origin=last.get('travel_origin') if isinstance(last,dict) else None
+    if not isinstance(origin,Origin):return None
+    key=(sender,ch);p=router.choice_proposals.get(key)
+    if not p:return None
+    if router.clock()>=p['expires']:
+        router.choice_proposals.pop(key,None);return None
+    if not _choice_origin_current(bot,router,origin,sender,ch):
+        return Decision(True,None,reason='unbound_or_expired_choice_origin')
+    if p['session']!=origin.chat_session:
+        router.choice_proposals.pop(key,None);return None
+    # A newer full command/decline in the same merged batch also invalidates
+    # the old list. Never execute that older ingress; retain route_pending's
+    # existing newest-message precedence instead of resurrecting a stale choice.
+    for row in rows[:-1]:
+        previous=row.get('travel_origin') if isinstance(row,dict) else None
+        if not (isinstance(previous,Origin) and previous.speaker_uuid==sender and previous.channel==ch
+                and previous.chat_session==origin.chat_session
+                and type(previous.ingress_revision) is int and 0<previous.ingress_revision<origin.ingress_revision
+                and finite(previous.observed_mono) and 0<=router.clock()-previous.observed_mono<=30
+                and type(previous.raw_message) is str and len(previous.raw_message)<=320):continue
+        match=SLASH.match(previous.raw_message)
+        if match and (_choice_declines(match.group(1).strip())
+                      or (parse(previous.raw_message) is not None and _choice_explicit(previous.raw_message))):
+            router.choice_proposals.pop(key,None);return None
+    text=SLASH.match(origin.raw_message).group(1).strip()
+    if _choice_declines(text):
+        router.choice_proposals.pop(key,None)
+        return Decision(True,'好～那就先不去了。',reason='choice_declined')
+    if _choice_explicit(origin.raw_message):
+        router.choice_proposals.pop(key,None);return None
+    hits=_choice_matches(text,p['candidates'])
+    if not hits:return None
+    if len(hits)!=1:
+        reply=None if p['asked'] else '这几个都对得上，'+_choice_listing(p['candidates'])
+        p['asked']=True
+        return Decision(True,reply,reason='choice_ambiguous')
+    chosen=p['candidates'][hits[0]]
+    # Ref identity must still be executable now, not merely when the list was sent.
+    try:current_ref=router.resolver(chosen['query'])
+    except Exception:current_ref=None
+    if current_ref!=chosen['ref']:
+        router.choice_proposals.pop(key,None)
+        return Decision(True,'这个地点现在还没确认好，你再说一次地点？',reason='choice_destination_changed')
+    router.choice_proposals.pop(key,None)
+    cmd={'handhold':'带我去','piggyback':'背我去','princess_carry':'抱我去'}.get(p['kind'],'带我去')
+    raw='/'+cmd+chosen['query']
+    synth=Origin(origin.speaker_uuid,raw,origin.line_id,origin.channel,origin.chat_session,
+                 origin.ingress_revision,origin.observed_mono)
+    intent=parse(raw)
+    if intent is None or intent.operation!='start':return Decision(True,None,reason='choice_parse_failed')
+    def current():return getattr(bot,'_travel_chat_session',None)==synth.chat_session and getattr(bot,'_travel_ingress_revision',None)==synth.ingress_revision
+    return router.route(synth,intent,still_current=current)
+
+
+def record_list_maps_choices(bot,sender,ch,rows,reply,payloads):
+    """Remember only executable names actually sent after this turn's list_maps.
+
+    The caller supplies sent (not merely generated) reply text and tool payloads
+    scoped to this turn. No model text is ever interpreted as a movement command.
+    """
+    if not isinstance(reply,str) or not reply or not isinstance(payloads,(list,tuple)) or not payloads:return False
+    if not isinstance(rows,(list,tuple)):return False
+    rows=[r for r in rows if isinstance(r,dict)]
+    origin=rows[-1].get('travel_origin') if rows else None
+    router=getattr(bot,'escort_travel_router',None)
+    if not isinstance(router,Router):
+        router=default_router(bot);bot.escort_travel_router=router
+    if not _choice_origin_current(bot,router,origin,sender,ch):return False
+    catalogue=_choice_catalogue(router);eligible=[]
+    for payload in payloads:
+        if not isinstance(payload,dict) or payload.get('ok') is not True:continue
+        maps=payload.get('maps')
+        if not isinstance(maps,list):continue
+        for row in maps:
+            if not isinstance(row,dict):continue
+            aliases=row.get('其它叫法',[])
+            if not isinstance(aliases,list):continue
+            names=[row.get('落点') or row.get('名称'),*aliases]
+            for c in catalogue:
+                if c in eligible:continue
+                if any(isinstance(n,str) and _loose(n) in {_loose(a) for a in c['aliases']} for n in names):
+                    eligible.append(c)
+    mentions=[]
+    for i,c in enumerate(eligible):
+        for alias in c['aliases']:
+            if len(alias)<2:continue
+            for m in re.finditer(re.escape(alias),reply):mentions.append((m.start(),m.end(),i))
+    # “霞谷神殿” should not also count as a separate mention of “霞谷”.
+    visible=[m for m in mentions if not any(other[2]!=m[2] and other[0]<=m[0] and other[1]>=m[1]
+                                           and other[1]-other[0]>m[1]-m[0] for other in mentions)]
+    order=[]
+    for start,end,index in sorted(visible):
+        if index not in order:order.append(index)
+    if len(order)>CHOICE_LIMIT:
+        router.choice_proposals.pop(_choice_key(origin),None)
+        return False
+    if not order:return False
+    intent=parse(origin.raw_message)
+    kind=intent.carry_kind if intent is not None else None
+    prior=router.choice_proposals.get(_choice_key(origin))
+    if kind is None and prior and prior['session']==origin.chat_session and router.clock()<prior['expires']:
+        kind=prior['kind']
+    _remember_choices(router,origin,[eligible[i] for i in order],kind or 'handhold')
+    return True
+
+
 def capture_ingress(bot,sender,raw,ch,line_id):
+    raw=raw.strip()  # 客户端消息可能带尾随换行，先归一化
     if not canonical_uuid(sender) or not SLASH.match(raw):return None
     with bot.lock:
         if not getattr(bot,'_travel_chat_session',None):bot._travel_chat_session=str(uuid4())
@@ -414,6 +779,8 @@ def default_router(bot):
 
 def route_pending(bot,sender,ch,msgs):
     rows=[m for m in msgs if isinstance(m,dict)]
+    selected=_select_choice(bot,sender,ch,rows)
+    if selected is not None:return selected
     candidates=[m for m in rows if isinstance(m.get('travel_origin'),Origin) and parse(m['travel_origin'].raw_message) is not None]
     if not candidates:
         confirmed=_confirm_proposal(bot,sender,ch,rows)

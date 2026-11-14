@@ -43,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workers", type=int, default=1, choices=(1, 2))
     p.set_defaults(func="terrain")
 
+    p = sub.add_parser("props", parents=[common], help="从本机 APK 生成道具形状，不重做地形")
+    p.add_argument("--apk", required=True)
+    p.add_argument("--output", default=None, help="默认 DATA/game/<当前版本>/props")
+    p.add_argument("--optional", action="store_true", help="完整数据链中的可选阶段，失败保留核心数据成功")
+    p.set_defaults(func="props")
+
     p = sub.add_parser("capture-register", parents=[common],
                        help="登记一次 MuMu 录制（按录制里的账号绑定认号）")
     p.add_argument("--dir", default=None, help="一次录制目录")
@@ -63,6 +69,36 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("status", parents=[common], help="哪些已完成")
     p.set_defaults(func="status")
     return ap
+
+
+def cmd_props(args) -> int:
+    from pathlib import Path
+    from .common import Progress, game_dir, resolve_data
+    progress = Progress("props", 1)
+    output = Path(args.output) if args.output else game_dir(resolve_data(args.data)) / "props"
+    try:
+        from .props import generate
+        def report(event):
+            if isinstance(event, dict):
+                progress.emit(str(event.get("msg") or event.get("message") or "生成道具形状"),
+                              done=event.get("done", event.get("current")), total=event.get("total"))
+        result = generate(args.apk, output_dir=output, progress=report)
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise GameDataError("道具形状生成结果未确认", "props_unconfirmed")
+        progress.finish("道具形状生成完成")
+        final(True, kind="props", props={"ready": True, "state": "ready",
+              "count": result.get("ready"), "known": result.get("known")}, result=result)
+        return 0
+    except Exception as exc:
+        code = str(getattr(exc, "code", "props_generation_failed"))
+        message = "道具形状未生成，可在安装与资源页单独补生成；已有名称表与地形不受影响。"
+        if args.optional:
+            final(True, kind="props", props={"ready": False, "state": "missing", "code": code},
+                  warning=message, warning_code=code)
+            return 0
+        final(False, kind="props", props={"ready": False, "state": "missing", "code": code},
+              error=message, code=code)
+        return 1
 
 
 def main(argv=None) -> int:
@@ -87,6 +123,8 @@ def main(argv=None) -> int:
         if args.func == "terrain":
             from .terrain import cmd_terrain
             return cmd_terrain(args)
+        if args.func == "props":
+            return cmd_props(args)
         if args.func == "capture":
             from .captures import cmd_capture_register
             return cmd_capture_register(args)

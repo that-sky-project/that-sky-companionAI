@@ -140,7 +140,7 @@ def _expand_runtime_paths(doc):
     if not isinstance(doc, dict):
         return doc
     out = dict(doc)
-    for key in ('assetRoot', 'engineRoot', 'catalogPath'):
+    for key in ('assetRoot', 'engineRoot', 'catalogPath', 'propCatalog'):
         value = out.get(key)
         if isinstance(value, str) and value.startswith('data:'):
             p = _data_candidates(value[5:])
@@ -201,6 +201,13 @@ def validate_config(doc):
                 and doc['bindingRow'].get('scene_name') == doc['sceneName'], 'row_scene_mismatch')
     for key in ('assetRoot', 'engineRoot', 'nodeExecutable'):
         require(type(doc.get(key)) is str and bool(doc[key]), 'runtime_path_required')
+    if 'propCatalog' in doc:
+        require(type(doc['propCatalog']) is str and 0 < len(doc['propCatalog']) <= 4096
+                and '\x00' not in doc['propCatalog'] and Path(doc['propCatalog']).is_absolute(),
+                'absolute_prop_catalog_required')
+    if 'propCatalogSHA256' in doc:
+        require(type(doc['propCatalogSHA256']) is str
+                and re.fullmatch(r'[0-9a-f]{64}', doc['propCatalogSHA256']), 'prop_catalog_sha_invalid')
     movement = doc.get('movement', {})
     require(type(movement) is dict, 'movement_config')
     speed, segment, travel = (movement.get('walkSpeed', .25),
@@ -214,6 +221,47 @@ def validate_config(doc):
     from hop_follow_runtime_v20 import validate_entry_hop_config
     validate_entry_hop_config(doc)
     return doc
+
+
+def _bind_placeable_catalog(backend, tracker, config, scene, log):
+    """只在冷 build 读目录；无目录/坏目录不阻断原静态寻路。"""
+    if not (callable(getattr(tracker, 'props_snapshot', None))
+            and callable(getattr(backend, 'bind_placeables', None))):
+        return
+    from skyterrain.props import load_generated_catalog, catalog_registry_names
+    # Empty is an explicit disabled binding, never a packaged/observed fallback.
+    prop_catalog = {'schema': 'skyterrain-props-v1', 'coordinate_space': 'sky_native', 'props': {}}
+    names = {}
+    reason = 'props_generated_missing'
+    path = xg_paths.PROP_ASSETS / 'catalog.json'
+    try:
+        configured = config.get('propCatalog')
+        if configured is not None and Path(configured).resolve() != path.resolve():
+            raise ValueError('props_catalog_not_current_generated_root')
+        from qfsky.version_profile import CURRENT_BUILD
+        build = xg_paths.GAME_VERSION.rsplit('-', 1)[-1]
+        expected_build = int(build) if build.isdecimal() else CURRENT_BUILD
+        prop_catalog = load_generated_catalog(path.parent, expected_build=expected_build)
+        names = catalog_registry_names(catalog=prop_catalog)
+        reason = 'ready'
+    except (OSError, ValueError, TypeError, ImportError, AttributeError):
+        # No exception text/path/identity in diagnostics; one state transition only.
+        prop_catalog = {'schema': 'skyterrain-props-v1', 'coordinate_space': 'sky_native', 'props': {}}
+        names = {}
+        reason = 'props_generated_unavailable'
+    setter = getattr(tracker, 'set_placeable_names', None)
+    if callable(setter):
+        setter(names)
+    tracker.props_assets_ready = reason == 'ready'
+    if getattr(tracker, '_props_assets_notice', None) != reason:
+        tracker._props_assets_notice = reason
+        try:
+            log('props_assets_state', status=reason, available=tracker.props_assets_ready)
+        except Exception:
+            pass
+    backend.bind_placeables(tracker.props_snapshot, tracker.props_revision,
+        room_generation=scene.room_generation, map_id=scene.scene_hash, log=log,
+        allow_observed=False, catalog=prop_catalog)
 
 
 def _load_scene_catalog(path, expected_sha):
@@ -411,6 +459,8 @@ class ExperimentalGroundHook:
             self._remember_handoff_pose(result, grounded=getattr(cached, "grounded", False) is True
                 and not getattr(active, "blocked", True))
             return result
+        from seat_tilt_runtime import upright_action
+        @upright_action
         def walk(controller, goal, label='', face=None, speed=.25):
             if label == 'bounded_pilot':
                 return self._original_walk(goal, label, face, speed)
@@ -418,6 +468,16 @@ class ExperimentalGroundHook:
                 return False
             try:
                 self._desired = vec(goal)
+                safe_goal = getattr(c, '_stuck_safe_follow_goal', None)
+                if label == 'follow' and callable(safe_goal):
+                    selected = safe_goal(goal)
+                    if selected is None:
+                        self._desired = None
+                        return False
+                    self._desired = vec(selected)
+                note = getattr(c, '_stuck_note_walk', None)
+                if callable(note):
+                    note(goal, label, face, speed)
                 self._desired_follow_peer = None
                 # T23-8：seat 请求的稳定参照由 room_pose 放在 _walk_ref，别的
                 # label 一律清掉，避免上一次座位的人被当成这次走路的 subject。
@@ -864,6 +924,7 @@ class ExperimentalGroundHook:
             navigation_window=row.get('navigation_window'),
             worker_profile='preserving_imported_nav', **entry_hop_backend_options(config))(row, scene)
         try:
+            _bind_placeable_catalog(backend, t, config, scene, c.log)
             snapshot = backend.binding_snapshot()
             require(snapshot.get('scene_name') == scene.scene_name and snapshot.get('scene_hash') == scene.scene_hash
                     and snapshot.get('asset_manifest_sha256') == row['asset_manifest_sha256'], 'geometry_scene_pin_mismatch')
@@ -994,22 +1055,47 @@ class ExperimentalGroundHook:
         start, goal = vec(self.c.position), self._desired
         self._desired = None
         follow_intent = None
+        point_follow_peer = None
+        supported_vertical_goal = False
         if (self._request_label == 'follow' and self.c.follow
                 and getattr(runtime.admission, 'mode', None) == 'experimental_ground_trial'):
             # Preserve the fresh full target as planning intent; the bounded
             # proxy below stays only a request/lease identity, not a waypoint.
             try:
                 goal, peer, _ = self.c._spot_near(self.c.follow['target'], self.c.follow['distance'])
+                original_goal = vec(goal)
+                safe_goal = getattr(self.c, '_stuck_safe_follow_goal', None)
+                if callable(safe_goal):
+                    goal = safe_goal(goal)
+                    if goal is None:
+                        self.status = 'waiting_for_supported_follow_goal'
+                        return
                 goal, peer = vec(goal), vec(peer)
+                supported_vertical_goal = (math.dist(goal, original_goal) > 1e-6
+                    and abs(goal[1]-start[1]) > .05)
                 stand = math.hypot(goal[0]-peer[0], goal[2]-peer[2])
-                if stand <= 1.3:
+                if stand <= 1.3 and abs(goal[1]-peer[1]) <= 1e-4:
                     follow_intent = dict(goal=goal, peer=peer, distance=stand,
                         segmentLength=runtime.admission.max_requested_distance or runtime.admission.max_distance,
                         maxEndpointDistance=min(1.3, stand+.3))
+                elif abs(goal[1]-peer[1]) > 1e-4:
+                    # 原 follow 契约要求 goal/peer 等高；真实 peer 不改，异高支撑点
+                    # 走既有普通地面点/受限分段，logical follow 继续保留和刷新。
+                    # Rate-limit only logging; preserve requests, receipts, peer and permission.
+                    log_key = (getattr(self.c, '_command_seq', 0),
+                               (self.c.follow or {}).get('target'), 'goal_peer_height_differs')
+                    logged = getattr(self, '_supported_point_log', None)
+                    log_now = self.clock()
+                    if logged is None or logged[0] != log_key or log_now-logged[1] >= 5.0:
+                        self._supported_point_log = (log_key, log_now)
+                        self.c.log('follow_supported_point_request', reason='goal_peer_height_differs',
+                                   goal=list(goal), peer=list(peer), logical_follow=True)
+                    point_follow_peer = peer
             except (KeyError, ValueError, LookupError, RuntimeError):
                 self.status = 'waiting_for_fresh_observation'
                 return
-        if follow_intent is not None:
+        if follow_intent is not None or point_follow_peer is not None:
+            cooldown_peer = follow_intent['peer'] if follow_intent is not None else point_follow_peer
             # A rejected stationary target must not launch expensive preflights
             # every Actor. Only failed cold follow attempts are throttled;
             # successful movement and same-motor hot retarget stay unchanged.
@@ -1030,14 +1116,14 @@ class ExperimentalGroundHook:
             cooldown = getattr(self, '_follow_failure_cooldown', None)
             if (cooldown is not None and cooldown[0] is runtime and self.clock() < cooldown[3]
                     and math.dist(start, cooldown[1]) <= .2
-                    and math.dist(follow_intent['peer'], cooldown[2]) <= .2):
+                    and math.dist(cooldown_peer, cooldown[2]) <= .2):
                 self._desired = goal
                 self.status = 'follow_failed_route_cooldown'
                 return
         distance = math.dist(start, goal)
         slack = (getattr(self.c, '_terrain_follow_slack', .6)
                  if self._request_label == 'follow' else .6)
-        if distance < slack:
+        if distance < slack and not supported_vertical_goal:
             self.status = 'goal_within_standing_slack'
             return
         segment = runtime.admission.max_requested_distance or runtime.admission.max_distance
@@ -1046,8 +1132,12 @@ class ExperimentalGroundHook:
             # subtraction/norm must not turn 6 m into 6.000000000000001 m.
             goal = tuple(a+(b-a)*((segment-1e-6)/distance) for a,b in zip(start, goal))
         runtime.request(goal, **({'follow_intent': follow_intent} if follow_intent is not None else {}))
-        if follow_intent is not None:
-            self._last_follow_attempt = (runtime, start, follow_intent['peer'])
+        bind = getattr(self.c, '_stuck_request_bind', None)
+        if callable(bind):
+            bind(runtime)
+        if follow_intent is not None or point_follow_peer is not None:
+            self._last_follow_attempt = (runtime, start,
+                follow_intent['peer'] if follow_intent is not None else point_follow_peer)
         return True
 
     def _dispatch_after_hop_landing(self, result):
@@ -1099,6 +1189,31 @@ class ExperimentalGroundHook:
             self.status = 'blocked_runtime_error'
         return False
 
+    def _handle_invalid_ground_goal(self):
+        handler = getattr(self.c, '_stuck_invalid_goal', None)
+        if not callable(handler) or self.runtime is None:
+            return False
+        result = handler(self.runtime, self._request_label, self._desired, self.clock())
+        if result is None:
+            return False
+        # 丢弃失败请求，不能把原 invalid goal 再送一次或误当卡住起跳。
+        self._desired = self._desired_follow_peer = None
+        action = result['action']
+        if action == 'seat_existing_policy':
+            self.status = 'goal_invalid_seat_existing_policy'
+            return True
+        self.c.route, self.c.after_arrive = [], None
+        if action == 'follow_near_support' and result['goal'] is not None:
+            # 公共 walk 闭包会应用缓存；传原目标而不是已修正点，避免二次修正误判目标移动。
+            self.c.walk_to(result['original_goal'], 'follow', face=result.get('face'))
+            self.status = 'follow_goal_reselected'
+        elif action == 'reselect_explore':
+            self.c._explore()
+            self.status = 'explore_goal_reselected'
+        else:
+            self.status = 'waiting_for_supported_goal'
+        return True
+
     def _refresh_follow_goal(self):
         """Memory-only target refresh; no control-file/social ticks or sampling."""
         now = self.clock()
@@ -1113,9 +1228,22 @@ class ExperimentalGroundHook:
             return
         try:
             spot, peer, _ = self.c._spot_near(follow['target'], follow['distance'])
+            original_spot = spot
+            safe_goal = getattr(self.c, '_stuck_safe_follow_goal', None)
+            if callable(safe_goal):
+                spot = safe_goal(spot)
+                if spot is None:
+                    self._desired = self._desired_follow_peer = None
+                    return
             current_goal = self.c.motion.b if self.c.motion is not None else self.c.position
-            if math.hypot(spot[0]-current_goal[0], spot[2]-current_goal[2]) >= getattr(self.c, '_terrain_follow_slack', 1.):
+            vertical_correction = (math.dist(spot, original_spot) > 1e-6
+                                   and abs(spot[1]-current_goal[1]) > .05)
+            if (math.hypot(spot[0]-current_goal[0], spot[2]-current_goal[2]) >= getattr(self.c, '_terrain_follow_slack', 1.)
+                    or vertical_correction):
                 self._desired, self._request_label = vec(spot), 'follow'
+                note = getattr(self.c, '_stuck_note_walk', None)
+                if callable(note):
+                    note(original_spot, 'follow', peer)
                 self._desired_follow_peer = vec(peer)
             elif self._request_label == 'follow':
                 # The newest peer position supersedes an older queued follow.
@@ -1210,34 +1338,48 @@ class ExperimentalGroundHook:
         self.c.log('experimental_ground_worker_recovery_exhausted', attempts=self._worker_recovery_attempts)
 
     def _rebind_returned_follow_target(self):
-        """Rebuild a returned UUID's admission; never reuse its old slot proof."""
+        """Rebuild admission for a fresh explicit target; never reuse old physics.
+
+        An idle/explore route may have admitted another peer before the first
+        follow command.  That target change is legitimate only through the
+        current dispatcher binding; the old runtime's identity guard stays shut.
+        """
         runtime, binding = self.runtime, getattr(self, '_hop_dispatch', None)
         if (runtime is None or binding is None or self._future is not None
-                or self._request_label != 'follow' or self._closed or self._expired
-                or self.clock() >= self.deadline):
+                or self._closed or self._expired or self.clock() >= self.deadline):
             return False
         with binding.lock:
             c, co = self.c, getattr(runtime, '_follow_hop', None)
             if (not binding.is_follow_current() or c._terrain_social_owns()
+                    or getattr(c, '_sit_pending', None) is not None
                     or co is not None and co.active
                     or c.motion is not None and c.motion is not runtime._motion):
                 return False
             ctx, t = runtime.admission.context, c.tracker
             target = c.follow.get('target')
-            # Only the explicitly followed full identity may return. Numeric
-            # slot reuse must not silently follow a different occupant.
-            if (type(target) is not str or target != ctx['target']['uuid']
-                    or str(uuid.UUID(target)) != target):
+            # Slot reuse, prefixes, passive idle-peer selection, and a config
+            # pinned to a different target never authorize a new subject.
+            try:
+                if type(target) is not str or str(uuid.UUID(target)) != target:
+                    return False
+            except (ValueError, AttributeError):
                 return False
-            life = runtime.lifecycle()
+            pinned = (self._config or {}).get('targetUUID')
+            if pinned and pinned != target:
+                return False
+            provider = TrackerLifecycleProvider(t, runtime.lifecycle.scene,
+                lambda: target, expected_engine=runtime.lifecycle.expected_engine,
+                monotonic=self.clock)
+            life = provider()
             if (life is None or not life.connected or not life.target_fresh
                     or life.scene.scene_name != ctx['sceneName']
                     or life.scene.scene_hash != ctx['sceneHash']
                     or life.scene.room_generation != ctx['roomGeneration']):
                 return False
             peer, slot = life.target_key.split('@slot=')
-            if peer != target or (int(slot) == ctx['target']['slot']
-                    and life.target_incarnation == ctx['target']['incarnation']):
+            same_uuid = peer == ctx['target']['uuid']
+            if (peer != target or (same_uuid and int(slot) == ctx['target']['slot']
+                    and life.target_incarnation == ctx['target']['incarnation'])):
                 return False
             if not t.lock.acquire(False):
                 return False
@@ -1248,21 +1390,28 @@ class ExperimentalGroundHook:
                     return False
             finally:
                 t.lock.release()
-            if runtime.lifecycle() != life:
+            if (provider() != life or not binding.is_follow_current()
+                    or c.follow.get('target') != target):
                 return False
-            # Leave position, explicit follow object/revision, and the absolute
-            # session deadline unchanged. All old motion/proof ownership ends.
+            # Keep the latest explicit command/revision and absolute deadline.
+            # Cancel only its obsolete runtime/lease/permit; shutdown is queued
+            # before the next build on the existing single cold executor.
+            reason = 'follow_target_reincarnated' if same_uuid else 'follow_target_changed'
             if co is not None:
-                co.hard_cancel('follow_target_reincarnated')
-            self._revoke('experimental_follow_target_reincarnated')
+                co.hard_cancel(reason)
+            if binding.coordinator is co:
+                binding.coordinator = None
+            self._revoke('experimental_' + reason)
+            self._request_label, self._request_target = 'follow', None
             self._desired = self._desired_follow_peer = self._accepted_follow_peer = None
             self._follow_cold_streak = None
             self._scene_follow_pending = True
             self._next_follow_refresh = 0.
             self._cold_build_attempts, self._cold_build_next, self._cold_build_exhausted = 0, 0., False
             self.status = 'rebuilding_returned_follow_target'
-            c.log('experimental_follow_target_rebind', reason='fresh_target_incarnation_changed',
-                same_uuid=True, old_physics_reused=False)
+            c.log('experimental_follow_target_rebind',
+                reason='fresh_target_incarnation_changed' if same_uuid else 'fresh_explicit_target_changed',
+                same_uuid=same_uuid, old_physics_reused=False)
             return True
 
     def _rebind_seat_target(self):
@@ -1498,10 +1647,19 @@ class ExperimentalGroundHook:
                     self._future = self._executor.submit(self._build, dict(config), generation)
                 return
             if self.c._terrain_social_owns():
+                pause = getattr(self.c, '_stuck_ground_tick', None)
+                if callable(pause):
+                    pause(self.runtime, self._request_label, self._desired, self.clock())
                 self._follow_cold_streak = None
                 self.status = 'waiting_for_social_release'
                 return
             self.status = self.runtime.tick()
+            if self._handle_invalid_ground_goal():
+                return
+            recover = getattr(self.c, '_stuck_ground_tick', None)
+            if callable(recover) and recover(self.runtime, self._request_label, self._desired, self.clock()):
+                self.status = 'stuck_recovery_air'
+                return
             self._refresh_follow_goal()
             if (self._request_label == 'follow' and self._desired is not None
                     and self.c.motion is not None and self.c.follow):

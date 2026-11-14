@@ -118,8 +118,70 @@
     if (summary.apk && !$("wz-apk-path").value) $("wz-apk-path").value = summary.apk;
     if (summary.capture) renderCapture(summary.capture);
     if (summary.task) renderTask(summary.task);
+    renderCatalogCertificate(summary);
+    renderProps(summary);
     if (summary.device) renderDevice(summary.device);
     renderSummary();
+  }
+
+  function renderProps(summary) {
+    const props=summary && (summary.props || (summary.gameData || {}).props);
+    const task=summary && summary.task;
+    const reset=summary && (summary.resourceReset || {}).steps || [];
+    const ready=!!props && props.ready===true && props.state==='ready' && !reset.includes('props');
+    $("wz-props-state").textContent=task && task.kind==='props' && task.running ? '正在生成道具形状…' :
+      (props && props.message) || '道具形状尚未生成，请单独补生成；已有名称表与地形保持不变。';
+    $("wz-props-state").dataset.state=ready?'success':'waiting';
+    $("wz-props-start").disabled=!!state.cleanupBusy||!!state.resourceStartBusy||!!(task&&task.running);
+    $("wz-props-start").textContent=ready?'重新生成道具形状':'补生成道具形状（不重做地形）';
+  }
+
+  function renderCatalogCertificate(summary) {
+    const catalog = summary && summary.catalog;
+    const valid = !!catalog && catalog.certified === true && !!summary.account && String(catalog.account) === String(summary.account);
+    const running = summary && summary.task && summary.task.kind === "catalog" && summary.task.running;
+    $("wz-catalog-start").textContent = valid ? "重新校验/重建地图目录" : "构建地图目录";
+    if (!running) {
+      $("wz-cat-progress").value = valid ? 100 : 0;
+      $("wz-cat-pct").textContent = valid ? "100% · 校验通过" : "未生成 / 未通过校验";
+      $("wz-cat-msg").textContent = valid ? "地图目录构建成功 · 当前版本校验通过。" :
+        (catalog && catalog.message) || "目录尚未通过当前版本校验。生成游戏数据 → 遇境采集 → 构建地图目录。";
+    }
+    if (summary && summary.resourceReset && summary.resourceReset.active && (summary.resourceReset.steps || []).includes("data")) {
+      $("wz-data-progress").value = 0;
+      $("wz-data-pct").textContent = "未生成";
+      $("wz-data-msg").textContent = "已清理所选游戏数据。请明确点击生成游戏数据，然后采集遇境、构建地图目录。";
+    }
+  }
+
+  function mountCleanup() {
+    if (!window.XGDataCleanup) return;
+    state.cleanup = window.XGDataCleanup.mount($("wz-cleanup"), {
+      request: (path, body) => api(path, {method: "POST", body}),
+      getStatus: () => api("/xiaoguang/status"),
+      isBusy: () => !!state.resourceStartBusy||!!state.resourceTaskRunning||!!(state.summary && state.summary.task && state.summary.task.running),
+      onBusy: busy => {
+        state.cleanupBusy = busy;
+        ["wz-data-start", "wz-props-start", "wz-cap-start", "wz-cap-register", "wz-catalog-start", "wz-finish"].forEach(id => {
+          const button = $(id); if (button) button.disabled = busy || !!(state.summary && state.summary.task && state.summary.task.running);
+        });
+      },
+      navigate: step => { go(step === "data" || step === "props" ? "data" : "capture"); const button=$(step === "props" ? "wz-props-start" : step === "catalog" ? "wz-catalog-start" : step === "capture" ? "wz-cap-start" : "wz-data-start"); if(button)button.focus(); },
+      onSuccess: async (mode, result) => {
+        const onlyProps=result && result.selection && result.selection.props===true && !['terrain','catalog','names','captures'].some(k=>result.selection[k]);
+        if (mode !== "purge" && !onlyProps) {
+          stopTaskPoll(); if(state.capTimer){clearInterval(state.capTimer);state.capTimer=null;}
+          state.summary=null; $("wz-data-resume").checked=false;
+          $("wz-cat-progress").value=0; $("wz-cat-pct").textContent="未生成 / 待重新校验";
+          $("wz-cat-msg").textContent="数据已变更，等待当前版本目录重新核验。";
+          $("wz-cap-state").textContent="等待重新核验"; $("wz-cap-recorded").textContent="—";
+          $("wz-cap-msg").textContent="数据已变更，旧采集状态不作为完成证明。";
+          $("wz-data-msg").textContent="请重新生成游戏数据，再采集遇境、构建地图目录。";
+        }
+        const summary=await refresh(); if(!summary || summary.ok===false)throw new Error(summary && summary.message || "状态刷新失败");
+        if(mode!=="purge")go("data");
+      }
+    });
   }
 
   function renderSummary() {
@@ -142,6 +204,8 @@
   // ---------------------------------------------------------------- 长任务
   function renderTask(t) {
     if (!t) return;
+    state.resourceTaskRunning=!!t.running;
+    if($("wz-props-start"))$("wz-props-start").disabled=!!t.running||!!state.cleanupBusy||!!state.resourceStartBusy;
     const p = t.total ? Math.round(100 * (t.done || 0) / t.total) : (t.running ? 0 : 100);
     $("wz-data-progress").value = Math.min(100, Math.max(0, p));
     $("wz-data-pct").textContent = t.total ? (t.done || 0) + " / " + t.total : (t.running ? "…" : "—");
@@ -157,7 +221,7 @@
       $("wz-data-start").disabled = false;
       $("wz-task-stop").hidden = true;
       if (t.error) $("wz-data-msg").textContent = "失败：" + t.error + "（可以点“开始生成”重试，勾上续跑）";
-      else if (t.ok) $("wz-data-msg").textContent = "完成了。";
+      else if (t.ok) $("wz-data-msg").textContent = (t.result && t.result.warning) || "完成了。";
     }
     const det = t.error_detail || {};
     if (!t.running && (t.error || det.text)) {
@@ -247,16 +311,26 @@
   }
 
   // ---------------------------------------------------------------- 第 4 步
-  async function startData() {
-    const b = $("wz-data-start");
-    b.disabled = true;
-    $("wz-data-msg").textContent = "正在启动…";
-    const r = await api("/api/wizard/data/start", { method: "POST",
-      body: { resume: $("wz-data-resume").checked } });
-    b.disabled = false;
-    if (!r.ok) { $("wz-data-msg").textContent = r.message || "启动失败"; return; }
-    pollTask();
+  async function startResource(kind) {
+    if(state.cleanupBusy||state.resourceStartBusy||state.resourceTaskRunning)return;
+    state.resourceStartBusy=true;
+    const props=kind==='props', message=$(props?'wz-props-state':'wz-data-msg');
+    $("wz-data-start").disabled=$("wz-props-start").disabled=true;
+    message.textContent='正在核验离线状态…';
+    try{
+      if(state.summary && state.summary.task && state.summary.task.running)throw new Error('请等待当前构建任务完成。');
+      if(!window.XGDataCleanup)throw new Error('无法确认离线状态，请刷新后重试。');
+      const problem=window.XGDataCleanup.offlineProblem(await api('/xiaoguang/status'));
+      if(problem)throw new Error(problem.replace(/清理/g,'生成资源'));
+      const r=await api('/api/wizard/'+kind+'/start',{method:'POST',body:props?{}:{resume:$("wz-data-resume").checked}});
+      if(!r.ok)throw new Error(r.message || '资源任务启动失败');
+      message.textContent='任务已启动，可在本页查看进度。';
+      state.resourceTaskRunning=true;pollTask();
+    }catch(error){message.textContent=error.message || '资源任务启动失败';message.setAttribute('role','alert');}
+    finally{state.resourceStartBusy=false;$("wz-data-start").disabled=$("wz-props-start").disabled=!!state.cleanupBusy||!!state.resourceTaskRunning;}
   }
+  async function startData(){return startResource('data');}
+  async function startProps(){return startResource('props');}
 
   // ---------------------------------------------------------------- 第 5 步
   function platform() {
@@ -450,12 +524,13 @@
   // ---------------------------------------------------------------- 第 5 步（录制遇境）
   function renderCapture(c) {
     if (!c) return;
+    const resetCapture=!!(state.summary && state.summary.resourceReset && state.summary.resourceReset.active && (state.summary.resourceReset.steps || []).includes("capture"));
     const stale = Array.isArray(c.stale) ? c.stale : [];
-    const running = !!(c.state && !["idle", "stopped", "stale"].includes(c.state));
+    const running = ["starting", "searching", "ready", "waiting", "recording", "registering"].includes(c.state);
     const label = { idle: "还没开始", starting: "正在启动", searching: "正在找 MuMu",
       ready: "就绪", waiting: "等进图", recording: "正在录", registering: "正在登记",
       stale: "需要重新录制遇境", error: "出错", stopped: "已停止" }[c.state] || c.state || "—";
-    $("wz-cap-state").textContent = label;
+    $("wz-cap-state").textContent = resetCapture && !running ? "未生成 · 等待重新采集" : label;
     const m = c.mumu || {};
     $("wz-cap-mumu").textContent = m.serial ? (m.serial + "（进程 " + m.pid + "，Root " + (m.root ? "有" : "没有") + "）") : "—";
     $("wz-cap-scene").textContent = c.scene ? ((c.scene_name || c.scene) + "（" + c.scene + "）") : "—";
@@ -465,6 +540,7 @@
     const staleMsg = c.stale_notice || (staleOnly ? ("游戏已更新到 " + (c.current_version || "新版本") +
       "，之前的遇境录制是 " + (stale[0].version || "旧版本") + " 的，需要用 MuMu 重新录一次遇境（只需遇境一张）。") : "");
     $("wz-cap-msg").textContent = staleMsg || (c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || "—"));
+    if (resetCapture && !running) $("wz-cap-msg").textContent = "清理后的旧录制状态不作为完成证明，请明确重新采集遇境或登记当前有效录制。";
     $("wz-cap-start").hidden = running;
     $("wz-cap-stop").hidden = !running;
     const capDet = c.last_error_detail || {};
@@ -486,7 +562,7 @@
     state.capTimer = setInterval(async () => {
       if (state.step !== "capture") { clearInterval(state.capTimer); state.capTimer = null; return; }
       const c = await api("/api/capture/status");
-      if (c && !c.__http) renderCapture(c);
+      if (c && c.ok !== false && (!c.__http || c.__http === 200)) renderCapture(c);
       const t = await api("/api/wizard/task");
       if (t && t.task) {
         renderTask(t.task);
@@ -497,7 +573,7 @@
           $("wz-cat-msg").textContent = t.task.msg || "正在生成地图目录…";
         } else if (t.task.kind === "catalog" && !t.task.running) {
           $("wz-catalog-start").disabled = false;
-          $("wz-cat-msg").textContent = t.task.ok ? "地图目录生成完成。" :
+          $("wz-cat-msg").textContent = t.task.ok ? "任务已结束，正在校验当前版本目录；尚未确认完成。" :
             ("生成失败：" + (t.task.error || "未知错误") + "，可以重试。");
           if (!t.task.ok) {
             $("wz-cat-details").hidden = false;
@@ -513,6 +589,7 @@
   }
 
   async function capStart() {
+    if (state.cleanupBusy) return;
     const r = await api("/api/wizard/capture/start", { method: "POST", body: {} });
     $("wz-cap-msg").textContent = r.message || (r.ok ? "已开始" : "启动失败");
     if (!r.ok) $("wz-cap-msg").textContent += (r.detail ? ("：" + r.detail) : "");
@@ -526,6 +603,7 @@
   }
 
   async function capRegister() {
+    if (state.cleanupBusy) return;
     const b = $("wz-cap-register");
     b.disabled = true;
     $("wz-cap-msg").textContent = "正在重新登记已有录制…";
@@ -541,11 +619,19 @@
   }
 
   async function catalogStart() {
+    if(state.cleanupBusy || state.catalogBusy)return;
+    state.catalogBusy=true;
     $("wz-catalog-start").disabled = true;
-    const r = await api("/api/wizard/catalog/start", { method: "POST", body: {} });
-    $("wz-cat-msg").textContent = r.message || (r.ok ? "已开始生成地图目录" : "启动失败");
-    if (r.ok) pollTask();
-    setTimeout(() => { $("wz-catalog-start").disabled = false; }, 3000);
+    try {
+      const r = await api("/api/wizard/catalog/start", { method: "POST", body: {} });
+      $("wz-cat-msg").textContent = r.message || (r.ok ? "已开始生成地图目录" : "启动失败");
+      if (r.ok) pollTask();
+    } catch (error) {
+      $("wz-cat-msg").textContent = "启动失败：" + (error.message || "请求中断，请重试。");
+    } finally {
+      state.catalogBusy=false;
+      $("wz-catalog-start").disabled = !!state.cleanupBusy;
+    }
   }
 
   // ---------------------------------------------------------------- 第 7 步
@@ -694,6 +780,7 @@
 
   // ---------------------------------------------------------------- 第 9 步
   async function finishWizard() {
+    if (state.cleanupBusy) return;
     const b = $("wz-finish");
     b.disabled = true;
     const r = await api("/api/wizard/finish", { method: "POST", body: {} });
@@ -727,6 +814,7 @@
     $("wz-apk-pull").addEventListener("click", pullApk);
     $("wz-apk-check").addEventListener("click", () => checkApk(false));
     $("wz-data-start").addEventListener("click", startData);
+    $("wz-props-start").addEventListener("click", startProps);
     $("wz-task-stop").addEventListener("click", async () => {
       await api("/api/wizard/task/stop", { method: "POST", body: {} });
       stopTaskPoll(); await refresh();
@@ -790,6 +878,7 @@
     setupWindowControls();
     window.addEventListener("pywebviewready", setupWindowControls);
     bind();
+    mountCleanup();
     const s = await refresh();
     if (!s || s.ok === false) return;
     loadPersonas();

@@ -65,6 +65,7 @@ test('new game version asks for game-data rebuild without a new login', () => {
 });
 test('current-version catalog is still certified normally', () => {
   const ready = {ok: true, account: 'fixture-a', gameVersion: '0.16.8',
+    catalog: {account: 'fixture-a', certified: true, maps: 115, variants: 1},
     steps: [{id: 'capture', done: true, detail: {account: 'fixture-a',
       result: {ok: true, account: 'fixture-a', maps: 115, variants: 1}}}, {id: 'data', done: true}]};
   assert.equal(model.catalogView(ready, null).state, 'success');

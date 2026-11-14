@@ -1,10 +1,8 @@
-"""光遇国服聊天审核规则（0.16.7 设备缓存，0.16.8 沿用，780 条）离线检查：小光发言前先过一遍，命中就换种说法。
+"""Optional local SDK text-rule precheck; public packages contain no rule data.
 
-规则来源：ref/textrules/cached_patterns.jsonl（GPT 从 ma75_147897_regex.txt 解密还原；engine_pattern 在 PCRE2 10.40 下
-复编译与原字节码逐字节一致）。这里用系统 libpcre2-8（10.46）按 compileOptions 编译 engine_pattern 匹配——语法相同，
-只是不用原序列化字节码。文本先按 SDK 规范化（ref/textrules/sdk_subject.py：NFKC、繁转简、全转半、汉字码位 +1、
-level/channel 前缀）。分组：shield 屏蔽（别人看不到）/ intercept 拦截 / replace 替换 / remind 提醒。
-  textcheck.py "要检查的话"     # 命令行自测
+Rules may be supplied in the user data directory. Missing rules are explicitly
+unavailable, not reported as a successful match/verification. The remote service
+retains its normal text handling. No package data fallback is used.
 """
 import ctypes as C
 import importlib.util
@@ -16,14 +14,16 @@ from pathlib import Path
 import xg_paths
 
 def _rules_dir():
-    """规则目录：优先用户数据目录，其次安装目录自带的 app/ref/textrules。"""
-    for p in (Path(xg_paths.DATA) / "ref/textrules", Path(getattr(xg_paths, "APP", "")) / "ref/textrules"):
-        try:
-            if (p / "cached_patterns.jsonl").is_file():
-                return p
-        except OSError:
-            continue
-    return Path(xg_paths.DATA) / "ref/textrules"
+    """Only generated/user-local rules, never APK/cache data from app/ref."""
+    current = Path(xg_paths.GAME_DIR) / "text-rules"
+    for path in (current, Path(xg_paths.DATA) / "ref/textrules"):
+        if (path / "cached_patterns.jsonl").is_file():
+            return path
+    return current
+
+
+class RulesUnavailable(FileNotFoundError):
+    """The optional user-local rule data has not been generated/provided."""
 
 
 RULES = _rules_dir()
@@ -43,6 +43,11 @@ def _subject_mod():
 
 class Engine:
     def __init__(self):
+        global RULES
+        RULES = _rules_dir()
+        if not all((RULES / name).is_file() for name in
+                   ("cached_patterns.jsonl", "sdk_subject.py", "t2s.json")):
+            raise RulesUnavailable("local_text_rules_not_generated")
         # PCRE2 match data/context are mutable; every thread shares this engine.
         self._check_lock = threading.Lock()
         lib = None
@@ -94,7 +99,7 @@ class Engine:
             self.rules[r["group"]].append((str(r["id"]), code))
 
     def require_ready(self):
-        """Require all 780 rules from the bundled 0.16.7 rule set (unchanged in 0.16.8) to compile."""
+        """Require the selected user-local rule set to compile completely."""
         if self.failed or any(len(self.rules.get(group, ())) != count
                               for group, count in EXPECTED_RULE_COUNTS.items()):
             raise RuntimeError("text_rules_incomplete")

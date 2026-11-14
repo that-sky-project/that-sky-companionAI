@@ -5,6 +5,8 @@ must commit through the current engine before the runner changes its own map.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import math
 import os
 import re
@@ -32,6 +34,15 @@ def valid_uuid(value):
         return False
 
 
+FEEDBACK_REASONS = frozenset((
+    'invalid_request_owner', 'explicit_slash_required', 'unrecognized_travel_command',
+    'invalid_spawn_variant', 'destination_variant_mismatch', 'destination_mismatch',
+    'invalid_command_time', 'stale_command', 'command_expired',
+    'destination_capture_unavailable', 'invalid_request_id', 'request_limit',
+    'runtime_rejected', 'runtime_failed', 'superseded',
+))
+
+
 class LeaderTravelRuntime:
     def __init__(self, ctl, *, session_deadline, has_capture, rpc_port,
                  clock=time.monotonic, wall=time.time):
@@ -54,6 +65,10 @@ class LeaderTravelRuntime:
         self.resume_gate = None
         self.resume_authorization = None
         self.resume_reported = False
+        self._feedback_results = {}
+        self._feedback_runtime = uuid.uuid4().hex
+        # Restart invalidates the previous process's accepted receipts immediately.
+        self._write_feedback()
 
     def log(self, event, **fields):
         self.ctl.log('escort_' + event, **fields)
@@ -67,6 +82,70 @@ class LeaderTravelRuntime:
 
     def available_without_resources(self, kind):
         return kind in (EffectKind.INVITE, EffectKind.TRANSFER, EffectKind.STOP)
+
+    def _write_feedback(self):
+        """Bounded ephemeral controller results under the existing control root."""
+        now = self.wall()
+        self._feedback_results = {key: value for key, value in self._feedback_results.items()
+                                  if value['expires_at'] > now}
+        rows = list(self._feedback_results.values())[-16:]
+        self._feedback_results = {row['request_id']: row for row in rows}
+        current = self.current
+        active = (self.command or {}).get('request_id') if current is not None and (
+            current.phase not in TERMINAL or current.phase is Phase.SUCCEEDED) else None
+        doc = {'version': 1, 'runtime_id': self._feedback_runtime, 'generated_at': now,
+               'active_request_id': active, 'active_revision': self.revision if active else None,
+               'results': rows}
+        path = pending = None
+        path_safe = False
+        try:
+            # ctl.path is the same xg_paths control file used by _poll; the server
+            # controller supplies its own control root without a hardcoded path.
+            path = Path(self.ctl.path).with_name('escort_travel.feedback.json')
+            if path.is_symlink() or path.parent.is_symlink():
+                raise OSError('feedback_path')
+            path_safe = True
+            pending = path.with_name(path.name + '.' + uuid.uuid4().hex + '.pending')
+            data = json.dumps(doc, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode('utf-8')
+            if len(data) > 65536:
+                raise ValueError('feedback_size')
+            with pending.open('xb') as stream:
+                stream.write(data); stream.flush(); os.fsync(stream.fileno())
+            os.replace(pending, path)
+        except (OSError, ValueError, TypeError, AttributeError):
+            self.log('feedback_write_failed')
+            # Fail closed where possible: an older accepted file must not remain
+            # authoritative after an update/restart could not be persisted.
+            # A locked/unremovable file is still bounded by the 15-second TTL.
+            if path_safe and path is not None:
+                try:
+                    if not path.is_symlink() and not path.parent.is_symlink():
+                        path.unlink(missing_ok=True)
+                except OSError:
+                    self.log('feedback_invalidation_failed')
+        finally:
+            if pending is not None:
+                try: pending.unlink(missing_ok=True)
+                except OSError: pass
+
+    def _publish_feedback(self, cmd, status, reason=None):
+        """Echo only binding fields, not the user's command or arbitrary errors."""
+        if (type(cmd) is not dict or cmd.get('feedback_version') != 1
+                or not re.fullmatch('[0-9a-f]{32}', str(cmd.get('request_id', '')))
+                or not valid_uuid(cmd.get('requester')) or not valid_uuid(cmd.get('chat_session'))
+                or type(cmd.get('issued_at')) not in (int, float) or not math.isfinite(cmd['issued_at'])
+                or type(cmd.get('ingress_revision')) is not int or cmd['ingress_revision'] <= 0
+                or type(cmd.get('channel')) is not str or len(cmd['channel']) > 32):
+            return
+        now = self.wall()
+        result = {key: cmd[key] for key in ('request_id', 'requester', 'issued_at',
+                  'chat_session', 'ingress_revision', 'channel')}
+        result.update(operation='escort_travel', status=status,
+                      reason='runtime_accepted' if status == 'accepted' else (reason if reason in FEEDBACK_REASONS else 'runtime_rejected'),
+                      controller_revision=self.revision if status == 'accepted' else None,
+                      observed_at=now, expires_at=now + 15)
+        self._feedback_results[result['request_id']] = result
+        self._write_feedback()
 
     def _validate(self, cmd):
         now, wall = self.clock(), self.wall()
@@ -201,15 +280,19 @@ class LeaderTravelRuntime:
                              social=(self.ctl.social or {}).get('kind'))
                 except Exception as exc:
                     self.log('hold_probe_failed', error=repr(exc)[:160])
+                self._publish_feedback(cmd, 'accepted')
                 return True
             except (ValueError, TypeError, KeyError, AttributeError) as exc:
                 self.log('rejected', reason=str(exc)[:100])
+                self._publish_feedback(cmd, 'rejected', str(exc))
                 return False
 
     def preempt(self, reason):
         with self.lock:
             self._same_peer_ws_intent = None
             previous = self.current
+            if self.command is not None:
+                self._publish_feedback(self.command, 'superseded', 'superseded')
             if previous is not None and previous.phase not in TERMINAL:
                 previous.preempt(command_revision=self.revision + 1)
                 self.log('stopped', reason=reason)
@@ -231,6 +314,7 @@ class LeaderTravelRuntime:
             self._same_peer_ws_intent = None
             c.cancel(now=self.clock(), speaker_uuid=cmd['requester'],
                      command_revision=self.revision + 1)
+            self._publish_feedback(self.command, 'superseded', 'superseded')
             self.pending_transfer = None
             self.resume_authorization = None
             if self.resume_gate is not None:
@@ -370,6 +454,8 @@ class LeaderTravelRuntime:
 
     def tick(self):
         with self.lock:
+            if any(row['expires_at'] <= self.wall() for row in self._feedback_results.values()):
+                self._write_feedback()
             if self.current is None or self.current.phase in TERMINAL:
                 return
             now = self.clock()
@@ -380,6 +466,8 @@ class LeaderTravelRuntime:
             status = self.current.tick(now, self.snapshot(now))
             key = (status.phase, status.reason)
             if key != self.last_status:
+                if status.phase in TERMINAL and status.phase is not Phase.SUCCEEDED:
+                    self._publish_feedback(self.command, 'rejected', 'runtime_failed')
                 self.last_status = key
                 self.log('state', phase=status.phase.value, reason=status.reason,
                          map_id=self.command['map_id'])

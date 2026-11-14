@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -72,6 +73,14 @@ NAMES = GAME_DIR / "names"
 TERRAIN = GAME_DIR / "terrain"
 CATALOG_DATA = GAME_DIR / "catalog"
 
+
+def props_dir(game_version: str | None = None) -> Path:
+    """用户本机生成的版本专属道具目录；绝不回退到随包 APK 几何。"""
+    version = GAME_VERSION if game_version is None else game_version
+    if not isinstance(version, str) or re.fullmatch(r'[0-9][A-Za-z0-9_.-]{0,79}', version) is None:
+        raise ValueError('props_game_version')
+    return DATA / 'game' / version / 'props'
+
 CONFIG_FILE = DATA / "config.json"
 WEB_JSON = CONTROL / "web.json"
 WIZARD_TASK = CONTROL / "wizard_task.json"       # 后台长任务（names/terrain/catalog/pull-apk）
@@ -100,6 +109,8 @@ LAUNCHER = APP / "launcher"
 TOOLS = APP / "tools"
 WEB = APP / "web"
 CONFIG_DIR = APP / "config"
+ASSETS = APP / "assets"                       # 随包只读运行时资产
+PROP_ASSETS = props_dir()                       # 用户本地生成；冷预载 + RAM LRU
 
 # 运行入口（服务器优先用 release 的那份，保持原行为）
 RELEASE_BOT_ENTRY = RELEASE / "bot/experimental_ground_entry.py"
@@ -297,7 +308,7 @@ def describe() -> dict:
         "control": str(CONTROL), "logs": str(LOGS), "captures": str(CAPTURES),
         "runtime_private": str(RUNTIME_PRIVATE), "runtime_data": str(RUNTIME_DATA),
         "dictionary": str(DICTIONARY),
-        "names": str(NAMES), "game": str(GAME_DIR), "python": python_exe(), "node": node_exe(),
+        "names": str(NAMES), "game": str(GAME_DIR), "props": str(PROP_ASSETS), "python": python_exe(), "node": node_exe(),
         "native": str(NATIVE_DIR), "apk": str(APK_DIR),
         "platform": "windows" if IS_WINDOWS else os.name,
     }
