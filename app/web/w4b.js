@@ -88,7 +88,8 @@
           stale: "需要重新录制遇境", error: "出错", stopped: "已停止" };
         stateEl.textContent = labels[c.state] || c.state || "—";
         const m = c.mumu || {};
-        mumuEl.textContent = m.serial ? (m.serial + "（进程 " + m.pid + "，Root " + (m.root ? "有" : "没有") + "）") : "—";
+        mumuEl.textContent = [m.serial, m.android_label, m.pid ? "进程 " + m.pid : "",
+          typeof m.root === "boolean" ? "Root " + (m.root ? "有" : "没有") : ""].filter(Boolean).join(" · ") || "—";
         sceneEl.textContent = c.scene ? ((c.scene_name || c.scene) + "（" + c.scene + "）") : "—";
         recordedEl.textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、")
           : (stale.length ? ("旧录制：" + stale.map((x) => x.version || "旧版本").join("、")) : "—");

@@ -138,7 +138,8 @@ def _cleanup_busy() -> bool:
 def _cleanup_service(data_root=None):
     global _CLEANUP_SERVICE, _CLEANUP_ROOT
     import data_cleanup
-    root = Path(data_root if data_root is not None else xg_paths.DATA).resolve()
+    # 保留词法根：提前 resolve 会隐藏根目录本身的 junction。
+    root = Path(data_root if data_root is not None else xg_paths.DATA)
     if _CLEANUP_SERVICE is None or _CLEANUP_ROOT != root:
         _CLEANUP_SERVICE = data_cleanup.CleanupService(
             root, is_online=_cleanup_online, is_busy=_cleanup_busy)
@@ -1039,7 +1040,7 @@ class Handler(BaseHTTPRequestHandler):
             if api == "/memory/reset":
                 scope = "all" if data.get("scope") == "all" else "chat"
                 if xg_proc.find_script("bot/ai_companion.py"):
-                    (xg_paths.CONTROL / "memory_reset").write_text(json.dumps({"scope": scope}))
+                    (xg_paths.CONTROL / "memory_reset").write_text(json.dumps({"scope": scope}), encoding="utf-8")
                 else:
                     mf = xg_paths.LOGS / "memory.json"
                     try:
@@ -1155,7 +1156,7 @@ def main(argv=None):
     if not token:
         # 服务器兼容：sky-play 读 DATA/control/api.token（同一份）。没有就生成。
         try:
-            token = (xg_paths.CONTROL / "api.token").read_text().strip()
+            token = (xg_paths.CONTROL / "api.token").read_text(encoding="utf-8").strip()
         except OSError:
             token = ""
         if not token:

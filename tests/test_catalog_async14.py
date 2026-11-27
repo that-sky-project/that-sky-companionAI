@@ -5,17 +5,19 @@ import ast,copy,hmac,http.client,json,os,types
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlsplit,parse_qs
 from pathlib import Path
-import sys,tempfile,threading,time,unittest
+import sys,tempfile,threading,time,unittest,uuid
 from unittest import mock
 ROOT=Path(__file__).resolve().parents[1];APP=ROOT/'app'
 sys.path[:0]=[str(APP/'escort-v31-server'),str(APP)]
 from xg_gamedata import catalog_state as C
 from qfsky.version_profile import CURRENT_BUILD,profile_for_build
 PROFILE=profile_for_build(CURRENT_BUILD)
-UUID='10000000-0000-4000-8000-000000000014'
-OTHER='10000000-0000-4000-8000-000000000015'
+# Deterministic fixture identities; the test carries no fixed account identifier.
+UUID=str(uuid.uuid5(uuid.NAMESPACE_OID,'offline-catalog-fixture/primary'))
+OTHER=str(uuid.uuid5(uuid.NAMESPACE_OID,'offline-catalog-fixture/other'))
 
 def write_json(path,value):
+    path=Path(C.xg_paths.long_path(path,force=True))
     path.parent.mkdir(parents=True,exist_ok=True);tmp=path.with_name(path.name+'.pending')
     tmp.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8');os.replace(tmp,path)
 
@@ -46,6 +48,9 @@ class AsyncCatalogTests(unittest.TestCase):
         for event in self.events:event.set()
         wait_idle()
         with C._LOCK:C._CACHE.clear()
+        if os.name=='nt':
+            import shutil
+            shutil.rmtree(C.xg_paths.long_path(self.tmp.name,force=True))
         self.tmp.cleanup()
     def make(self,account):
         folder=self.xg.ASSET_RELEASE/'asset-catalog-acct'/account
@@ -65,7 +70,7 @@ class AsyncCatalogTests(unittest.TestCase):
         row=copy.deepcopy(json.loads(policy._EXPECTED_VARIANTS_JSON)['507487826']['qianniaocheng']);row['actor_sha256']='a'*64
         manifest={'apk_build':PROFILE['build'],'native_sha256':PROFILE['native_sha256'],'variants':{'507487826':{'qianniaocheng':row}}}
         write_json(self.folder/'manifest.json',manifest)
-        placement=self.folder/'SunsetEnd2/variants/qianniaocheng/placement.json'
+        placement=Path(C.xg_paths.long_path(self.folder/'SunsetEnd2/variants/qianniaocheng/placement.json',force=True))
         placement.parent.mkdir(parents=True,exist_ok=True)
         placement.write_bytes(policy.canonical_json(value))
         return manifest,value
@@ -270,6 +275,17 @@ class AsyncCatalogTests(unittest.TestCase):
         with mock.patch.object(C,'_runtime_check') as run:
             self.assertEqual(C.certify(self.data,'fixture-a',UUID,PROFILE)['code'],C.QIANNIAOCHENG_STALE_CODE)
             run.assert_not_called()
+
+    def test_long_unicode_manifest_is_read_and_fingerprinted(self):
+        folder=self.folder/'含空格 的目录'/('路径段'*30)/('b'*90)
+        manifest=folder/'manifest.json'
+        self.assertGreater(len(str(manifest)),260)
+        write_json(manifest,{'revision':1})
+        self.assertEqual(C._json(manifest),{'revision':1})
+        before=C._fingerprint(self.xg,folder)
+        self.assertIn(str(manifest),{row[0] for row in before})
+        write_json(manifest,{'revision':222})
+        self.assertNotEqual(C._fingerprint(self.xg,folder),before)
 
     def test_real_http_status_routes_remain_fast_while_catalogue_checks(self):
         # Execute actual Handler and wizard.catalog_status AST without importing any

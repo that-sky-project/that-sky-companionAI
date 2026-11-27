@@ -6,6 +6,7 @@
 import argparse
 import json
 import os
+import queue
 import signal
 import sys
 import threading
@@ -14,6 +15,7 @@ import uuid
 from pathlib import Path
 
 import xg_paths
+import same_map_move_policy as move_policy
 
 
 def _load_map_state_class():
@@ -84,7 +86,7 @@ def watch_segment(cancel, seg_cancel, rejoin, tracker, join_players, state):
     started, missing_since = time.monotonic(), None
     fast = time.monotonic() < state.get("fast_until", 0)      # 刚跟着哥哥换图：快点回到他身边
     grace, step = (FOLLOW_GRACE, 2) if fast else (REJOIN_GRACE, 5)
-    while not seg_cancel.wait(step):
+    while not seg_cancel.wait(2 if time.monotonic() < state.get("after_escort_until", 0) else step):
         if cancel.is_set():
             seg_cancel.set()
             return
@@ -106,7 +108,12 @@ def watch_segment(cancel, seg_cancel, rejoin, tracker, join_players, state):
                 state["switched_at"] = None
             continue
         missing_since = missing_since or time.monotonic()
-        if time.monotonic() - missing_since >= (FOLLOW_MISSING if fast else state["interval"]):
+        quick = time.monotonic() < state.get("after_escort_until", 0)   # T72：带路后主人被并房，6 秒就追
+        if state.get('_t75_r3_until', 0.0) > time.monotonic():
+            # 只在权威单人迁移已提交后的有限窗口保留当前健康房；全局取消仍优先。
+            missing_since = None
+            continue
+        if time.monotonic() - missing_since >= (FOLLOW_MISSING if fast else (6.0 if quick else state["interval"])):
             if fast and state.get("switched_at"):
                 state["tickets"] = state.get("tickets", 1) + 1      # 这次拉票没分到哥哥身边
             state["interval"] = min(REJOIN_MAX, state["interval"] * 2)
@@ -117,6 +124,17 @@ def watch_segment(cancel, seg_cancel, rejoin, tracker, join_players, state):
 
 MOVE_LOG = ROOT / "logs/ws_move.jsonl"   # ai_companion 记下的 WS move（服务器推的入服票）
 MOVE_MAX_AGE = 20.0        # 只用这么新的票（move_ts 是服务器时间，票过期就没用了）
+
+# T74-R3：连接内 ticket join 的即时日志白名单（由 on_pump_event 写入 bot 日志）。
+_PUMP_EVENT_WHITELIST = frozenset({
+    't75_r3_recovery_open','t75_r3_recovery_ticket','t75_r3_recovery_end','t94_dayhub_flip','t99_split_allowed',
+    "ticket_join_staged", "ticket_join_connected", "ticket_join_join_sent",
+    "ticket_join_enter", "ticket_join_aborted", "ticket_join_failed",
+    "ticket_dial_retry", "ticket_sig_fallback", "ticket_fail_reply",
+    "move_committed", "owner_left_room",
+    "t75_pair_wire", "t75_pair_terminal", "t75_pair_diag_error", "t75_pair_move", "t75_arrival_ticket",
+    "t75_r2_fault_site", "t76_solo_move_busy",
+})
 
 
 FRIEND_POLL = 0.5          # 跟着过图：每这么久问一次哥哥在哪间房
@@ -173,14 +191,14 @@ def use_friend_ticket(t, state, cancel=None):
 
 def owner_uuid():
     try:
-        return (ROOT / "control/owner_uuid").read_text().strip()
+        return (ROOT / "control/owner_uuid").read_text(encoding="utf-8").strip()
     except OSError:
         return ""
 
 
 def has_capture(uuid, map_id):
     try:
-        d = json.loads((RT / "private/connection0167_profiles.local.json").read_text())
+        d = json.loads((RT / "private/connection0167_profiles.local.json").read_text(encoding="utf-8"))
         cap = (d["maps"].get(str(map_id)) or {}).get("current_capture") or {}
         if uuid in (cap.get("by_account") or {}) or cap.get("account") == uuid:
             return True
@@ -214,10 +232,16 @@ ROOM_LEVEL_STABLE = 20.0  # 名单里哥哥的地图和小光以为的不一样�
 ROOM_LEVEL_GRACE = 30.0   # 进房后这么久内不判断：刚过图时名单里哥哥那行的地图还是旧的
 
 
-def watch_moves(cancel, seg_cancel, pending, pose_ctl, own_uuid, current_map, tracker=None, acceptor=None, same_peer_publish=None):
+def watch_moves(cancel, seg_cancel, pending, pose_ctl, own_uuid, current_map, tracker=None, acceptor=None, same_peer_publish=None, adopt_move=None):
     """跟着哥哥过图/回遇境。两条路：
     1) 带路方发来 ChangeLevelWithFadeRpc（牵着时按回遇境/过图，实测走这条）→ 换图，拉票带上哥哥；
-    2) WS move（服务器推的票）：哥哥正牵着/背着（或刚松开），或目的房间里有哥哥 → 用这张票过去。"""
+    2) WS move（服务器推的票）：哥哥正牵着/背着（或刚松开），或目的房间里有哥哥 → 用这张票过去。
+
+    T73：同图票不再“拆连接重新入服”，而是经 adopt_move 递交给当前连接的
+    handoff pump，按服务器 type 9 Move 的 make-before-break 路径迁移；详见
+    same_map_move_policy 与 work/REPORT.md。跨图票仍走结束本段+新票入服。"""
+    same_seen = {}
+
     def stopped():
         return cancel.is_set() or seg_cancel.is_set()
 
@@ -317,8 +341,87 @@ def watch_moves(cancel, seg_cancel, pending, pose_ctl, own_uuid, current_map, tr
                 continue
             linked = pose_ctl is not None and pose_ctl.linked_with(owner)
             with_owner = owner in (ev.get("other_players") or [])
-            if level == current_map or not (linked or with_owner):
-                continue                          # 同图换服务器的票不理（会把小光从哥哥身边拆走）
+            if level == current_map:
+                # T73：同图票原则上都跟，但**绝不**用“结束本段 + 新连接”的方式
+                # （01:04:29 实测 1 秒被 server_ended_or_changed_connection 终止，
+                # 而且开门前就离开主人房间）。带主人 / 主人坐标已过期 / 同一张
+                # uri 第二次推送 → 把票交给当前连接的 pump 做连接内迁移。
+                key = ev.get("uri")
+                same_seen[key] = same_seen.get(key, 0) + 1
+                ticket = {k: ev[k] for k in ("uri", "move_ts", "sig", "signature",
+                                             "platform_filter",
+                                             "origin_host", "origin_port", "ip", "port",
+                                             "speed_host", "speed_ip", "connect_addr",
+                                             "dial_host", "public_ip")
+                          if k in ev}
+                ticket["level"] = level
+                # T74-R2：WS move 同时带 `sig` 与 `signature`。默认沿用旧行为用 `sig`；
+                # 若线上确认 Join/RC4 用的是 `signature`，设 SKY_T74_R2_WS_SIG_FIELD=signature
+                # 即可切换（另一个保留在 ticket['signature'] 供 in-band Move 匹配）。
+                if (os.environ.get("SKY_T74_R2_WS_SIG_FIELD") == "signature"
+                        and ev.get("signature") and ev.get("sig")):
+                    ticket["sig"], ticket["signature"] = ev["signature"], ev["sig"]
+                # T73-R2：把“票里是否带主人”一起交给 pump，EnterGame 名单要复验。
+                ticket["other_players"] = list(ev.get("other_players") or [])
+                ticket["with_owner"] = bool(with_owner)
+                if level == 2394719185 and with_owner and os.environ.get("SKY_T75_DAYHUB_PAIRING", "1") != "0":
+                    # 仅供此配对比较签发源与本地旧票面；不是拨号地址。
+                    ticket["src_uri"] = ev.get("src_uri")
+                    if (os.environ.get("SKY_T75_R2_DAYHUB_PAIRING","1")!="0"
+                            and os.environ.get("SKY_T75_R3_DAYHUB_PAIRING","1")!="0"):
+                        # 只给已经读到的目标配对票记录本机处理点；绝不提前拨号或改写票内 move_ts。
+                        ticket["_t75_r3_watch_mono_ns"]=time.monotonic_ns()
+                        if type(ev.get("_t75_r3_ws_mono_ns")) is int:
+                            ticket["_t75_r3_ws_mono_ns"]=ev["_t75_r3_ws_mono_ns"]
+                    ticket["_t75_first_field"] = ("signature" if
+                        os.environ.get("SKY_T74_R2_WS_SIG_FIELD") == "signature"
+                        and ev.get("signature") and ev.get("sig") else "sig")
+                owner_seen = False
+                if tracker is not None and owner:
+                    try:
+                        with tracker.lock:
+                            owner_seen = any(v == owner for v in tracker.slots.values())
+                    except Exception:
+                        owner_seen = False
+                # T74-R2：区分“主人还在本房但坐标 stale”与“主人已经离开本房”。
+                # 后者时 no-owner 的同图票必须按住，交给 owner_rejoin。
+                present_now = _owner_present(tracker, owner) if owner_seen else None
+                # T74-R3：配对票按 (uri, move_ts) 去重——服务器每次重推都是
+                # 新 move_ts + 新签名；“已成功同房的同一目标”才按住。
+                ticket_key = f"{key}@{ev.get('move_ts')}"
+                # T98（11-22）：配对票里两人一起换房时，原生被牵的一方会等带路的人先走。
+                # 实测小光比主人先到目标房就被 36 拒，同一房间十几秒后重推、主人已在房里就成功。
+                # 所以先等主人离开当前房间（坐标停更或名单消失）再进，最多等 SKY_T98_WAIT_MAX 秒。
+                if (level == 2394719185 and with_owner and owner_seen
+                        and os.environ.get("SKY_T98_WAIT_OWNER", "1") != "0"):
+                    _t98_t0 = time.monotonic()
+                    _t98_max = float(os.environ.get("SKY_T98_WAIT_MAX", "2.5"))
+                    _t98_left = False
+                    while time.monotonic() - _t98_t0 < _t98_max:
+                        if _owner_present(tracker, owner, limit=0.8) is False:
+                            _t98_left = True
+                            break
+                        time.sleep(0.05)
+                    if _t98_left:
+                        time.sleep(float(os.environ.get("SKY_T98_AFTER_LEFT", "0.3")))
+                    log("t98_wait_owner", move_ts=ev.get("move_ts"), owner_left=_t98_left,
+                        waited_ms=round((time.monotonic() - _t98_t0) * 1000))
+                move_policy.route_same_map_ticket(
+                    level=level, uri=key, ticket_fields=ticket,
+                    with_owner=with_owner, owner_stale=_owner_stale(tracker, owner),
+                    owner_seen=owner_seen, owner_present=present_now,
+                    seen_count=same_seen[key], has_capture=has_capture(own_uuid, level),
+                    adopt=(adopt_move or (lambda _ticket: False)),
+                    publish=(lambda t: publish(level=level, ticket=t,
+                                               why="服务器并房（无 inband 通道，退回新连接）")),
+                    log=log,
+                    adopt_available=(adopt_move is not None
+                                     and os.environ.get("SKY_T73_INBAND_MOVE", "1") == "1"),
+                    ticket_key=ticket_key, move_ts=ev.get("move_ts"),
+                    pairing_map=(level == 2394719185), now=time.monotonic())
+                continue
+            if not (linked or with_owner):
+                continue
             escort = getattr(pose_ctl,"_escort_travel",None) if pose_ctl is not None else None
             if (escort is not None and escort.ignore_source_ws_advisory(level,current_map)):
                 log("escort_source_ws_move_ignored",source_map=level,target_map=current_map,
@@ -457,6 +560,9 @@ def main():
         install_leader_travel(pose_ctl, has_capture=has_capture,
                              rpc_port=install_engine_port(pose_ctl))
         log("pose_control_start", file=str(control))
+        if os.environ.get("SKY_T100_AFFINITY", "1") != "0":
+            threading.Thread(target=_t100_affinity_loop, args=(tracker, cancel), daemon=True,
+                             name="t100aff").start()
 
     if args.accept_offers:
         import offer_accept
@@ -556,10 +662,20 @@ def main():
         # A slow previous watcher keeps only its old container, never the next segment's.
         pending_move = {}
         scene_publish = {'map_id': args.map, 'revision': 0}
+        # T73：同图 WS 票 → 当前连接的 pump（连接线程内消费），绝不作为新段入服票。
+        external_moves = queue.Queue(maxsize=4)
+
+        def adopt_external_move(ticket):
+            try:
+                external_moves.put_nowait(dict(ticket))
+                return True
+            except queue.Full:
+                log("same_map_move_queue_full", uri=ticket.get("uri"))
+                return False
+
         same_peer_moves = None
         same_peer_publish = None
         if os.environ.get('SKY_ESCORT_SAME_PEER_V31') == '1':
-            import queue
             same_peer_moves = queue.Queue(maxsize=1)
             def same_peer_publish(move, escort, segment_id=segment, scene_state=scene_publish):
                 if not escort.same_peer_move_current(move):return
@@ -593,6 +709,7 @@ def main():
                 ws_intent_token = escort.begin_same_peer_ws_intent(move)
                 segment_rejoin_state['leader_same_peer'] = True
                 def before_target(target):
+                    segment_rejoin_state.pop('_t75_r3_until',None)
                     if cancel.is_set() or seg_cancel.is_set() or not escort.same_peer_move_current(move):
                         raise RuntimeError('same_peer_request_cancelled')
                     if pose_ctl is not None:
@@ -613,6 +730,16 @@ def main():
                     # T22：真的换图后旧图的同图传送快照不能再用。
                     escort.drop_same_map_snapshot('same_peer_level_update')
                     escort.activate_same_peer_ws_intent(ws_intent_token,target.map_id)
+                    # T72：换图完成后恢复“主人不在房间就好友传送回去”的看门狗；
+                    # 否则服务器随后把小光单独挪到别的实例（中央神坛实测 ~30s）她就再也回不来。
+                    segment_rejoin_state['leader_same_peer'] = False
+                    segment_rejoin_state['after_escort_until'] = time.monotonic() + 600
+                    try:
+                        # 只在中央神坛（色彩日入口开门后服务器配对并房）打开；其他图原样（服务器连接内一起挪，手不断）。
+                        if target.map_id == 2394719185:
+                            move_policy.arm_pairing()
+                    except Exception:
+                        pass
                 same_peer_moves.put_nowait(dict(level=move['level'], variant=move.get('variant'),
                     guard=lambda:not cancel.is_set() and not seg_cancel.is_set() and escort.same_peer_move_current(move),
                     commit_guard=lambda:not cancel.is_set() and not seg_cancel.is_set() and escort.is_current(move['_binding']),
@@ -620,12 +747,70 @@ def main():
                     report=lambda detail:log('escort_same_peer_level_update',**detail)))
         move_watcher = threading.Thread(target=watch_moves, daemon=True, name="moves",
                                        args=(cancel, seg_cancel, pending_move, pose_ctl, own_uuid, args.map, tracker,
-                                             None, same_peer_publish))   # 原follower路径不变；leader显式同连接队列
+                                             None, same_peer_publish, adopt_external_move))   # 原follower路径不变；同图票进 in-band 队列
         move_watcher.start()
         try:
             if cancel.is_set():
                 break
-            final = (conn.run_connection(prepared, remaining, seg_cancel, emit, same_peer_moves=same_peer_moves) if same_peer_moves is not None else conn.run_connection(prepared, remaining, seg_cancel, emit)) or latest
+            def owner_attached():
+                """T73-R2：只有真的牵着/背着主人才让原生 Move 的 Join 带 others。"""
+                try:
+                    who = owner_uuid()
+                    return bool(who and pose_ctl is not None and pose_ctl.linked_with(who))
+                except Exception:
+                    return False
+            def owner_present():
+                """T74-R2：主人此刻是否还在本段房间名单里（tracker 的 slots）。
+
+                slot 消失，或坐标超过 1.5s 没更新 → False。connection0167 只在
+                “本段见过主人”之后才据此触发 owner_rejoin，避免刚进段就误跟。
+                """
+                try:
+                    return _owner_present(tracker, owner_uuid()) is not False
+                except Exception:
+                    return True
+            def owner_in_later_roster(after):
+                # 不使用“坐标还新/没观察到就视为在房”的普通启发法，只认更新的真实名单。
+                if tracker is None: return False
+                with tracker.lock:
+                    return (tracker.confirmed_map_id==2394719185 and tracker.roster_at>after
+                            and owner_uuid() in tracker.slots.values())
+            owner_present._t75_r3_roster_after=owner_in_later_roster
+            def on_pump_event(event, segment_id=segment):
+                """T74-R3：把每次 ticket join 的阶段即时写进 bot 日志。
+
+                staged/connected/join_sent/enter/committed/aborted/换签名/换候选
+                全部带拨号地址、耗时、票的 move_ts 与 sig 前 2 字节（不含凭据）。
+                同时在配对票 commit 后告诉策略“这个目标已经成功同房”，后续同
+                目标的旧票直接 HOLD（不再来回换房）。
+                """
+                name = event.get("event")
+                fields = {k: v for k, v in event.items() if k != "event"}
+                if name == 't75_r3_recovery_open':
+                    segment_rejoin_state['_t75_r3_until']=event['until_monotonic']
+                elif name == 't75_r3_recovery_end':
+                    segment_rejoin_state.pop('_t75_r3_until',None)
+                if name in _PUMP_EVENT_WHITELIST:
+                    try:
+                        log(name, segment=segment_id, **fields)
+                    except Exception:
+                        pass
+                if name == "move_committed":
+                    try:
+                        if event.get("external") and event.get("owner_in_roster"):
+                            move_policy.note_pairing_committed(
+                                event.get("target") or "", now=time.monotonic())
+                        elif not event.get("external") and event.get("move_ts"):
+                            move_policy.note_inband_move(event.get("move_ts"))
+                    except Exception:
+                        pass
+            final = conn.run_connection(prepared, remaining, seg_cancel, emit,
+                                        same_peer_moves=same_peer_moves,
+                                        external_moves=external_moves,
+                                        owner_uuid=owner_uuid(),
+                                        owner_attached=owner_attached,
+                                        owner_present=owner_present,
+                                        on_pump_event=on_pump_event) or latest
         except Exception as exc:  # run_connection 自己会兜底，这里只防意外
             final = {**latest, "phase": "failed", "error_code": type(exc).__name__}
         finally:
@@ -633,6 +818,7 @@ def main():
             # A blocked I/O operation must not hold up the connection loop forever.
             for worker in (watcher, move_watcher):
                 worker.join(timeout=0.25)
+            segment_rejoin_state.pop('_t75_r3_until',None)  # 窗口绝不跨段继承。
             rejoin_state.update(dict(segment_rejoin_state))
             map_state.finish(segment)
             if tracker is not None:
@@ -640,16 +826,60 @@ def main():
         lived = round(time.monotonic() - started, 1)
         log("segment_end", segment=segment, lived=lived, **{k: final.get(k) for k in (
             "phase", "reason", "error_code", "http_status", "move_completed", "move_forced_closed",
-            "remote_disconnect_code", "long_actor_frames", "reply_count", "crc_failures")})
+            "remote_disconnect_code", "long_actor_frames", "reply_count", "crc_failures",
+            "registration_unexpected_type", "registration_unexpected_len",
+            "registration_unexpected_same_enter", "registration_busy_replies", "registration_dup_enter",
+            # T73：并房/迁移要看这些计数（Claude 上线后按 REPORT 的成功判据核对）。
+            "move_received", "move_started", "move_ignored", "move_busy_replies",
+            "external_move_received", "external_move_adopted", "external_move_failed",
+            "external_move_busy", "external_move_ignored", "external_move_action",
+            "external_move_error", "external_move_duplicate_move", "terminal_message_type",
+            # T73-R2：主人房真实入服的成败判据（见 work/round2/REPORT.md §5）
+            "ticket_join_staged", "ticket_join_committed", "ticket_join_aborted",
+            "ticket_join_failed", "ticket_join_error", "owner_rejoin_requested",
+            "owner_rejoin_ticket_miss", "owner_rejoin_staged", "owner_rejoin_committed",
+            "owner_rejoin_aborted", "owner_rejoin_action", "move_others_injected",
+            "owner_in_roster", "owner_in_roster_after_move", "exception_class", "exception_code",
+            # T74-R2：票面/拨号分离、失败回执、主人离开跟随
+            "ticket_dial_attempts", "ticket_dial_retries", "ticket_dial_source",
+            "ticket_origin_source", "ticket_fail_replies", "ticket_join_server_disconnect",
+            "owner_left_room", "owner_gone",
+            # T74-R3：配对票即时阶段/换候选/换签名/被 split Move 取代
+            "ticket_join_stage", "ticket_join_elapsed_ms", "ticket_join_dial",
+            "ticket_join_move_ts", "ticket_sig_fallback", "pairing_fail_replies",
+            "external_move_superseded", "external_move_busy_retry")})
 
         if final.get('same_peer_level_update_failed') or final.get('error_code') == 'same_peer_level_update_failed':
             log('stopped',reason='same_peer_level_update_failed_no_room_retry')
             return
+        t95_flipped = False
+        # T95（11-22）：神坛新连接加入（好友票/目录开局）开局即被服务器断开 → 门开/门关场景数据翻另一份，
+        # 下次重试就用另一份（T94 只接了换房路径，这里补上直接加入路径）。
+        try:
+            if ((final.get("map_id") or args.map) == 2394719185 and lived < 3 and final.get("phase") == "failed"
+                    and str(final.get("error_code") or "") in ("server_transport_disconnect", "server_ended_or_changed_connection")):
+                from qfsky.join0167_profile import t94_flip_dayhub
+                log("t94_dayhub_flip", to=t94_flip_dayhub(), reason="direct_join_" + str(final.get("error_code"))[:30])
+                t95_flipped = True
+        except Exception:
+            pass
+        if lived >= 3:
+            rejoin_state.pop("t96_retried", None)   # T96：连上过一次就允许下次失败再补试
         if rejoin_state.pop("friend_try", False):
             conn.TICKET_OVERRIDE.pop("fields", None)
             if lived < 3 and final.get("phase") == "failed":
                 log("friend_join_failed", error=final.get("error_code"))
+                # T96：刚因神坛场景数据翻面，马上用另一份再找主人一次（每次失败只补一次）
+                if t95_flipped and not rejoin_state.get("t96_retried"):
+                    rejoin_state["t96_retried"] = True
+                    try:
+                        if use_friend_ticket(friend_ticket(args.account, owner_uuid(), args.map, wait=2.0, cancel=cancel),
+                                             rejoin_state, cancel=cancel):
+                            log("t96_friend_retry_after_flip")
+                    except Exception:
+                        pass
                 continue                          # 立刻退回普通拉票
+            rejoin_state.pop("t96_retried", None)
             log("friend_join_ok", lived=lived)
         if pending_move and not cancel.is_set():   # 跟着哥哥过图/回遇境：换图，下一段用服务器推的票入服
             mv = dict(pending_move)
@@ -750,6 +980,83 @@ def main():
         wait = min(120, 5 * 2 ** max(0, retries - 1))
         log("reconnect_wait", seconds=wait, retries=retries)
         cancel.wait(wait)
+
+
+def _owner_stale(tracker, owner, limit=6.0):
+    """T72/T73-R2：主人“曾在小光房间里”、但坐标超过 limit 秒没更新。
+
+    T73-R2 修正：主人从来没在本段名单里（slot 不存在）时返回 False。
+    第一轮把“主人不在”当成 stale=True，导致遇境里每 13 秒的同图票全被
+    采纳（logs2 段 1/2/5 的 same_map_move_adopted 都是 with_owner=false），
+    如果迁移成功会把小光从任何房间反复挪走。真正“主人被并走”的兜底改由
+    connection0167 的 owner_rejoin 好友票负责。
+    """
+    if tracker is None or not owner:
+        return False
+    try:
+        with tracker.lock:
+            slot = next((k for k, v in tracker.slots.items() if v == owner), None)
+            if slot is None:
+                return False                      # 本段从未见过主人：不是 stale
+            seen = tracker.position_observed.get(slot)
+        return seen is None or time.monotonic() - seen[1] > limit
+    except Exception:
+        return False
+
+
+def _owner_present(tracker, owner, limit=1.5):
+    """T74-R2：主人此刻是否还在本段房间里（用于区分 stale 与已离开）。
+
+    - slot 不在 tracker.slots：False（已经离开 / 从未出现）；
+    - slot 在、但坐标超过 limit 秒没更新：False（door.pcap 02:25:41 主人被
+      单独 split 走后就是这种状态；tracker 的 slot 不会立刻删）；
+    - 其他：True。
+    返回 None 表示没有 tracker/owner，调用方按“不知道”处理。
+    """
+    if tracker is None or not owner:
+        return None
+    try:
+        with tracker.lock:
+            slot = next((k for k, v in tracker.slots.items() if v == owner), None)
+            if slot is None:
+                return False
+            seen = tracker.position_observed.get(slot)
+        return seen is None or time.monotonic() - seen[1] <= limit
+    except Exception:
+        return None
+
+
+def _t100_affinity_body(epoch, entries):
+    """T100：上行 GameMsg 子 7 亲密度，[7][epoch][0][条数] + 每条 [对方槽][值]（与原生/参考仓库同构）。"""
+    entries = list(entries)[:8]
+    return bytes((7, epoch & 0xFF, 0, len(entries))) + b"".join(bytes((s & 0xFF, v & 0xFF)) for s, v in entries)
+
+
+def _t100_affinity_loop(tracker, cancel):
+    """T100：像原生客户端一样约每 2.56 s 上报对主人的亲密度（默认 255）。SKY_T100_AFFINITY=0 关闭。"""
+    import room_pose
+    from qfsky.long0167.engine import Frame
+    from qfsky.map_long0167 import map_long_engine
+    period = float(os.environ.get("SKY_T100_PERIOD", "2.56"))
+    value = int(os.environ.get("SKY_T100_VALUE", "255"))
+    sent, last_log = 0, 0.0
+    while not cancel.wait(period):
+        try:
+            owner = owner_uuid()
+            with tracker.lock:
+                own = tracker._own_social_binding_locked()
+                epoch = room_pose.LAST_EPOCH
+                slot = next((k for k, v in tracker.slots.items() if v == owner), None) if owner else None
+            if own is None or epoch is None:
+                continue
+            entries = [(slot, value)] if slot is not None and slot != own else []
+            map_long_engine.OUTBOX.append(Frame(14, _t100_affinity_body(epoch, entries), True))
+            sent += 1
+            if time.monotonic() - last_log >= 60:
+                last_log = time.monotonic()
+                log("t100_affinity", sent=sent, owner_slot=slot, own=own, epoch=epoch, entries=len(entries))
+        except Exception as exc:
+            log("t100_affinity_error", error=str(exc)[:160])
 
 
 if __name__ == "__main__":

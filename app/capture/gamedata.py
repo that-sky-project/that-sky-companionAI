@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 import xg_exec
+import install_support
 
 
 def _extra_paths():
@@ -91,11 +92,19 @@ def run(args, timeout=600, cwd=None):
                         errors="replace", timeout=timeout)
         rows, final = parse_lines((p.stdout or "") + "\n" + (p.stderr or ""))
         if final is None:
-            raise ValueError("xg_gamedata 没有返回结果：" + ((p.stdout or p.stderr or "")[-300:]))
+            detail = ((p.stderr or "") + "\n" + (p.stdout or ""))[-2000:]
+            issue = install_support.problem(detail, default="本机资源工具未返回有效结果。请确认完整解压后重试。")
+            return {"ok": False, "final": {"ok": False, "code": issue["code"],
+                    "error": issue["message"]}, "rows": rows, "code": p.returncode,
+                    "diagnostic": detail}
         return {"ok": bool(final.get("ok")), "final": final, "rows": rows,
                 "code": p.returncode}
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"ok": False, "final": {"ok": False, "error": f"{type(exc).__name__}"},
+    except (OSError, MemoryError, subprocess.TimeoutExpired) as exc:
+        issue = install_support.problem(exc, default="本机资源工具未完成。请关闭占用资源的软件后重试。")
+        if isinstance(exc, subprocess.TimeoutExpired):
+            issue = {"code": "local_tool_timeout",
+                     "message": "本机资源操作超时。请关闭占用磁盘或内存的软件后重试。"}
+        return {"ok": False, "final": {"ok": False, "code": issue["code"], "error": issue["message"]},
                 "rows": [], "code": -1}
 
 

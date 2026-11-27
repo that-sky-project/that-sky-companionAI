@@ -204,7 +204,7 @@ UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 def owner_uuid():
     try:
-        v = OWNER_FILE.read_text().strip()
+        v = OWNER_FILE.read_text(encoding="utf-8").strip()
         return v if UUID_RE.fullmatch(v) else DEFAULT_OWNER
     except OSError:
         return DEFAULT_OWNER
@@ -272,7 +272,7 @@ def cmd_owner(req):
     except Exception as exc:
         return {"ok": False, "message": "读不到好友列表：" + str(exc)[:120]}
     OWNER_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OWNER_FILE.write_text(uid + "\n")
+    OWNER_FILE.write_text(uid + "\n", encoding="utf-8")
     return {"ok": True, "owner": uid, "message": "已设为哥哥"}
 
 

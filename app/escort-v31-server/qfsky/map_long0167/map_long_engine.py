@@ -370,8 +370,13 @@ class MapLongEngine:
                     tick_steps=self._revision_base+self._counts['actor_extensions']+1,map_id=self._map).wire_bytes()
                 body=self._cw_post(body)
                 frames.append(self._actor_frame(body,writer));staged['extension']=now
-            if os.environ.get('CLAUDEWORK_LONG')=='1' and OUTBOX:
+            if OUTBOX:  # claudework：叫声光晕等 RPC 无条件发出（原版只有长模式才发）
                 while OUTBOX:frames.append(OUTBOX.pop(0))
+            try:
+                from qfsky.long0167.candle_rpc import drain as _candle_drain
+                frames.extend(_candle_drain(self._epoch,self._match.self_net_player_id,self._map))
+            except Exception:
+                pass
             if 'started'in staged or 'extension'in staged:staged['actor_writer']=writer
             return self._group(frames,**staged)
         except BaseException:

@@ -16,14 +16,14 @@ class LargeJsonAllowlistTests(unittest.TestCase):
         for rel in ("game/0.16.8-421629/terrain/assets.work/beamo-world-all-v1/DuskMid_Past/beamo/manifest.json",
                     "game/0.16.7-421589/terrain/assets/Dawn/static-world/manifest.json",
                     "game/0.16.8-421629/terrain/assets/Dawn/static-world/runtime-manifest.json",
-                    "hop-proofs/hop-86fbf69e-0559-46cb-ad91-93b444793e00.json",
+                    "hop-proofs/hop-00000000-0000-4000-8000-000000000000.json",
                     "game/0.16.8-421629/terrain/assets.work/beamo-world-all-v1/Dawn/beamo/manifest.json.pending"):
             self.assertTrue(ok(rel), rel)
 
     def test_unknown_large_text_still_refused(self):
         for rel in ("game/0.16.8-421629/terrain/assets.work/beamo-world-all-v1/Dawn/beamo/secret.json",
                     "game/0.16.8-421629/terrain/assets/Dawn/notes/manifest.json",
-                    "hop-proofs/notes.json", "hop-proofs/sub/hop-86fbf69e-0559-46cb-ad91-93b444793e00.json",
+                    "hop-proofs/notes.json", "hop-proofs/sub/hop-00000000-0000-4000-8000-000000000000.json",
                     "game/0.16.8-421629/names/catalog.json", "logs/companion.jsonl"):
             self.assertFalse(ok(rel), rel)
 

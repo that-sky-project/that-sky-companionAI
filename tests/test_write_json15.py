@@ -36,14 +36,15 @@ class WriteJsonTests(unittest.TestCase):
             self.assertEqual(json.loads(p.read_text(encoding="utf-8")), {"a": 2})
             self.assertEqual(calls["n"], 3)
 
-    def test_persistent_denial_falls_back_to_in_place_write(self):
+    def test_persistent_denial_preserves_old_document(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "c.json"
             xg_paths.write_json(p, {"a": 1, "long": "x" * 200})
             with mock.patch("os.replace", side_effect=PermissionError(5, "denied")), mock.patch("time.sleep"):
-                xg_paths.write_json(p, {"a": 2})
-            self.assertEqual(json.loads(p.read_text(encoding="utf-8")), {"a": 2})
-            self.assertFalse(Path(str(p) + ".pending").exists())
+                with self.assertRaises(PermissionError):
+                    xg_paths.write_json(p, {"a": 2})
+            self.assertEqual(json.loads(p.read_text(encoding="utf-8")), {"a": 1, "long": "x" * 200})
+            self.assertFalse(list(p.parent.glob("*.pending")))
 
 
 if __name__ == "__main__":

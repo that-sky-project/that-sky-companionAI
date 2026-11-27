@@ -73,7 +73,7 @@ class CurrentEnginePort:
                     return False
                 frame = build_current_slot_frame(self.frame_factory, epoch=epoch, own_slot=own_slot,
                     scene=scene, attachment_kind='handhold' if kind == 'handhold' else 'carrier',
-                    wire_layout='room_slot_u8')
+                    wire_layout='room_slot_u8', source_map=getattr(self.ctl, 'map_id', None))
                 self.binding = {'effect_binding':r.current.binding,'engine':engine,'epoch':epoch,
                     'generation':tr.room_generation,'own':own_slot,
                     'own_version':tr._slot_versions.get(own_slot),

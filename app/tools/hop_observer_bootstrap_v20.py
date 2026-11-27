@@ -91,7 +91,7 @@ def _atomic(path, value):
 
 def _process_identity():
     pid = os.getpid()
-    fields = (Path('/proc') / str(pid) / 'stat').read_text().rsplit(') ', 1)[1].split()
+    fields = (Path('/proc') / str(pid) / 'stat').read_text(encoding="utf-8").rsplit(') ', 1)[1].split()
     return {'pid': pid, 'start_ticks': int(fields[19]), 'pgid': int(fields[2]), 'session': int(fields[3])}
 
 

@@ -1,4 +1,101 @@
 'use strict';
+// CLIENT_UPDATE_UI_BEGIN
+(() => {
+  const read = (id) => document.getElementById('client-update-' + id);
+  let wired = false;
+  let checking = false;
+
+  function wireUpdater() {
+    const api = window.pywebview?.api;
+    const methods = ['update_get', 'update_check', 'update_set_auto', 'update_skip', 'update_later', 'update_open_release'];
+    if (wired || !api || !methods.every((method) => typeof api[method] === 'function')) return;
+    const [auto, check, status, dialog, heading, title, notes, error, open, later, skip] =
+      ['auto', 'check', 'status', 'dialog', 'heading', 'release-title', 'notes', 'error', 'open', 'later', 'skip'].map(read);
+    if (!auto || !check || !status || !dialog || !heading || !title || !notes || !error || !open || !later || !skip) return;
+    wired = true;
+
+    function dialogError(message) {
+      error.textContent = message;
+      error.hidden = !message;
+    }
+
+    function showRelease(snapshot) {
+      const release = snapshot.release;
+      if (!release || dialog.open) return;
+      // Remote fields are always text, never HTML, URLs or attributes.
+      heading.textContent = `发现新版本 ${release.tag}（当前 ${snapshot.current}）`;
+      title.textContent = release.title;
+      notes.textContent = release.notes || '本次发布未填写更新说明。';
+      dialogError('');
+      dialog.showModal();
+    }
+
+    async function refresh(manual) {
+      if (checking) return;
+      checking = check.disabled = true;
+      status.textContent = manual ? '正在检查更新…' : '';
+      let finished = '';
+      try {
+        let snapshot = await (manual ? api.update_check() : api.update_get());
+        if (!manual && snapshot) {
+          auto.checked = snapshot.auto_check;
+          auto.disabled = false;
+        }
+        while (snapshot?.status === 'checking') {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          snapshot = await api.update_get();
+        }
+        if (snapshot?.status === 'available') showRelease(snapshot);
+        else if (manual && snapshot?.status === 'no_update') finished = '没有需要提示的新版本。';
+      } catch (_) {
+        // Background/network/bridge failures must not interrupt the desktop.
+      } finally {
+        status.textContent = finished;
+        checking = check.disabled = false;
+      }
+    }
+
+    auto.addEventListener('change', async () => {
+      const enabled = auto.checked;
+      auto.disabled = true;
+      try {
+        const result = await api.update_set_auto(enabled);
+        auto.checked = result?.auto_check ?? !enabled;
+        if (!result?.ok) status.textContent = '未能保存更新设置，请检查用户数据目录权限后重试。';
+      } catch (_) {
+        auto.checked = !enabled;
+        status.textContent = '未能保存更新设置，请重试。';
+      } finally {
+        auto.disabled = false;
+      }
+    });
+
+    async function choose(method, message) {
+      if (open.disabled) return;
+      open.disabled = later.disabled = skip.disabled = true;
+      try {
+        if (await api[method]()) dialog.close();
+        else dialogError(message);
+      } catch (_) {
+        dialogError(message);
+      } finally {
+        open.disabled = later.disabled = skip.disabled = false;
+      }
+    }
+    const dismiss = () => choose('update_later', '未能关闭更新提示，请重试。');
+    check.addEventListener('click', () => refresh(true));
+    later.addEventListener('click', dismiss);
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); dismiss(); });
+    open.addEventListener('click', () => choose('update_open_release', '未能打开系统浏览器，请检查默认浏览器设置后重试。'));
+    skip.addEventListener('click', () => choose('update_skip', '未能保存跳过设置，请检查用户数据目录权限后重试。'));
+    refresh(false);
+  }
+
+  window.addEventListener('pywebviewready', wireUpdater);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireUpdater, {once: true});
+  else wireUpdater();
+})();
+// CLIENT_UPDATE_UI_END
 // RESOURCE_WORKFLOW_MODEL_BEGIN
 const resourceStatus=(()=>{
 // Presentation only: completion is certified by the backend, never by a counter.
@@ -329,13 +426,39 @@ async function resourceGeneration(path,body){
   }catch(error){parityMsg('resources-feedback',friendlyError(error),true);throw error;}
   finally{parity.generationBusy=false;syncResourceButtons();}
 }
-async function resourceRequest(path,body,confirmation){if(confirmation&&!await parityConfirm(confirmation[0],confirmation[1]))return;parity.resourceBusy=true;syncResourceButtons();parityMsg('resources-feedback',path.endsWith('/capture/register')?'正在登记录制数据，可能需要几分钟。此页会保持等待。':'正在处理…');try{const r=await parityApi(path,body);parityMsg('resources-feedback',r.message||'请求已完成。');await loadResources(true);return r;}catch(e){const code=path.endsWith('/wizard/apk/check')&&e.data?.code;parityMsg('resources-feedback',friendlyError(e)+(code?'（错误码：'+code+'）':''),true);throw e;}finally{parity.resourceBusy=false;syncResourceButtons();}}
+function mumuCheckText(result, message) {
+  const page = result?.page_size;
+  return [result?.android_label, message, Number.isInteger(page) ? '内存页大小：' + (page / 1024) + ' KiB' : '',
+    result?.page_size_message, result?.scene_log_message].filter(Boolean).join(' · ');
+}
+async function resourceRequest(path, body, confirmation) {
+  if (confirmation && !await parityConfirm(confirmation[0],confirmation[1])) return;
+  const isMumuCheck = path.endsWith('/wizard/mumu');
+  parity.resourceBusy = true;
+  syncResourceButtons();
+  parityMsg('resources-feedback',path.endsWith('/capture/register')?'正在登记录制数据，可能需要几分钟。此页会保持等待。':'正在处理…');
+  try {
+    const r = await parityApi(path,body);
+    const message = r.message || '请求已完成。';
+    parityMsg('resources-feedback',isMumuCheck ? mumuCheckText(r, message) : message);
+    await loadResources(true);
+    return r;
+  } catch (e) {
+    const code = path.endsWith('/wizard/apk/check') && e.data?.code;
+    const message = friendlyError(e) + (code ? '（错误码：'+code+'）' : '');
+    parityMsg('resources-feedback',isMumuCheck ? mumuCheckText(e.data, message) : message,true);
+    throw e;
+  } finally {
+    parity.resourceBusy = false;
+    syncResourceButtons();
+  }
+}
 function currentTask(r){return resourceStatus.currentTask(r);}
 function taskText(r){const v=taskView(r,parity.summary);return [v.title,v.detail,v.message].filter(Boolean).join(' · ');}
 function captureRunning(c){if(!c)return false;if(Object.prototype.hasOwnProperty.call(c,'worker_pid'))return !!c.worker_pid&&!['stopped','idle'].includes(c.state);return ['starting','searching','ready','waiting','recording','registering'].includes(c.state);}
 function syncResourceButtons(){const busy=parity.resourceBusy||!!parity.cleanupBusy||!!parity.generationBusy;byId('resource-consent-save').disabled=busy||parity.consent===true||!byId('resource-consent-check').checked;for(const id of ['resource-mumu','resource-apk-pull','resource-apk-check','resource-login-done','resource-capture-register','resource-ai-done','resource-owner-done','resource-finish','resource-autostart-save'])byId(id).disabled=busy;const t=parity.task,cap=parity.capture;byId('resource-task-stop').disabled=busy||!t||!t.running;byId('resource-data-start').disabled=busy||!t||!!t.running;if(byId('resource-props-start'))byId('resource-props-start').disabled=busy||!t||!!t.running||captureRunning(cap);byId('resource-catalog-start').disabled=busy||!t||!!t.running;byId('resource-capture-start').disabled=busy||!cap||captureRunning(cap);byId('resource-capture-stop').disabled=busy||!cap||!captureRunning(cap);}
 function taskLogText(r){const t=currentTask(r);const log=(t&&t.log)||r.log;const lines=Array.isArray(r.lines)?r.lines:[];const fmt=x=>typeof x==='string'?x:[x.stage,x.msg,Number.isFinite(x.done)&&Number.isFinite(x.total)?x.done+'/'+x.total:''].filter(Boolean).join(' · ');return Array.isArray(log)?log.map(fmt).join('\n'):typeof log==='string'?log:lines.map(fmt).join('\n');}
-async function loadResources(force=false){if(parity.resourceLoading){if(force!==true)return parity.resourceLoading;await parity.resourceLoading;}parity.resourceLoading=(async()=>{const results=await Promise.allSettled([parityApi('/api/wizard'),resourceTaskStatus(),parityApi('/api/capture/status'),parityApi('/api/autostart'),request('/api/consent')]);if(results[0].status==='fulfilled'){const s=results[0].value;parity.summary=s;parity.summaryError=null;setText('resource-summary',s.completed?'安装设置已完成。':s.message||'可按上面的步骤继续准备资源。');const env=(s.capture&&s.capture.mumu)||{};const apkPath=typeof s.apk==='string'?s.apk:(s.apk&&s.apk.path)||'';parityMsg('resource-environment',(env.message||'')+(apkPath?' · APK：'+apkPath:''));if(apkPath&&!byId('resource-apk').value)byId('resource-apk').value=apkPath;}else{parity.summary=null;parity.summaryError=friendlyError(results[0].reason);parityMsg('resource-summary','安装进度读取失败：'+parity.summaryError,true);}
+async function loadResources(force=false){if(parity.resourceLoading){if(force!==true)return parity.resourceLoading;await parity.resourceLoading;}parity.resourceLoading=(async()=>{const results=await Promise.allSettled([parityApi('/api/wizard'),resourceTaskStatus(),parityApi('/api/capture/status'),parityApi('/api/autostart'),request('/api/consent')]);if(results[0].status==='fulfilled'){const s=results[0].value;parity.summary=s;parity.summaryError=null;setText('resource-summary',s.completed?'安装设置已完成。':s.message||'可按上面的步骤继续准备资源。');const env=(s.capture&&s.capture.mumu)||{};const saved=Array.isArray(s.steps)?s.steps.find(row=>row.id==='mumu')?.detail:null;const apkPath=typeof s.apk==='string'?s.apk:(s.apk&&s.apk.path)||'';parityMsg('resource-environment',[env.android_label || (!env.serial && saved?.android_label ? '上次检查：'+saved.android_label : ''),env.message,apkPath?'APK：'+apkPath:''].filter(Boolean).join(' · '));if(apkPath&&!byId('resource-apk').value)byId('resource-apk').value=apkPath;}else{parity.summary=null;parity.summaryError=friendlyError(results[0].reason);parityMsg('resource-summary','安装进度读取失败：'+parity.summaryError,true);}
 if(results[1].status==='fulfilled'){const r=results[1].value;parity.task=r;parity.taskError=null;setText('resource-task-log',taskLogText(r));}else{parity.task=null;parity.taskError=friendlyError(results[1].reason);}
 if(results[2].status==='fulfilled'){parity.capture=results[2].value;parity.captureError=null;}else{parity.capture=null;parity.captureError=friendlyError(results[2].reason);}
 if(results[3].status==='fulfilled'){if(!byId('resource-autostart').dataset.dirty)byId('resource-autostart').checked=!!results[3].value.enabled;}else parityMsg('resources-feedback','自动启动设置读取失败：'+friendlyError(results[3].reason),true);if(results[4].status==='fulfilled'){parity.consent=results[4].value.ok===true;byId('resource-consent-label').hidden=parity.consent;byId('resource-consent-save').hidden=parity.consent;parityMsg('resource-consent-status',parity.consent?'使用说明已在本机确认。':'请阅读说明，勾选后手动确认。');}else{parity.consent=null;parityMsg('resource-consent-status','确认状态读取失败：'+friendlyError(results[4].reason),true);}renderResourceWorkflow();syncResourceButtons();})().finally(()=>{parity.resourceLoading=null;window.clearTimeout(parity.resourceTimer);if(state.page==='resources'&&!document.hidden)parity.resourceTimer=window.setTimeout(()=>loadResources(),3000);});return parity.resourceLoading;}

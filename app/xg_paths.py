@@ -8,7 +8,7 @@
    `RUNTIME_PRIVATE` / `RUNTIME_DATA` / `STABLE` 全部等于服务器原路径
    `<server-data-root>/...`。合回服务器时这些常量原样成立。
 2. **程序与数据分开**：`ROOT` 是代码/运行根；`DATA` 是用户数据根，默认等于
-   `ROOT`（服务器），Windows 安装版由启动器设成 `%LOCALAPPDATA%\\XiaoGuang\\data`。
+   `ROOT`（非 Windows）。Windows 启动器显式传入已有数据目录；直接导入则使用桌面宿主的用户数据目录。
    所有运行时会写的东西（control/ logs/ captures/ runtime/private、
    runtime/runtime-data、地形与目录资产、配置）都在 `DATA` 下；程序目录只读。
 3. **代码目录跟着包走**：`APP` = 本文件所在目录（安装版的 `app\\`）。安装版里
@@ -31,6 +31,8 @@ XG_PILOT_CONFIG 覆盖地形引擎 pilot config
 from __future__ import annotations
 
 import json
+import math
+import tempfile
 import os
 import re
 import shutil
@@ -44,7 +46,12 @@ from pathlib import Path
 APP = Path(__file__).resolve().parent          # 程序目录（安装版 app\）
 INSTALL_ROOT = APP.parent                     # 只随本模块物理位置，不随代码/数据环境变化
 ROOT = Path(os.environ.get("SKY_AI_ROOT") or APP.parent)
-DATA = Path(os.environ.get("XG_DATA_DIR") or ROOT)
+def default_desktop_data():
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or Path.home()
+    return Path(base) / "XiaoGuangPrivate" / "data"
+
+
+DATA = Path(os.environ.get("XG_DATA_DIR") or (default_desktop_data() if os.name == "nt" else ROOT))
 
 IS_WINDOWS = os.name == "nt"
 
@@ -130,10 +137,13 @@ RUNTIME_TERRAIN = RUNTIME / "terrain-experimental-20261104"
 
 
 def python_exe() -> str:
-    """跑子进程的解释器：优先项目 .venv，其次当前解释器（便携版就是它）。"""
+    """显式覆盖优先；Windows 找物理安装目录，不依赖用户名、PATH 或项目工作目录。"""
     env = os.environ.get("XG_PYTHON")
     if env:
         return env
+    bundled = INSTALL_ROOT / "runtime/python/python.exe"
+    if IS_WINDOWS and bundled.is_file():
+        return str(bundled)
     for cand in (ROOT / ".venv/bin/python", ROOT / ".venv/Scripts/python.exe"):
         if cand.is_file():
             return str(cand)
@@ -357,15 +367,15 @@ def long_path(path, *, force: bool = False) -> str:
     p = os.fspath(path)
     if os.name != "nt" or not p:
         return p
-    if p.startswith("\\\\?\\"):
+    if p.startswith(("\\\\?\\", "\\\\.\\")):
         return p
     p = p.replace("/", "\\")
-    if not os.path.isabs(p):
-        try:
-            p = os.path.abspath(p)
-        except OSError:
-            return p
-    if not force and len(p) < LONG_PATH_THRESHOLD:
+    try:
+        # 扩展命名空间不会折叠 ..；先在普通路径下按 Windows 规则规范化。
+        p = os.path.abspath(p)
+    except (OSError, ValueError):
+        return p
+    if not force and len(p.encode("utf-16-le", "surrogatepass")) < LONG_PATH_THRESHOLD * 2:
         return p
     if p.startswith("\\\\"):
         return "\\\\?\\UNC\\" + p[2:]
@@ -386,16 +396,23 @@ def short_path(path) -> str:
     p = os.fspath(path)
     if os.name != "nt" or not p:
         return p
-    if p.startswith("\\\\?\\"):
+    if p.startswith("\\\\?\\") and p[4:8].casefold() == "unc\\":
+        p = "\\\\" + p[8:]
+    elif p.startswith("\\\\?\\") and re.match(r"^[A-Za-z]:\\", p[4:]):
         p = p[4:]
+    elif p.startswith(("\\\\?\\", "\\\\.\\")):
+        return p
     try:
         p = os.path.abspath(p)
         import ctypes
         size = 32768
         buf = ctypes.create_unicode_buffer(size)
-        n = ctypes.windll.kernel32.GetShortPathNameW(p, buf, size)
+        n = ctypes.windll.kernel32.GetShortPathNameW(long_path(p), buf, size)
         if 0 < n < size and buf.value:
-            return buf.value
+            result = buf.value
+            if result.startswith("\\\\?\\") and result[4:8].casefold() == "unc\\":
+                return "\\\\" + result[8:]
+            return result[4:] if result.startswith("\\\\?\\") else result
     except Exception:
         pass
     return p
@@ -419,41 +436,40 @@ def read_json(path, default=None):
 
 
 def write_json(path, value, private_file: bool = True) -> Path:
-    """原子写 JSON（先写 .pending 再 os.replace，Windows 长路径也安全）。"""
+    """同行并发使用独立暂存文件；替换失败保留旧版本，绝不截断原文件。"""
     p = Path(path)
-    os.makedirs(long_path(p.parent), exist_ok=True)
-    tmp = p.with_name(p.name + ".pending")
-    Path(long_path(tmp)).write_text(json.dumps(value, ensure_ascii=False, sort_keys=True),
-                                    encoding="utf-8")
-    _replace_retry(long_path(tmp), long_path(p))
-    if private_file:
-        private(p)
+    # 暂存名比最终文件名可能更长；父路径没有达到阈值也必须留足长度。
+    parent = long_path(p.absolute().parent, force=True)
+    os.makedirs(parent, exist_ok=True)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=parent,
+                                         prefix=".xg-write-", suffix=".pending", delete=False) as f:
+            tmp = f.name
+            json.dump(value, f, ensure_ascii=False, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        if private_file:
+            private(tmp)
+        _replace_retry(tmp, long_path(p))
+        tmp = None
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass  # 只处理本次暂存，不改原文件；持续被占用的残件留待检查
     return p
 
 
 def _replace_retry(src, dst, attempts=12, delay=0.05):
-    """Windows: 目标文件被另一个进程（杀软、索引、另一个小光实例）短暂占用时 os.replace
-    会报 WinError 5/32；短暂重试（最长约 2 秒），仍失败才抛出。"""
-    import time
-    for i in range(attempts):
+    for attempt in range(attempts):
         try:
             return os.replace(src, dst)
         except PermissionError:
-            if i == attempts - 1:
-                break
-            time.sleep(delay * (1 + i))
-    # 兜底：有些杀毒软件会一直拦截 AppData 里的改名/替换，但允许直接写入。
-    # 此时改为就地覆盖写入目标文件（内容已完整写在 src 里），再删掉 src。
-    data = Path(src).read_bytes()
-    with open(dst, "r+b" if os.path.exists(dst) else "wb") as out:
-        out.write(data)
-        out.truncate()
-        out.flush()
-        os.fsync(out.fileno())
-    try:
-        os.remove(src)
-    except OSError:
-        pass
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(delay * (1 + attempt))
 
 
 def config() -> dict:
@@ -492,6 +508,75 @@ def load_name_table(filename: str, default=None):
     return value if value is not None else (default if default is not None else {})
 
 
+_TABLE_LIMIT = 2 * 1024 * 1024
+
+
+def _table_document(name):
+    """固定文件名、用户目录优先；表缺失/坏表用随包表，无用户数据写入。"""
+    if name not in {"tour_routes.json", "spawn_y_fix.json"}:
+        raise ValueError("未知静态表名")
+    for base in (CONTROL, CONFIG_DIR):
+        path = Path(long_path(base / name))
+        try:
+            with path.open("rb") as f:
+                raw = f.read(_TABLE_LIMIT + 1)
+            if len(raw) <= _TABLE_LIMIT:
+                doc = json.loads(raw.decode("utf-8-sig"))
+                if isinstance(doc, dict):
+                    yield doc
+        except (OSError, ValueError, RecursionError):
+            continue
+
+
+def _finite(v):
+    return type(v) in (int, float) and -1e12 <= v <= 1e12 and math.isfinite(v)
+
+
+def read_tour_routes():
+    """只读取本地路线；返回副本。校验失败不拼接部分路线。"""
+    for doc in _table_document("tour_routes.json"):
+        maps = doc.get("maps")
+        if doc.get("schema") != "xg-tour-routes-v1" or not isinstance(maps,list):
+            continue
+        seen = set()
+        for m in maps:
+            if not isinstance(m,dict):
+                break
+            ident, pts = m.get("map_id"), m.get("waypoints")
+            if (type(ident) is not int or not 0 <= ident < 2**32 or ident in seen
+                    or not all(isinstance(m.get(k),str) and m[k] for k in ("scene","travel_query"))
+                    or any(k in m and type(m[k]) is not bool for k in ("default","auto_when_event"))
+                    or any(k in m and not isinstance(m[k],str) for k in ("label","region"))
+                    or not isinstance(pts,list) or not all(isinstance(p,list) and len(p) == 3
+                    and all(_finite(c) for c in p) for p in pts)):
+                break
+            seen.add(ident)
+        else:
+            return doc
+    return {"schema": "xg-tour-routes-v1", "maps": []}
+
+
+def corrected_spawn_y(map_id, y):
+    if not _finite(y):
+        return y
+    for doc in _table_document("spawn_y_fix.json"):
+        row = doc.get(str(map_id))
+        if not isinstance(row, dict):
+            continue
+        wire, delta = row.get("wire"), row.get("delta")
+        if _finite(wire) and _finite(delta) and 0.03 <= delta <= 0.5:
+            return wire + delta if abs(y - wire) <= 0.05 else y
+    return y
+
+
+def safe_console(stream):
+    """保留真实控制台编码；无法表示的字符转义而不是引发异常。"""
+    try:
+        stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
 def spawn_points() -> Path:
     """哥哥标的出生点（允许随包分发；红线白名单里写明就是这个文件）。"""
     return _first([CONFIG_DIR / "spawn_points.json", DATA / "config/spawn_points.json"])
@@ -513,4 +598,5 @@ def describe() -> dict:
 
 
 if __name__ == "__main__":
+    safe_console(sys.stdout)
     print(json.dumps(describe(), ensure_ascii=False, indent=1))

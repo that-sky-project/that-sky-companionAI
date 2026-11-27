@@ -26,6 +26,7 @@ for p in (APP, APP / "bot", APP / "escort-v31-server"):
 from qfsky.version_profile import CURRENT_BUILD, profile_for_build
 from qfsky.join0167_profile import account_binding
 from xg_gamedata import catalog_state
+import install_support
 from test_catalog_async14 import settled, wait_idle
 
 PROFILE = profile_for_build(CURRENT_BUILD)
@@ -61,7 +62,7 @@ class FixtureCase(unittest.TestCase):
         def recording_write(path, value, **kwargs):
             self.writes.append((Path(path), copy.deepcopy(value)))
             write_json(path, value)
-        self.xg = types.SimpleNamespace(DATA=self.data, APP=APP, ROOT=ROOT,
+        self.xg = types.SimpleNamespace(DATA=self.data, APP=APP, ROOT=ROOT, INSTALL_ROOT=ROOT,
             CONTROL=self.data / "control", LOGS=self.data / "logs",
             WIZARD_TASK=self.data / "control/wizard_task.json",
             CURRENT_PROFILES=self.data / "runtime/private/current_profiles",
@@ -75,6 +76,7 @@ class FixtureCase(unittest.TestCase):
                                          terminate=mock.Mock(), psutil=types.SimpleNamespace(pid_exists=lambda pid: False))
         self.env = dict(json=json, os=os, secrets=secrets, sys=sys, time=time, Path=Path,
             copy=copy, threading=threading, wraps=wraps, xg_paths=self.xg, xg_proc=self.proc,
+            install_support=install_support,
             error_detail=types.SimpleNamespace(describe=lambda error, **kw: kw),
             gamedata=types.SimpleNamespace(env=lambda: {}), __file__=str(APP / "launcher/tasks.py"))
         self.tasks = source_subset(APP / "launcher/tasks.py", self.env,
@@ -99,6 +101,7 @@ class FixtureCase(unittest.TestCase):
         self.cfg = {"wizard": {"steps": {}}, "ai": {"marker": "dummy-preserved"}}
         self.wenv = dict(json=json, os=os, re=re, sys=sys, hashlib=hashlib, subprocess=types.SimpleNamespace(),
             threading=threading, time=time, Path=Path, xg_paths=self.xg, tasks=self.tasks,
+            install_support=install_support,
             xg_account=types.SimpleNamespace(active_id=lambda: "fixture-a"),
             capture_ctl=types.SimpleNamespace(status=lambda: copy.deepcopy(self.cap), start=lambda: {"ok": True}),
             gamedata=types.SimpleNamespace(run=lambda *a, **kw: {"ok": True, "final": {"account": "fixture-a", "scene": "CandleSpace", "recorded": {"scenes": ["CandleSpace"]}}}),

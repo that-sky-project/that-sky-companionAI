@@ -17,6 +17,21 @@ from qfsky.long0167.room_join import parse_player_sync
 from qfsky.long0167.scene_header import serialize_cached_level_header
 from qfsky.long0167.delta_send import SnapshotSendState
 
+
+def _t105_adopt_elect():
+    import os as _o, json as _j
+    if _o.environ.get('SKY_T105_ELECT_ADOPT', '1') == '0':
+        return False
+    try:
+        try:
+            import xg_paths as _xp
+            p = str(_xp.CONTROL / 'zero_darkstones.json')
+        except Exception:
+            p = _o.path.join(_o.environ.get('XG_DATA_DIR') or _o.environ.get('SKY_AI_ROOT') or '.', 'control', 'zero_darkstones.json')
+        return _j.load(open(p, encoding='utf-8')).get('enabled') is True
+    except Exception:
+        return False
+
 _SEAL=object()
 
 def check_scene_record(record, *, resource_tag, native_record_size, account_hash):
@@ -131,9 +146,41 @@ class SceneOnlyDraft:
                 check_scene_record(observation.record,resource_tag=self._baseline.resource_tag,
                     native_record_size=self._baseline.native_record_size,account_hash=self._baseline._account_hash)
                 if observation.kind=='LevelData_Elect'and(not self._actual or observation.record.slot_4!=self._record.slot_4):
-                    raise ValueError('map_scene_included_elect_without_actual_cache')
+                    # T105（11-22）：跑图模式下，被选为房主时直接采用选举附带的本图场景数据
+                    # （原来没有本图实际缓存就拒收→第一次当不成房主、花要等一轮才炸）。SKY_T105_ELECT_ADOPT=0 回退。
+                    if not _t105_adopt_elect():
+                        raise ValueError('map_scene_included_elect_without_actual_cache')
             except ValueError:
                 self._usable=False;self._rejections+=1;return True
+            try:
+                try:
+                    if self._match.self_level_id == 2394719185 and __import__('os').environ.get('XG_RESEARCH_LOG'):
+                        import hashlib as _hl, os as _os, time as _t
+                        _d = observation.record.data
+                        if _d:
+                            _dir = _os.path.join(_os.environ.get('XG_DATA_DIR') or '.', 'control', 'dayhub-scenes')
+                            _os.makedirs(_dir, exist_ok=True)
+                            _sha = _hl.sha256(_d).hexdigest()[:12]
+                            _p = _os.path.join(_dir, 'scene-%d-%s.bin' % (int(_t.time()), _sha))
+                            if not _os.path.exists(_p):
+                                open(_p, 'wb').write(_d)
+                                _files = sorted(_os.listdir(_dir))
+                                for _f in _files[:-40]:
+                                    try: _os.remove(_os.path.join(_dir, _f))
+                                    except OSError: pass
+                except Exception:
+                    pass
+                from qfsky.long0167.scene_edit import apply_zero
+                from qfsky.long0167.scene_record import PUBLIC_ELF_SHA256 as _sha
+                _edited=apply_zero(observation.record.data, map_id=self._match.self_level_id, profile_sha=_sha)
+                from qfsky.long0167.scene_edit import apply_gates as _apply_gates
+                _edited=_apply_gates(_edited, map_id=self._match.self_level_id, profile_sha=_sha)
+                if _edited is not observation.record.data:
+                    from qfsky.long0167.level_authority import LevelRecord as _LRec
+                    _r=observation.record
+                    observation=type(observation)(observation.kind,observation.sender_network_id,observation.owner_network_id,observation.level_id,observation.version,observation.include_record,_LRec(_r.slot_0,_r.slot_2,_r.slot_4,_r.slot_8,_r.slot_a,_r.slot_c,_edited),observation.snapshot_saved)
+            except Exception:
+                pass
             self._record=observation.record;self._actual=True;self._usable=True;self._adoptions+=1
         self._armed=self._usable and self._owner==self._match.self_net_player_id
         return True

@@ -9,6 +9,7 @@ import struct
 from dataclasses import dataclass
 from .join0167_profile import BUILD, NATIVE_SHA256, account_binding, uuid_raw
 from .join0167_codec import uint, octets
+from .ticket_route0167 import migration_tail_fields
 
 TICKET_DOMAIN=b"sky-cn-421629-fresh-initial-ticket-v1\0"
 
@@ -136,6 +137,27 @@ def fresh_initial_record(profile,ticket,*,account_uuid,newly_allocated_connectio
 def validate_fresh_ticket(record,ticket):
     if record.get('kind')!='sky-static-fresh-initial-fields' or record.get('fresh_ticket_binding_sha256')!=ticket_binding(ticket):
         raise ValueError('ticket differs from prepared fresh initial record')
+
+
+def apply_native_migration(fields, *, previous_endpoint, level_id, others=(), flag_b=0):
+    """T74-R2：把 fresh-initial 字段改成原生迁移 Join 的 tail/others。
+
+    原生 door.pcap 四条 Join 的公共形状：
+      previous_address_tag=1、previous_address=上一条连接**票面 origin**、
+      previous_port=同端口、previous_level_id=当前 level、tail 1/0、others=同行者。
+    机器人旧路径是 previous_address_tag=0/空/port=0（fresh 形状），服务器不按
+    “从旧房间迁过来”处理；这里只改字段，不做 I/O。
+    ``flag_b`` 对应原生 tail 第二 bit（door.pcap 的“返回/重连”为 1；向前迁移 0）。
+    """
+    if not isinstance(fields, dict):
+        raise ValueError('fields must be a dict')
+    if type(level_id) is not int or not 0 < level_id <= 0xFFFFFFFF:
+        raise ValueError('level_id required')
+    out = dict(fields)
+    out.update(migration_tail_fields(previous_endpoint, level_id, flag_b))
+    out['others'] = tuple(others)
+    out['counter'] = 0
+    return out
 
 
 def main():

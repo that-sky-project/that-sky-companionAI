@@ -96,7 +96,7 @@ function wizardStart(status={online:false,runner:false,chat:false}){
   });
   await test('both pages bind props button without changing catalog build action',()=>{
     assert(desktop.includes("parityButton('resource-props-start',()=>resourceGeneration('/api/wizard/props/start',{}))"));
-    assert(wizard.includes('$("wz-props-start").addEventListener("click", startProps)'));
+    assert(wizard.includes('bindAction("wz-props-start", startProps, "wz-props-state")'));
     assert(desktop.includes('/api/wizard/catalog/start'));assert(wizard.includes('/api/wizard/catalog/start'));
   });
   console.log(JSON.stringify({passed:tests.length,failed:0,tests},null,2));

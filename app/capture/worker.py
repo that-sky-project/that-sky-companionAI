@@ -13,7 +13,6 @@ import argparse
 import datetime as _dt
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -26,6 +25,7 @@ sys.path.insert(0, str(APP))
 
 from . import device, errors, gamedata, native_lib  # noqa: E402
 import error_detail  # noqa: E402
+import install_support  # noqa: E402
 
 PACKAGE = "com.netease.sky"
 HOME_SCENE = "CandleSpace"
@@ -163,7 +163,7 @@ def _record_once(adb, serial, pid, scene, revision, fake):
         if dest.exists():
             shutil.rmtree(dest, ignore_errors=True)
         return (None, None, errors.explain(msg),
-                error_detail.describe(exc, code="capture_failed"))
+                error_detail.describe(exc, code=errors.error_code(exc)))
     try:
         return dest, _binding_of(dest), None, None
     except Exception:
@@ -223,38 +223,62 @@ def run(once=False):
                     return 1
                 time.sleep(5)
                 continue
-            game = device.find_game(adb)
+            diagnostics = {}
+            game = device.find_game(adb, mumu_dir=mumu_dir, diagnostics=diagnostics)
+            status['mumu'].update({key: diagnostics[key] for key in ('android_version', 'android_label')
+                                   if diagnostics.get(key)})
             if not game:
-                if time.time() - last_hint > 10:
-                    last_hint = time.time()
-                    status.update(state="searching",
-                                  last_error_code="game_missing",
-                                  last_error_detail=error_detail.describe(
-                                      None, code="game_missing",
-                                      text="pidof %s did not return a pid" % PACKAGE),
-                                  message="找到 adb（%s），但没找到正在跑光遇的 MuMu。打开游戏、登进遇境。" % adb)
-                    write_status(status)
+                reason = diagnostics.get("reason") or "game_missing"
+                message = diagnostics.get("message") or "请在 MuMu 前台打开光遇，进图后重试。"
+                status.update(state="searching", last_error=message, last_error_code=reason,
+                              last_error_detail=error_detail.describe(None, code=reason, text=message),
+                              message=message)
+                write_status(status)
                 if once:
                     return 1
                 time.sleep(5)
                 continue
             serial, pid = game["serial"], game["pid"]
-            if not device.ensure_root(adb, serial):
-                status.update(state="error", last_error="MuMu 拿不到 root",
-                              last_error_code="root_unavailable",
-                              last_error_detail=error_detail.describe(
-                                  None, code="root_unavailable",
-                                  text="adb shell id did not report uid=0 for %s" % serial),
-                              message="MuMu 拿不到 root：设置 → 其他设置 → 打开「手机 Root 权限」，重启模拟器。")
+            status['mumu'].update(adb=str(adb), mumu_dir=str(mumu_dir or ''), serial=serial, pid=pid, root=False)
+            package = game.get("package") or PACKAGE
+            version = None if fake else device.game_version(adb, serial, package)
+            from qfsky.version_profile import CURRENT_BUILD, profile_for_version
+            profile = profile_for_version(version) if version else None
+            if not fake and (profile is None or profile.get("legacy")):
+                version_message = (f"当前游戏版本号为 {version}，本客户端需要网易国服 build {CURRENT_BUILD}。"
+                                   if version else "未读到已安装光遇的版本；请确认游戏已安装并在前台。")
+                reason = "game_version_unsupported" if version else "game_version_unknown"
+                message = version_message + " 换成支持的版本后重试。"
+                status.update(state="error", last_error=message, last_error_code=reason,
+                              last_error_detail=error_detail.describe(None, code=reason, text=message),
+                              message=message)
                 write_status(status)
                 serial = pid = None
                 if once:
                     return 1
                 time.sleep(8)
                 continue
-            status.update(state="ready", mumu={"adb": str(adb), "mumu_dir": str(mumu_dir or ""),
-                                               "serial": serial, "pid": pid, "root": True},
-                          message="找到 MuMu（%s），游戏进程 %s，已拿到 root。" % (serial, pid))
+            root_enabled = diagnostics.get("root_enabled")
+            if not device.ensure_root(adb, serial, root_enabled=root_enabled, diagnostics=diagnostics):
+                reason = diagnostics.get("reason") or "root_unavailable"
+                message = diagnostics.get("message") or "当前 MuMu 实例未通过 Root 检查。请回到安装向导检查当前实例。"
+                status.update(state="error", last_error=message,
+                              last_error_code=reason,
+                              last_error_detail=error_detail.describe(
+                                  None, code=reason, text=message),
+                              message=message)
+                write_status(status)
+                serial = pid = None
+                if once:
+                    return 1
+                time.sleep(8)
+                continue
+            status['mumu']['root'] = True
+            android_label = status['mumu'].get('android_label')
+            instance_label = f'{serial}，{android_label}' if android_label else serial
+            status.update(state="ready",
+                          last_error="", last_error_code="", last_error_detail=None,
+                          message="找到 MuMu（%s），游戏进程 %s，已拿到 root。" % (instance_label, pid))
             write_status(status)
             if not fake and not native_ready:
                 try:
@@ -262,11 +286,14 @@ def run(once=False):
                     native_lib.ensure_native_library(apk)
                     native_ready = True
                 except Exception as exc:
-                    status.update(state="error", last_error=str(exc),
-                                  last_error_code="native_library",
+                    issue = install_support.problem(exc)
+                    reason = (issue or {}).get("code") or "native_library"
+                    message = (issue or {}).get("message") or errors.explain(exc)
+                    status.update(state="error", last_error=message,
+                                  last_error_code=reason,
                                   last_error_detail=error_detail.describe(
-                                      exc, code="native_library"),
-                                  message=errors.explain(exc))
+                                      exc, code=reason),
+                                  message=message)
                     write_status(status)
                     if once:
                         return 1
@@ -275,8 +302,8 @@ def run(once=False):
                     continue
 
         # 游戏是否还活着
-        code, out, _ = device.adb_run(adb, "shell", "pidof " + PACKAGE, serial=serial, timeout=8)
-        if code != 0 or not re.fullmatch(r"\d+", out or ""):
+        active_pid = device.game_pid(adb, serial, package)
+        if active_pid is None:
             status.update(state="searching", message="游戏关了或模拟器断开，重新寻找…")
             write_status(status)
             serial = pid = None
@@ -285,11 +312,38 @@ def run(once=False):
                 return 1
             time.sleep(3)
             continue
-        if int(out) != pid:
-            pid = int(out)
+        if active_pid != pid:
+            pid = active_pid
+            status['mumu']['pid'] = pid
             recorded = set()
+        if device.is_game_foreground(adb, serial, package) is False:
+            message = "光遇在后台。请切回 MuMu 里的光遇并保持在前台，录图会自动重试。"
+            status.update(state="waiting", message=message, last_error=message,
+                          last_error_code="game_in_background",
+                          last_error_detail=error_detail.describe(None, code="game_in_background", text=message))
+            write_status(status)
+            if once:
+                return 1
+            time.sleep(3)
+            continue
+        if status.get("last_error_code") == "game_in_background":
+            status.update(last_error="", last_error_code="", last_error_detail=None)
 
-        scene, level_id = device.current_scene(adb, serial, pid, revision)
+        log_diagnostics = {}
+        scene, level_id = device.current_scene(adb, serial, pid, revision, diagnostics=log_diagnostics)
+        if reason := log_diagnostics.get('scene_log_reason'):
+            message = log_diagnostics['scene_log_message']
+            if status.get('last_error_code') != reason:
+                status.update(state='waiting', message=message, last_error=message, last_error_code=reason,
+                              last_error_detail=error_detail.describe(None, code=reason, text=message))
+                write_status(status)
+            if once:
+                return 1
+            time.sleep(3)
+            continue
+        if status.get('last_error_code') == 'capture_logcat_denied':
+            status.update(last_error='', last_error_code='', last_error_detail=None)
+            last_hint = 0.0
         if not scene:
             if time.time() - last_hint > 8:
                 last_hint = time.time()

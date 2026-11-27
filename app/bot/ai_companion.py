@@ -47,6 +47,7 @@ import chat_runtime  # noqa: E402  同账号单实例与脱敏发送诊断
 import game_context  # noqa: E402  当前房间的只读外观/社交观测
 import social_commands  # noqa: E402  当前说话人的主动互动邀请（轻量，无native依赖）
 import travel_chat_v25  # noqa: E402  默认不执行的显式同行请求入口
+import tour_runtime  # noqa: E402  T70 巡游模式（/巡游）
 import wardrobe as wardrobe_mod  # noqa: E402  T23-3 衣柜（拥有判定 / 整套 set_outfit）
 import magic as magic_mod  # noqa: E402  T23-3 背包魔法（列出 / 询问 / 只记意图）
 import xg_account  # noqa: E402  T24-2 按号：这个聊天进程用的号的状态目录
@@ -151,6 +152,20 @@ SHOUT_COUNT_RE = re.compile(r"^" + SHOUT_ADDR + r"叫(?P<n>几|[0-9０-９]{1,2}
                             + SHOUT_TAIL + r"$")
 SHOUT_CN_NUM = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
                 "六": 5, "七": 5, "八": 5, "九": 5, "十": 5}
+
+
+ROUTE_ON = ("开启跑图模式", "开跑图模式", "开启跑图", "跑图模式开", "跑图开")
+ROUTE_OFF = ("关闭跑图模式", "关跑图模式", "关闭跑图", "跑图模式关", "跑图关")
+
+
+def parse_route_mode(content):
+    """/开启跑图模式 → True；/关闭跑图模式 → False；其它 → None。"""
+    said = (content or "").strip()
+    if said in ROUTE_ON:
+        return True
+    if said in ROUTE_OFF:
+        return False
+    return None
 
 
 def parse_shout_command(text):
@@ -307,7 +322,7 @@ def stance_from_request(said, account_id=None):
     if re.search(r"不要|别换|不用", said):
         return None
     try:
-        now = int((xg_account.state_dir(account_id) / "attitude").read_text().strip())
+        now = int((xg_account.state_dir(account_id) / "attitude").read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         now = None
     choices = [n for n, row in stances.items() if row.get("id") != now and row.get("id") not in (1, 12)]   # 畏寒/受伤 不随机
@@ -698,7 +713,7 @@ personas.active = _active_titled
 def _owner():
     """哥哥的用户 uuid：后台“设为哥哥”写在 control/owner_uuid（切号也认得同一个人）；OWNER_UUID 环境变量可覆盖。"""
     try:
-        v = (ROOT / "control/owner_uuid").read_text().strip()
+        v = (ROOT / "control/owner_uuid").read_text(encoding="utf-8").strip()
     except OSError:
         v = ""
     return os.environ.get("OWNER_UUID") or (v if re.fullmatch(r"[0-9a-f-]{36}", v) else "")
@@ -869,7 +884,7 @@ class Companion:
     def map_id(self):
         """小光此刻在哪张图：长连接每段开头写 control/current_map（跟着哥哥过图会变）。"""
         try:
-            return int((ROOT / "control/current_map").read_text().strip())
+            return int((ROOT / "control/current_map").read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             return self._map_id
 
@@ -1238,6 +1253,11 @@ class Companion:
             log("shout_command", sender=sender[:8], ch=ch, kind=shout_cmd["kind"],
                 count=shout_cmd["count"], cmd=content[:40])
             return
+        if tour_runtime.handle_command(self, sender, content, ch, owner=OWNER, owner_title=OWNER_TITLE,
+                                       root=ROOT, read_state=_pose_state, log=log):
+            return
+        if self.handle_route_mode_command(sender, content, ch, visible):
+            return
         if self.handle_voice_command(sender, content, ch, visible):
             return
         if self.handle_outfit_command(sender, content, ch, visible):
@@ -1331,6 +1351,29 @@ class Companion:
                 time.sleep(1.2)
             out.append(self.send(line, ch, recipient=recipient))
         return out
+
+    def handle_route_mode_command(self, sender, content, ch, visible):
+        """哥哥专用：/开启跑图模式 → 自动炸花 + 自动点蜡烛；/关闭跑图模式 → 两个都关。"""
+        if sender != OWNER:
+            return False
+        on = parse_route_mode(content)
+        if on is None:
+            return False
+        import json as _json
+        base = ROOT / "control"
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            (base / "zero_darkstones.json").write_text(
+                _json.dumps({"enabled": bool(on)}), encoding="utf-8")
+            (base / "light_candle.json").write_text(
+                _json.dumps({"auto": bool(on)}), encoding="utf-8")
+        except OSError as exc:
+            log("route_mode_error", on=on, error=str(exc)[:160])
+            return self.send("跑图模式没切成功，写文件报错了", ch, recipient=sender) or True
+        log("route_mode", on=bool(on), sender=sender[:8])
+        msg = ("跑图模式开好了：进图自动炸花、自动点蜡烛" if on
+               else "跑图模式关了：不炸花、不点蜡烛")
+        return self.send(msg, ch, recipient=sender) or True
 
     def handle_outfit_command(self, sender, content, ch, visible):
         """`/换成XX` 等确定性入口：只有哥哥能换；列表只读。处理了返回 True。"""
@@ -2728,7 +2771,7 @@ def _run_chat(args, llm, account, cancel):
             while True:
                 time.sleep(2)
                 try:
-                    scope = json.loads(f.read_text()).get("scope", "chat")
+                    scope = json.loads(f.read_text(encoding="utf-8")).get("scope", "chat")
                     f.unlink()
                 except (OSError, ValueError):
                     continue
@@ -2753,6 +2796,7 @@ def _run_chat(args, llm, account, cancel):
             if t == "move":
                 with open(ROOT / "logs/ws_move.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), **ev}, ensure_ascii=False) + "\n")
+# 跟随由 runner 自己处理（room_level + friend_ticket），这里不再抢跑
 
     ua = cn_user_agent(bot.client.client_version or "", bot.client.fp_key)
     backoff = 5

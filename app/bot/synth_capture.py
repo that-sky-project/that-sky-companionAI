@@ -86,7 +86,7 @@ def make(template_dir, donor_dir, uuid, out_name, stand=True):
     out = PROFILES / out_name
     if out.exists():
         raise ValueError("输出目录已存在")
-    rec = json.loads((t / "record.json").read_text())
+    rec = json.loads((t / "record.json").read_text(encoding="utf-8"))
     actor = actor_with_identity((t / "actor.bin").read_bytes(), (dn / "actor.bin").read_bytes())
     if stand:
         import social_pose  # 延迟导入：只做目录合成时不依赖姿态模板
@@ -104,7 +104,7 @@ def make(template_dir, donor_dir, uuid, out_name, stand=True):
     rec["checks"] = dict(rec["checks"], actor_bytes=len(actor), actor_timed_record_count=timed)
     rec["synthesized"] = {"template": template_dir, "identity_from": donor_dir,
                           "at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    (out / "record.json").write_text(json.dumps(rec, ensure_ascii=False, indent=1))
+    (out / "record.json").write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
     return out
 
 

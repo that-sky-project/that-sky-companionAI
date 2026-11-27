@@ -6,6 +6,8 @@ and independent host-finally CONT. Not an atomic or hard-real-time guarantee.
 import re
 import shlex
 
+from .device_scope import is_supported_emulator_serial
+
 PACKAGE = b'com.netease.sky'
 HEADER = b'SKY_PAIR_STOPPED_V1\n'
 TRAILER = b'\nSKY_PAIR_RESUMED_V1\n'
@@ -13,9 +15,7 @@ WATCHDOG_SECONDS = 2
 
 
 def _pid(d):
-    # 只允许本机 MuMu 的 adb serial（127.0.0.1:16384 + 32*n / 7555）或模拟器 serial。
-    if not isinstance(getattr(d, 'serial', None), str) or not re.fullmatch(
-            r'(?:127\.0\.0\.1:\d{4,5}|emulator-\d+)', d.serial):
+    if not is_supported_emulator_serial(getattr(d, 'serial', None)):
         raise ValueError('current_profile_pause_device_scope')
     if type(d.pid) is not int or not 0 < d.pid <= 2**31-1:
         raise ValueError('current_profile_pause_pid')

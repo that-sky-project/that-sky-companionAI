@@ -14,6 +14,19 @@ from urllib.parse import quote
 from urllib.request import ProxyHandler, Request, build_opener
 
 import psutil
+try:
+    import install_support
+except ModuleNotFoundError as exc:
+    if exc.name != "install_support":
+        raise
+    from app import install_support
+
+try:
+    import webview2_probe
+except ModuleNotFoundError as exc:
+    if exc.name != "webview2_probe":
+        raise
+    from app import webview2_probe
 
 
 APP_TITLE = "小光 · Companion"
@@ -500,11 +513,23 @@ def _message(text, error=True):
     print(text, file=sys.stderr)
 
 
+def _retry_message(text):
+    if os.name == "nt":
+        try:
+            # Native Windows Retry / Cancel, localized by the OS.
+            return ctypes.windll.user32.MessageBoxW(None, text, "小光", 0x15) == 4
+        except (OSError, AttributeError):
+            pass
+    _message(text)
+    return False
+
+
 class WindowControls:
-    """Only window controls are exposed to JS. No filesystem, token or shell API."""
-    def __init__(self):
+    """Window controls and narrowly scoped update actions, no generic shell/IO."""
+    def __init__(self, updater=None):
         self._window = None
         self._maximized = False
+        self._updater = updater
 
     def minimize(self):
         self._window.minimize()
@@ -519,6 +544,42 @@ class WindowControls:
     def close(self):
         self._window.destroy()
 
+    def _start_update_check(self):
+        if self._updater is not None:
+            self._updater.start(startup=True)
+
+    def update_get(self):
+        return self._updater.snapshot() if self._updater is not None else None
+
+    def update_check(self):
+        return self._updater.start() if self._updater is not None else None
+
+    def update_set_auto(self, enabled):
+        return self._updater.set_auto(enabled) if self._updater is not None else None
+
+    def update_skip(self):
+        return self._updater.skip() if self._updater is not None else False
+
+    def update_later(self):
+        return self._updater.dismiss() if self._updater is not None else False
+
+    def update_open_release(self):
+        # No URL supplied by JS: only the previously verified Release opens.
+        return self._updater.open_release() if self._updater is not None else False
+
+
+def _make_updater(root, data):
+    try:
+        # The runtime and PyInstaller build both add app/ to sys.path.
+        from client_update import UpdateChecker
+    except ModuleNotFoundError as exc:
+        if exc.name != "client_update":
+            raise
+        # Direct source imports under a standard Python use the repo root.
+        from app.client_update import UpdateChecker
+    return UpdateChecker(root / "BUILD.json", data,
+                         log=lambda event, **fields: _lifecycle_log(data, event, **fields))
+
 
 class Backend:
     def __init__(self, root, data):
@@ -532,9 +593,14 @@ class Backend:
         app = self.root / "app"
         python = self.root / "runtime/python/python.exe"
         if not python.is_file() or not (app / "bot/control_api.py").is_file():
-            raise RuntimeError("请解压完整客户端目录后运行，不要只复制 EXE。")
-        self.data.mkdir(parents=True, exist_ok=True)
-        (self.data / "logs").mkdir(exist_ok=True)
+            raise install_support.InstallProblem("runtime_missing", "未找到随包 Python 或本机后台。" + install_support.REEXTRACT)
+        try:
+            self.data.mkdir(parents=True, exist_ok=True)
+            (self.data / "logs").mkdir(exist_ok=True)
+            self.log = open(self.data / "logs/desktop-backend.log", "ab")
+        except OSError as exc:
+            issue = install_support.problem(exc, stage="data", default=install_support.DATA_WRITE)
+            raise install_support.InstallProblem(issue["code"], issue["message"]) from exc
         _cleanup_stale_backends(self.data)
         try:
             parent = psutil.Process(os.getpid())
@@ -547,7 +613,6 @@ class Backend:
                    QFLY_DATA_DIR=str(self.data / "runtime/runtime-data"),
                    **{PARENT_PID_ENV: str(os.getpid()),
                       PARENT_CREATE_ENV: ("%.6f" % parent_ct) if parent_ct else ""})
-        self.log = open(self.data / "logs/desktop-backend.log", "ab")
         self.process = subprocess.Popen([str(python), "-B", str(app / "bot/control_api.py"), "--port", "0"],
                                         cwd=app, env=env, stdin=subprocess.DEVNULL,
                                         stdout=self.log, stderr=self.log,
@@ -560,7 +625,9 @@ class Backend:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise RuntimeError("本机后台启动失败。详情保存在本机 desktop-backend.log。")
+                issue = install_support.problem(_windows_exit_error(self.process.returncode),
+                                                default=install_support.BACKEND)
+                raise install_support.InstallProblem(issue["code"], issue["message"])
             try:
                 web = json.loads(record.read_text(encoding="utf-8"))
                 if web.get("pid") == self.process.pid and isinstance(web.get("port"), int):
@@ -569,7 +636,9 @@ class Backend:
             except (OSError, ValueError):
                 pass
             time.sleep(.15)
-        raise RuntimeError("本机后台启动超时。")
+        raise install_support.InstallProblem(
+            "backend_timeout", "本机后台启动超时。请关闭旧版小光，检查安全软件是否阻止随包 Python 后重试。"
+            "若仍有问题，请查看数据目录下 logs/desktop-backend.log。")
 
     def url(self, path="/desktop"):
         # This is the existing local one-use UI bootstrap token, NOT a game
@@ -619,6 +688,18 @@ class Backend:
         self.web = None
 
 
+def _windows_exit_error(code):
+    # Native loader errors usually have an NTSTATUS exit code, not a Win32 errno.
+    reason = {0xC0000017: "out of memory", 0xC000009A: "out of memory",
+              0xC000012D: "paging file is too small"}.get(code & 0xffffffff)
+    if reason:
+        return RuntimeError(reason)
+    if (code & 0xffffffff) in (0xC000007B, 0xC0000135, 0xC0000142):
+        return install_support.InstallProblem(
+            "runtime_load_failed", "随包 Python 或其 DLL 加载失败。" + install_support.REEXTRACT + install_support.SECURITY)
+    return None
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data-dir")
@@ -628,9 +709,18 @@ def main():
     root = bundle_root()
     data = Path(a.data_dir or os.environ.get("XG_DESKTOP_DATA_DIR") or
                 str(Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "XiaoGuangPrivate/data"))
-    instance = DesktopInstance(data)
-    backend = Backend(root, data)
+    while True:
+        code, failure = _run_desktop(a, root, data)
+        if not failure or not _retry_message(failure):
+            return code
+
+
+def _run_desktop(a, root, data):
+    instance = backend = None
+    stage = "startup"
     try:
+        instance = DesktopInstance(data)
+        backend = Backend(root, data)
         if not instance.acquire():
             if a.backend_smoke:
                 report = {"backend_started": False, "already_running": True, "data": str(data)}
@@ -638,11 +728,11 @@ def main():
                     Path(a.smoke_report).write_text(json.dumps(report), encoding="utf-8")
                 else:
                     print(json.dumps(report, ensure_ascii=False))
-                return 0
+                return 0, False
             focused = _focus_existing_window()
             _message("小光已经在运行。\n" +
                      ("已切换到已有窗口。" if focused else "请在任务栏切换到已有窗口，或先关闭它。"), False)
-            return 0
+            return 0, False
         backend.start()
         if a.backend_smoke:
             report = {"backend_started": True, "loopback_only": True, "game_login_executed": False}
@@ -650,14 +740,18 @@ def main():
                 Path(a.smoke_report).write_text(json.dumps(report), encoding="utf-8")
             else:
                 print(json.dumps(report))
-            return 0
+            return 0, False
+        stage = "webview"
         import webview
-        controls = WindowControls()
+        if webview2_probe.available(getattr(webview, "__file__", None)) is False:
+            raise install_support.InstallProblem("webview2_missing", install_support.WEBVIEW)
+        controls = WindowControls(_make_updater(root, backend.data))
         controls._window = webview.create_window(APP_TITLE, backend.url(),
             js_api=controls, width=1240, height=820, min_size=(960, 640),
             background_color="#EDF3F6", frameless=True, easy_drag=False,
             text_select=True, confirm_close=True)
         controls._window.events.closed += backend.stop
+        controls._start_update_check()
         webview.start(gui="edgechromium", debug=False, private_mode=True)
     except Exception as exc:
         if a.backend_smoke:
@@ -665,13 +759,18 @@ def main():
                               "message": str(exc)[:350]}, ensure_ascii=False))
         elif isinstance(exc, StaleBackendError):
             _message(str(exc))
-        elif os.name == "nt":
-            _message("小光桌面客户端启动未完成。\n" + str(exc)[:350])
-        return 1
+        else:
+            issue = install_support.problem(exc, stage=stage, default=install_support.BACKEND)
+            _lifecycle_log(data, "startup_failed", stage=stage, code=issue["code"],
+                           error_type=type(exc).__name__, winerror=getattr(exc, "winerror", None))
+            return 1, "小光桌面客户端启动未完成。\n" + issue["message"]
+        return 1, False
     finally:
-        backend.stop()
-        instance.release()
-    return 0
+        if backend is not None:
+            backend.stop()
+        if instance is not None:
+            instance.release()
+    return 0, False
 
 
 if __name__ == "__main__":

@@ -1,0 +1,491 @@
+{
+ "generated": "2026-11-20",
+ "source": "原版 Objects.level.bin 节点计数",
+ "maps": {
+  "3526133726": {
+   "scene": "CandleSpace",
+   "flames": 62,
+   "candles": 66
+  },
+  "1887730855": {
+   "scene": "Dawn_TrialsEarth",
+   "flames": 8,
+   "candles": 55
+  },
+  "1649439303": {
+   "scene": "Dawn",
+   "flames": 35,
+   "candles": 174
+  },
+  "3884142720": {
+   "scene": "Dawn_TrialsWater",
+   "flames": 13,
+   "candles": 46
+  },
+  "1241316521": {
+   "scene": "Dawn_TrialsFire",
+   "flames": 41,
+   "candles": 211
+  },
+  "748712866": {
+   "scene": "DawnCave",
+   "flames": 71,
+   "candles": 100
+  },
+  "2050064391": {
+   "scene": "Dawn_TrialsAir",
+   "flames": 15,
+   "candles": 134
+  },
+  "3429122502": {
+   "scene": "Prairie_WildLifePark",
+   "flames": 21,
+   "candles": 6
+  },
+  "1190972738": {
+   "scene": "DayEnd",
+   "flames": 1,
+   "candles": 92
+  },
+  "312004957": {
+   "scene": "Prairie_NestAndKeeper",
+   "flames": 0,
+   "candles": 91
+  },
+  "2350532176": {
+   "scene": "Prairie_Village",
+   "flames": 11,
+   "candles": 114
+  },
+  "2394719185": {
+   "scene": "DayHubCave",
+   "flames": 8,
+   "candles": 119
+  },
+  "3057325709": {
+   "scene": "Prairie_Island",
+   "flames": 16,
+   "candles": 102
+  },
+  "3244931597": {
+   "scene": "Prairie_Cave",
+   "flames": 26,
+   "candles": 110
+  },
+  "2477345666": {
+   "scene": "Prairie_ButterflyFields",
+   "flames": 1,
+   "candles": 218
+  },
+  "4133595729": {
+   "scene": "Rain_Cave",
+   "flames": 28,
+   "candles": 0
+  },
+  "3317260872": {
+   "scene": "Rain_BaseCamp",
+   "flames": 67,
+   "candles": 55
+  },
+  "2159642775": {
+   "scene": "RainMid",
+   "flames": 56,
+   "candles": 60
+  },
+  "2720691892": {
+   "scene": "RainShelter",
+   "flames": 32,
+   "candles": 46
+  },
+  "2839585646": {
+   "scene": "RainForest",
+   "flames": 49,
+   "candles": 120
+  },
+  "164626931": {
+   "scene": "Rain",
+   "flames": 39,
+   "candles": 181
+  },
+  "128844448": {
+   "scene": "RainEnd",
+   "flames": 11,
+   "candles": 28
+  },
+  "3730271824": {
+   "scene": "Rain_BlueBirdTheater",
+   "flames": 0,
+   "candles": 25
+  },
+  "1759178769": {
+   "scene": "SunsetVillage",
+   "flames": 34,
+   "candles": 55
+  },
+  "1612139937": {
+   "scene": "Sunset_Theater",
+   "flames": 49,
+   "candles": 1
+  },
+  "571720490": {
+   "scene": "SunsetRace",
+   "flames": 0,
+   "candles": 6
+  },
+  "2360310676": {
+   "scene": "SunsetEnd",
+   "flames": 28,
+   "candles": 50
+  },
+  "263580627": {
+   "scene": "SunsetColosseum",
+   "flames": 71,
+   "candles": 102
+  },
+  "649101397": {
+   "scene": "Sunset_YetiPark",
+   "flames": 9,
+   "candles": 94
+  },
+  "2179549040": {
+   "scene": "Sunset_Citadel",
+   "flames": 0,
+   "candles": 380
+  },
+  "1638008359": {
+   "scene": "Sunset",
+   "flames": 21,
+   "candles": 287
+  },
+  "507487826": {
+   "scene": "SunsetEnd2",
+   "flames": 42,
+   "candles": 79
+  },
+  "1323747701": {
+   "scene": "SunsetVillage_MusicShop",
+   "flames": 21,
+   "candles": 8
+  },
+  "1844499196": {
+   "scene": "Sunset_FlyRace",
+   "flames": 0,
+   "candles": 16
+  },
+  "170656205": {
+   "scene": "DuskOasis",
+   "flames": 10,
+   "candles": 46
+  },
+  "864432821": {
+   "scene": "DuskGraveyard",
+   "flames": 19,
+   "candles": 64
+  },
+  "817373972": {
+   "scene": "DuskStart",
+   "flames": 13,
+   "candles": 74
+  },
+  "4158956653": {
+   "scene": "DuskEnd",
+   "flames": 11,
+   "candles": 43
+  },
+  "371156238": {
+   "scene": "DuskEnd_Past",
+   "flames": 10,
+   "candles": 0
+  },
+  "607516458": {
+   "scene": "Dusk_PearlIsland",
+   "flames": 24,
+   "candles": 119
+  },
+  "1058995818": {
+   "scene": "Dusk_PearlSea",
+   "flames": 1,
+   "candles": 0
+  },
+  "1152668600": {
+   "scene": "Dusk_HiddenTemple",
+   "flames": 1,
+   "candles": 12
+  },
+  "4070111637": {
+   "scene": "Dusk_Triangle",
+   "flames": 1,
+   "candles": 25
+  },
+  "1147491976": {
+   "scene": "Dusk",
+   "flames": 7,
+   "candles": 90
+  },
+  "1597085778": {
+   "scene": "DuskMid",
+   "flames": 20,
+   "candles": 41
+  },
+  "2650921869": {
+   "scene": "Dusk_CrabField",
+   "flames": 5,
+   "candles": 42
+  },
+  "217257707": {
+   "scene": "Night_ValleyHouse",
+   "flames": 40,
+   "candles": 0
+  },
+  "1185708672": {
+   "scene": "Night_ValleyHouseSky",
+   "flames": 37,
+   "candles": 0
+  },
+  "3803142938": {
+   "scene": "Night_StoryBook",
+   "flames": 3,
+   "candles": 0
+  },
+  "1801452336": {
+   "scene": "Night_ValleyForest",
+   "flames": 7,
+   "candles": 0
+  },
+  "2824771136": {
+   "scene": "NightDesert_Planets",
+   "flames": 4,
+   "candles": 0
+  },
+  "2899790755": {
+   "scene": "Night_Shelter",
+   "flames": 62,
+   "candles": 53
+  },
+  "2060214456": {
+   "scene": "NightDesert",
+   "flames": 0,
+   "candles": 83
+  },
+  "3051518728": {
+   "scene": "NightDesert_Beach",
+   "flames": 4,
+   "candles": 21
+  },
+  "98108829": {
+   "scene": "Night_GO_Gallery",
+   "flames": 10,
+   "candles": 1
+  },
+  "1694829989": {
+   "scene": "Night_PaintedWorld",
+   "flames": 56,
+   "candles": 253
+  },
+  "2518601": {
+   "scene": "NightArchive",
+   "flames": 127,
+   "candles": 73
+  },
+  "2458626594": {
+   "scene": "Night_GO_City",
+   "flames": 49,
+   "candles": 0
+  },
+  "3092325157": {
+   "scene": "Night_GO_Town",
+   "flames": 22,
+   "candles": 0
+  },
+  "996052172": {
+   "scene": "Night_GO_Island",
+   "flames": 1,
+   "candles": 0
+  },
+  "4182564783": {
+   "scene": "Night_Jumble",
+   "flames": 56,
+   "candles": 176
+  },
+  "214074919": {
+   "scene": "Night_InfiniteDesert",
+   "flames": 3,
+   "candles": 1
+  },
+  "2358907137": {
+   "scene": "Night",
+   "flames": 111,
+   "candles": 259
+  },
+  "2307461961": {
+   "scene": "Night2",
+   "flames": 19,
+   "candles": 204
+  },
+  "2267185542": {
+   "scene": "NightEnd",
+   "flames": 11,
+   "candles": 1
+  },
+  "3203226771": {
+   "scene": "Night_Workshop",
+   "flames": 21,
+   "candles": 0
+  },
+  "3258961934": {
+   "scene": "Night_JarCave",
+   "flames": 0,
+   "candles": 15
+  },
+  "530831471": {
+   "scene": "Night_IPHallway",
+   "flames": 4,
+   "candles": 0
+  },
+  "3479786579": {
+   "scene": "StormEnd",
+   "flames": 28,
+   "candles": 0
+  },
+  "3110721718": {
+   "scene": "StormStart",
+   "flames": 19,
+   "candles": 4
+  },
+  "1705189686": {
+   "scene": "Storm",
+   "flames": 33,
+   "candles": 9
+  },
+  "2251284635": {
+   "scene": "CandleSpaceEnd",
+   "flames": 0,
+   "candles": 2
+  },
+  "567986524": {
+   "scene": "OrbitEnd",
+   "flames": 0,
+   "candles": 80
+  },
+  "1104763408": {
+   "scene": "MainStreet_Cafe_Wonderland",
+   "flames": 53,
+   "candles": 0
+  },
+  "3368878998": {
+   "scene": "MainStreet_Soundbath",
+   "flames": 25,
+   "candles": 0
+  },
+  "1509719447": {
+   "scene": "MainStreet",
+   "flames": 99,
+   "candles": 103
+  },
+  "3905084854": {
+   "scene": "MainStreet_Apartment",
+   "flames": 3,
+   "candles": 0
+  },
+  "1936276829": {
+   "scene": "MainStreet_StorySpace",
+   "flames": 13,
+   "candles": 0
+  },
+  "1563891948": {
+   "scene": "MainStreet_ShopOutfits",
+   "flames": 40,
+   "candles": 3
+  },
+  "3743646255": {
+   "scene": "MainStreet_FunArmada",
+   "flames": 93,
+   "candles": 121
+  },
+  "1444818677": {
+   "scene": "MainStreet_Cafe",
+   "flames": 29,
+   "candles": 0
+  },
+  "372393162": {
+   "scene": "MainStreet_ShopProps",
+   "flames": 14,
+   "candles": 0
+  },
+  "1559613961": {
+   "scene": "MainStreet_ConcertHall",
+   "flames": 123,
+   "candles": 0
+  },
+  "1761965310": {
+   "scene": "MainStreetFlyingIntro",
+   "flames": 2,
+   "candles": 0
+  },
+  "4044469303": {
+   "scene": "MainStreet_ShopSpells",
+   "flames": 16,
+   "candles": 0
+  },
+  "1482972144": {
+   "scene": "VoidSharedSpace",
+   "flames": 4,
+   "candles": 0
+  },
+  "2920756220": {
+   "scene": "Event_Personality",
+   "flames": 14,
+   "candles": 8
+  },
+  "1661095040": {
+   "scene": "Event_Arr_SoftInside",
+   "flames": 16,
+   "candles": 0
+  },
+  "417578099": {
+   "scene": "Event_Cinema",
+   "flames": 30,
+   "candles": 6
+  },
+  "3667302771": {
+   "scene": "Season24Void1",
+   "flames": 8,
+   "candles": 9
+  },
+  "3082753918": {
+   "scene": "Event_DaysOfMischief",
+   "flames": 239,
+   "candles": 216
+  },
+  "3530471012": {
+   "scene": "Event_HidenSeek_SnowVillage",
+   "flames": 22,
+   "candles": 16
+  },
+  "3493360294": {
+   "scene": "UndergroundOffice",
+   "flames": 2,
+   "candles": 0
+  },
+  "1274288158": {
+   "scene": "Nest_Night_GO_Town",
+   "flames": 8,
+   "candles": 0
+  },
+  "295816905": {
+   "scene": "TGCOffice",
+   "flames": 8,
+   "candles": 60
+  },
+  "2199862534": {
+   "scene": "Nintendo_CandleSpace",
+   "flames": 2,
+   "candles": 0
+  },
+  "2081768701": {
+   "scene": "Skyway",
+   "flames": 23,
+   "candles": 236
+  }
+ }
+}

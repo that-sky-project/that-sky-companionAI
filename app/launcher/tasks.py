@@ -24,6 +24,7 @@ for _p in (str(APP), str(APP / "bot")):
 import xg_paths   # noqa: E402
 import xg_proc    # noqa: E402
 import error_detail  # noqa: E402
+import install_support  # noqa: E402
 from capture import gamedata  # noqa: E402
 
 CHAIN = Path(__file__).resolve().parent / "gamedata_chain.py"
@@ -183,6 +184,9 @@ def current():
                 doc["error_detail"] = error_detail.describe(
                     None, code=doc["error_code"],
                     text=str(final.get("error") or final.get("message") or "任务失败"))
+                issue = install_support.problem(doc["error"])
+                if issue:
+                    doc.update(error=issue["message"], error_code=issue["code"])
         doc["finished"] = doc.get("finished") or time.strftime("%Y-%m-%d %H:%M:%S")
         doc["running"] = False
     elif doc.get("running") and not alive:
@@ -192,6 +196,9 @@ def current():
         doc["error_code"] = "task_process_gone"
         doc["error_detail"] = error_detail.describe(
             None, code="task_process_gone", text=_raw_tail(_tail(log)))
+        issue = install_support.problem(doc["error_detail"]["text"])
+        if issue:
+            doc.update(error=issue["message"], error_code=issue["code"])
         doc["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
     if original.get("running") and not alive:
         # Persist the terminal transition before adding response-only progress
@@ -227,20 +234,22 @@ def start(kind, plan, label="", meta=None):
     if cur.get("running"):
         return {"ok": False, "busy": True, "message": "已经有一个后台任务在跑，等它结束再开始",
                 "task": cur.get("task")}
-    xg_paths.ensure_dirs()
     task_id = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(2)
     plan_path = xg_paths.CONTROL / ("task_" + task_id + ".plan.json")
     log_path = xg_paths.LOGS / ("task_" + task_id + ".jsonl")
-    xg_paths.write_json(plan_path, plan, private_file=False)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text("", encoding="utf-8")
-    env = gamedata.env()
+    try:
+        xg_paths.ensure_dirs()
+        xg_paths.write_json(plan_path, plan, private_file=False)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+    except (OSError, MemoryError) as exc:
+        return {"ok": False, **install_support.problem(exc, stage="data", default=install_support.DATA_WRITE)}
     try:
         proc, ident = xg_proc.spawn_detached(
             [xg_paths.python_exe(), "-B", str(CHAIN), "--kind", kind, "--plan", str(plan_path)],
-            cwd=xg_paths.APP, stdout=log_path, stderr=log_path, env=env)
+            cwd=xg_paths.APP, stdout=log_path, stderr=log_path, env=gamedata.env())
     except Exception as exc:
-        return {"ok": False, "message": f"任务起不来：{type(exc).__name__}"}
+        return {"ok": False, **install_support.problem(exc, default="本机任务未能启动。请核对随包运行库和安全软件拦截记录，然后重试。")}
     doc = {"id": task_id, "kind": kind, "label": label or kind, "pid": proc.pid,
            "create_time": (ident or {}).get("create_time"), "running": True, "ok": None,
            "stage": "starting", "done": 0, "total": None, "eta_s": None,

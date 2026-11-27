@@ -45,7 +45,7 @@ def resolve(name):
 
 
 def client():
-    a = L.load_account((ROOT / "control/active_account").read_text().strip())
+    a = L.load_account((ROOT / "control/active_account").read_text(encoding="utf-8").strip())
     return SkyClient(a["user_uuid"], a["session"], a["session2"], a.get("data_version") or "")
 
 
@@ -61,7 +61,7 @@ def set_stance(value):
         raise RuntimeError("读不到当前装扮")
     bk = xg_account.state_dir() / f"outfit_backup_{time.strftime('%m%d%H%M%S')}.json"
     bk.parent.mkdir(parents=True, exist_ok=True)
-    bk.write_text(json.dumps(o, ensure_ascii=False))
+    bk.write_text(json.dumps(o, ensure_ascii=False), encoding="utf-8")
     new = copy.deepcopy(o)
     new["attitude"] = int(value)   # 要发整数（发字符串 "3" 服务器回 ok 但不改；读回来是字符串）
     resp = c.post(O.P_SET_OUTFIT, {"outfit": new})   # 要包一层 outfit（不包 404）
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         v = int(a[1]) if a[1].isdigit() else next(k for k, n in STANCES.items() if n == a[1])
         print(json.dumps(set_stance(v), ensure_ascii=False))
     elif a[:1] == ["restore"] and len(a) == 2:
-        o = json.loads(Path(a[1]).read_text())
+        o = json.loads(Path(a[1]).read_text(encoding="utf-8"))
         print(json.dumps(client().post(O.P_SET_OUTFIT, {"outfit": o}), ensure_ascii=False)[:300])
     else:
         print(__doc__)

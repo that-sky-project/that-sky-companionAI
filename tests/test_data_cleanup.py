@@ -208,7 +208,7 @@ class CleanupTests(unittest.TestCase):
     def test_purge_preview_rechecks_manifest(self):
         self.terrain();result=self.execute(terrain=True);p=self.service.purge_preview()
         manifest=self.root/result['trash_path']/MANIFEST
-        value=json.loads(manifest.read_bytes());value['items'][0]['path']='../config.json';manifest.write_text(json.dumps(value))
+        value=json.loads(manifest.read_bytes());value['items'][0]['path']='../config.json';manifest.write_text(json.dumps(value), encoding="utf-8")
         self.assertEqual(self.service.purge(p['plan_id'],True)['error_code'],'untrusted_trash')
 
     def test_partial_move_failure_rolls_back(self):
@@ -276,7 +276,7 @@ class CleanupTests(unittest.TestCase):
     def test_new_capture_registration_refuses_restore(self):
         path,_=self.profiles();self.execute(captures=True)
         doc=json.loads(path.read_bytes());doc['maps']['10']['current_capture']={'record_dir':'new-record'}
-        path.write_text(json.dumps(doc));preview=self.service.restore_preview()
+        path.write_text(json.dumps(doc), encoding="utf-8");preview=self.service.restore_preview()
         result=self.service.restore(preview['plan_id'],True)
         self.assertEqual(result['error_code'],'restore_conflict')
         self.assertEqual(json.loads(path.read_bytes())['maps']['10']['current_capture'],{'record_dir':'new-record'})
@@ -290,7 +290,7 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(self.service.preview({'captures':True})['error_code'],'ambiguous_json')
 
     def test_mixed_preview_stale_even_when_only_unselected_field_changes(self):
-        p,before=self.profiles();preview=self.preview(captures=True);before['token']='changed';p.write_text(json.dumps(before))
+        p,before=self.profiles();preview=self.preview(captures=True);before['token']='changed';p.write_text(json.dumps(before), encoding="utf-8")
         self.assertEqual(self.service.execute(preview['plan_id'],True)['error_code'],'preview_stale')
 
     def test_catalog_registry_matches_selected_manifest_binding_only(self):
@@ -351,12 +351,12 @@ class CleanupTests(unittest.TestCase):
 
     def test_manifest_extra_sensitive_field_not_purged(self):
         self.terrain();result=self.execute(terrain=True)
-        p=self.root/result['trash_path']/MANIFEST;doc=json.loads(p.read_bytes());doc['APIKey']='injected-fixture';p.write_text(json.dumps(doc))
+        p=self.root/result['trash_path']/MANIFEST;doc=json.loads(p.read_bytes());doc['APIKey']='injected-fixture';p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.service.purge_preview()['error_code'],'untrusted_trash');self.assertTrue(p.exists())
 
     def test_index_extra_sensitive_field_not_purged(self):
         self.terrain();self.execute(terrain=True)
-        p=self.root/'trash'/INDEX;doc=json.loads(p.read_bytes());doc['secret']='injected-fixture';p.write_text(json.dumps(doc))
+        p=self.root/'trash'/INDEX;doc=json.loads(p.read_bytes());doc['secret']='injected-fixture';p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.service.purge_preview()['error_code'],'untrusted_trash')
 
     def test_restore_partial_journal_resumes_without_overwrite(self):

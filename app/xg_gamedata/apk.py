@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -15,7 +16,9 @@ from .common import (APK_BUILD, APK_PACKAGE, APK_VERSION, GameDataError, Progres
                      atomic_json, final, human_size, long_path, sha256_file)
 from qfsky.version_profile import PROFILES as VERSION_PROFILES
 from .apk_identity import validate_apk_members
-import xg_exec
+from .android_package import package_query_unavailable, parse_apk_paths
+from capture.device_scope import is_supported_emulator_serial
+import xg_adb
 
 # 国服 0.16.8 / 421629 与 0.16.7 / 421589 的资产身份。
 # 旧值保留只用于识别旧 APK；生成数据仍以 0.16.8 为准。
@@ -101,21 +104,24 @@ def _adb_command(adb: Path) -> list[str]:
 
 def _run_adb(adb: Path, serial: str | None, args: list[str], timeout: int = 120) -> str:
     cmd = _adb_command(adb)
-    if serial:
-        cmd += ["-s", serial]
-    cmd += args
+    adb_args = (["-s", serial] if serial else []) + args
     try:
-        proc = xg_exec.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           encoding="utf-8", errors="replace")
+        proc = xg_adb.run(cmd, adb_args, capture_output=True, text=True, timeout=timeout,
+                         encoding="utf-8", errors="replace")
     except FileNotFoundError:
         raise GameDataError("找不到 adb：%s" % adb, "adb_missing")
     except subprocess.TimeoutExpired:
         raise GameDataError("adb 超时（%d 秒）：%s" % (timeout, " ".join(args)), "adb_timeout")
-    if proc.returncode != 0:
+    if proc.returncode != 0 or (args[0] == "shell" and not (proc.stdout or "").strip()
+                               and package_query_unavailable(proc.stderr)):
         detail = (proc.stderr or proc.stdout or "").strip()
+        if "xg_adb_server_version_conflict" in detail:
+            raise GameDataError("正在运行的 ADB 服务与所选 adb.exe 版本不同，小光没有停止它。"
+                                "请使用该 MuMu 自带的 adb.exe，或关闭占用 ADB 的工具后重试。",
+                                "adb_server_version_conflict")
         raise GameDataError("adb 命令失败（%s）：%s" % (" ".join(args), detail[:500]),
                             "adb_failed")
-    return proc.stdout
+    return proc.stdout or ""
 
 
 def _device_list(adb: Path) -> list[str]:
@@ -132,14 +138,39 @@ def _device_list(adb: Path) -> list[str]:
 
 
 def _parse_pm_path(out: str) -> list[str]:
-    paths = []
-    for line in out.splitlines():
-        line = line.strip()
-        if line.startswith("package:"):
-            value = line[len("package:"):].strip()
-            if value:
-                paths.append(value)
-    return paths
+    return parse_apk_paths(out)
+
+
+def _query_apk_paths(adb: Path, serial: str) -> list[str]:
+    errors = []
+    explicitly_absent = False
+    for command in (["shell", "pm", "path", APK_PACKAGE],
+                    ["shell", "cmd", "package", "path", APK_PACKAGE]):
+        try:
+            output = _run_adb(adb, serial, command, timeout=12)
+        except GameDataError as exc:
+            if exc.code in {"adb_missing", "adb_timeout", "adb_server_version_conflict"}:
+                raise
+            detail = exc.message
+            if any(marker in detail.lower() for marker in ("device offline", "device unauthorized",
+                                                            "no devices/emulators found")):
+                raise
+            if "unknown package" in detail.lower():
+                explicitly_absent = True
+            else:
+                errors.append(detail)
+            continue
+        paths = _parse_pm_path(output)
+        if paths:
+            return paths
+        if "unknown package" in output.lower():
+            explicitly_absent = True
+        elif output.strip():
+            errors.append(output.strip()[:300])
+    if explicitly_absent or not errors:
+        return []
+    raise GameDataError("查询 %s 的 APK 路径失败：%s" % (APK_PACKAGE, "; ".join(errors)),
+                        "pm_path_failed")
 
 
 def _safe_name(remote: str) -> str:
@@ -153,18 +184,28 @@ def _merge_apk_view(base: Path, splits: list[Path], out: Path,
     """把 base + split 合成一个 zip 视图（同名以 base 优先，split 只补缺）。"""
     tmp = out.with_name(out.name + ".t")
     seen = set()
-    with zipfile.ZipFile(long_path(tmp), "w", zipfile.ZIP_DEFLATED, allowZip64=True) as dst:
-        for src in [base] + splits:
-            with zipfile.ZipFile(src) as zf:
-                for info in zf.infolist():
-                    if info.is_dir() or info.filename in seen:
-                        continue
-                    seen.add(info.filename)
-                    with zf.open(info) as fh, dst.open(info.filename, "w") as wh:
-                        shutil.copyfileobj(fh, wh, 8 * 1024 * 1024)
-            if progress:
-                progress.emit("合并 %s" % src.name, done=progress.done + 1)
-    os.replace(long_path(tmp), long_path(out))
+    try:
+        with zipfile.ZipFile(long_path(tmp), "w", zipfile.ZIP_DEFLATED, allowZip64=True) as dst:
+            for src in [base] + splits:
+                with zipfile.ZipFile(long_path(src)) as zf:
+                    members = zf.infolist()
+                    if len({info.filename for info in members}) != len(members):
+                        raise GameDataError("APK 拆分包里有重复文件成员：%s" % src.name,
+                                            "apk_duplicate_member")
+                    for info in members:
+                        if info.is_dir() or info.filename in seen:
+                            continue
+                        seen.add(info.filename)
+                        with zf.open(info) as fh, dst.open(info.filename, "w") as wh:
+                            shutil.copyfileobj(fh, wh, 8 * 1024 * 1024)
+                if progress:
+                    progress.emit("合并 %s" % src.name, done=progress.done + 1)
+        os.replace(long_path(tmp), long_path(out))
+    except zipfile.BadZipFile as exc:
+        raise GameDataError("APK 拆分包损坏：%s" % exc, "apk_bad_zip") from exc
+    finally:
+        if os.path.exists(long_path(tmp)):
+            os.unlink(long_path(tmp))
     return out
 
 
@@ -180,49 +221,71 @@ def _pulled_validation_error(error):
 
 
 def pull_apk(adb: str, serial: str | None, data_dir: Path) -> dict:
+    scope_message = "拉取安装包只支持本机或私有局域网的 MuMu 实例；不支持公网设备和 USB 真机。请打开 MuMu 后重试。"
+    if serial is not None and not is_supported_emulator_serial(serial):
+        raise GameDataError(scope_message, "unsupported_device_scope")
     adb_path = Path(adb)
     if not adb_path.is_file():
         raise GameDataError("adb 不存在：%s" % adb_path, "adb_missing")
     progress = Progress("pull-apk", 6)
     progress.emit("检查 MuMu 设备…", done=0)
-    devices = _device_list(adb_path)
+    online = _device_list(adb_path)
+    devices = [value for value in online if is_supported_emulator_serial(value)]
     if not devices:
+        if online:
+            raise GameDataError(scope_message, "unsupported_device_scope")
         raise GameDataError(
             "没找到 MuMu/adb 设备。先在 MuMu 里开机、打开开发者调试，"
             "再确认 adb 能连上（adb devices 能看到设备）。", "no_device")
     if serial is None:
+        if len(devices) > 1:
+            raise GameDataError("有多个 MuMu 实例在线。请从安装向导选中运行光遇的实例后重新拉取。",
+                                "device_ambiguous")
         serial = devices[0]
     elif serial not in devices:
         raise GameDataError("设备 %s 不在线；当前在线：%s" % (serial, ", ".join(devices)),
                             "device_not_found")
     progress.emit("查询光遇安装路径…", done=1)
-    try:
-        out = _run_adb(adb_path, serial, ["shell", "pm", "path", APK_PACKAGE])
-    except GameDataError as exc:
-        raise GameDataError("查询 %s 失败：%s" % (APK_PACKAGE, exc.message), "pm_path_failed")
-    paths = _parse_pm_path(out)
+    paths = _query_apk_paths(adb_path, serial)
     if not paths:
         raise GameDataError(
             "MuMu 里没有安装光遇（%s）。请先在 MuMu 里装好国服 0.16.8/421629。" % APK_PACKAGE,
             "game_not_installed")
     dest = Path(data_dir) / "game" / "apk"
     dest.mkdir(parents=True, exist_ok=True)
-    base_remote = next((p for p in paths if _safe_name(p) == "base.apk"), paths[0])
+    base_paths = [p for p in paths if _safe_name(p) == "base.apk"]
+    if len(base_paths) == 1:
+        base_remote = base_paths[0]
+    elif len(paths) == 1 and not _safe_name(paths[0]).startswith("split"):
+        base_remote = paths[0]  # Older monolithic system APKs may have another name.
+    else:
+        raise GameDataError("安卓包管理器未返回唯一的 base.apk，请确认安装完整后重试。",
+                            "apk_base_path_ambiguous")
     ordered = [base_remote] + [p for p in paths if p != base_remote]
+    names = ["base.apk", *(_safe_name(p) for p in ordered[1:])]
+    if len({name.casefold() for name in names}) != len(names):
+        raise GameDataError("安卓包管理器返回了同名的 APK 拆分包，请重试。", "apk_split_path_ambiguous")
     local: list[Path] = []
-    for idx, remote in enumerate(ordered):
-        name = _safe_name(remote)
-        if idx == 0:
-            name = "base.apk"
-        elif name == "base.apk":
-            name = "base_%d.apk" % idx
+    for idx, (remote, name) in enumerate(zip(ordered, names)):
         target = dest / name
         progress.emit("拉取 %s…" % remote, done=2 + (idx * 2) % 3)
-        tmp = target.with_name(target.name + ".t")
-        _run_adb(adb_path, serial, ["pull", remote, str(tmp)], timeout=1800)
-        if not os.path.isfile(long_path(tmp)) or os.path.getsize(long_path(tmp)) == 0:
-            raise GameDataError("拉取失败，文件为空：%s" % remote, "pull_empty")
-        os.replace(long_path(tmp), long_path(target))
+        fd, tmp = tempfile.mkstemp(prefix=".pull-", dir=long_path(dest))
+        os.close(fd)
+        try:
+            _run_adb(adb_path, serial, ["pull", remote, str(tmp)], timeout=1800)
+            if not os.path.isfile(long_path(tmp)) or os.path.getsize(long_path(tmp)) == 0:
+                raise GameDataError("拉取失败，文件为空：%s" % remote, "pull_empty")
+            os.replace(long_path(tmp), long_path(target))
+        except GameDataError as exc:
+            detail = exc.message.lower()
+            if "permission denied" in detail and any(marker in detail for marker in (
+                    "stat remote", "remote open", "failed to copy")):
+                raise GameDataError("当前安卓镜像禁止 ADB 读取安装包。请在向导中选择本地完整 APK。",
+                                    "pull_apk_denied") from exc
+            raise
+        finally:
+            if os.path.exists(long_path(tmp)):
+                os.unlink(long_path(tmp))
         local.append(target)
     base = local[0]
     splits = local[1:]
@@ -247,8 +310,8 @@ def pull_apk(adb: str, serial: str | None, data_dir: Path) -> dict:
             raise _pulled_validation_error(exc) from exc
         progress.emit("base 不完整（%s），合并 split 视图…" % exc.code, done=5)
         merged = dest / "merged.apk"
-        _merge_apk_view(base, splits, merged, progress)
         try:
+            _merge_apk_view(base, splits, merged, progress)
             info = inspect_apk(merged, progress=None)
         except GameDataError as merged_error:
             raise _pulled_validation_error(merged_error) from merged_error

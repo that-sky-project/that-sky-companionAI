@@ -231,7 +231,7 @@ def status():
     runners, chats = runner_rows(), chat_rows()
     map_id = None
     try:
-        map_id = int((xg_paths.CONTROL / "current_map").read_text().strip())
+        map_id = int((xg_paths.CONTROL / "current_map").read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         pass
     if map_id is None and runners:

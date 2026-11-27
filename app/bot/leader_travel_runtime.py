@@ -435,6 +435,10 @@ class LeaderTravelRuntime:
             # T21：即使 ctl.variant 已经是目标变体（传送被游戏拒绝、实际位置
             # 还在原处），协调器决定重做时也要走本地传送，不能退回网络 RPC。
             same_map = effect.destination.map_id == getattr(self.ctl, 'map_id', None)
+            if same_map and _force_network_change_level(self.command.get('scene')):
+                # T72 试验：同图也发原生 ChangeLevel（带入口编号），让主人客户端走入口的 onLoad。
+                same_map = False
+                self.log('same_map_forced_change_level', scene=self.command.get('scene'))
             self.pending_transfer = {'engine':engine, 'scene':scene, 'own':own, 'peer':peer,
                 'own_version':own_ver, 'peer_version':peer_ver, 'effect':effect,
                 'same_map':bool(same_map),
@@ -906,3 +910,13 @@ def install(ctl, *, has_capture, rpc_port, session_deadline=None):
     ctl._active_end = types.MethodType(active_end, ctl)
     runtime.log('installed', deadline_unix=session_deadline, resource_spending=False)
     return runtime
+
+
+def _force_network_change_level(scene):
+    """T72：control/change_level_tail.json 里该图写了 "same_map": true 时，同图也走网络 ChangeLevel。"""
+    try:
+        import json as _json
+        row = _json.load(open(__import__("leader_travel_rpc")._TAIL_FILE, encoding="utf-8")).get(scene)
+        return isinstance(row, dict) and row.get("same_map") is True
+    except Exception:
+        return False

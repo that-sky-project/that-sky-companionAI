@@ -57,7 +57,11 @@
     try {
       const r = await fetch(path, init);
       let body = {};
-      try { body = await r.json(); } catch (e) { body = { ok:false,message:"接口返回的不是 JSON" }; }
+      try { body = await r.json(); } catch (e) { body = null; }
+      if (!body || typeof body !== "object") {
+        body = { ok: false, message: "本机服务返回异常。请重新打开小光后重试。" };
+      }
+      if (r.ok === false && !Array.isArray(body)) body.ok = false;
       body.__http = r.status;
       return body;
     } finally { if (timer !== null) clearTimeout(timer); }
@@ -68,6 +72,33 @@
     el.hidden = false;
     el.className = "wz-result " + (ok ? "ok" : "bad");
     el.textContent = text || "";
+  }
+
+  function retryState(button, failed) {
+    if (!button) return;
+    if (!button.dataset.wzOriginalLabel) button.dataset.wzOriginalLabel = button.textContent;
+    button.textContent = failed ? "重试 · " + button.dataset.wzOriginalLabel : button.dataset.wzOriginalLabel;
+  }
+
+  function bindAction(buttonId, run, messageId, hint) {
+    const button = $(buttonId);
+    if (!button) return;
+    let active = false;
+    button.addEventListener("click", async () => {
+      if (active) return;
+      active = true;
+      retryState(button, false);
+      try {
+        if (await run() === false) retryState(button, true);
+      } catch (_) {
+        button.disabled = false;
+        retryState(button, true);
+        const el = $(messageId);
+        const message = hint || "本机服务未返回结果。等待片刻后点“重试”；仍失败请重新打开小光。";
+        if (el && el.classList.contains("wz-result")) showResult(el, message, false);
+        else if (el) el.textContent = message;
+      } finally { active = false; }
+    });
   }
 
   function stepIndex(id) { return STEP_IDS.indexOf(id); }
@@ -99,7 +130,10 @@
     $("wz-prev").disabled = stepIndex(id) <= 0;
     $("wz-next").disabled = stepIndex(id) >= STEP_IDS.length - 1;
     $("wz-footer-note").textContent = "";
-    if (id === "ai" && !state.aiFilled) loadAI();
+    if (id === "ai" && !state.aiFilled) loadAI().catch(() => {
+      state.aiFilled = false;
+      $("wz-ai-msg").textContent = "读取 AI 设置失败。请重新进入这一步重试，也可以手动填写。";
+    });
     if (id === "login") ensureDevice();
     if (id === "capture") pollCapture();
     if (id === "data" && state.summary && state.summary.task) pollTask();
@@ -205,10 +239,24 @@
   }
 
   async function refresh() {
-    const s = await api("/api/wizard");
-    if (s.ok === false && s.__http === 403) {
-      $("wz-badge").textContent = "请从小光启动器重新打开";
-      return s;
+    let s;
+    try {
+      s = await api("/api/wizard", { timeoutMs: 8000 });
+    } catch (_) { s = { ok: false }; }
+    const failed = s.ok === false || !Array.isArray(s.steps);
+    if ($("wz-summary-error")) $("wz-summary-error").hidden = !failed;
+    if (failed) {
+      const expired = s.__http === 403;
+      $("wz-badge").textContent = expired ? "请从小光启动器重新打开" : "未读取到安装状态";
+      if ($("wz-summary-error-text")) $("wz-summary-error-text").textContent = expired ?
+        "本机界面会话已失效。请关闭小光窗口，从启动器重新打开。" :
+        "读取安装状态失败。请点“重试读取向导”；若仍失败，请关闭并重新打开小光。";
+      return { ...s, ok: false };
+    }
+    const warning = $("wz-environment-warnings");
+    if (warning) {
+      warning.textContent = Array.isArray(s.environmentWarnings) ? s.environmentWarnings.join("\n") : "";
+      warning.hidden = !warning.textContent;
     }
     render(s);
     return s;
@@ -254,7 +302,14 @@
     stopTaskPoll();
     let quiet = 0;
     state.taskTimer = setInterval(async () => {
-      const t = await api("/api/wizard/task");
+      let t;
+      try {
+        t = await api("/api/wizard/task", { timeoutMs: 7000 });
+      } catch (_) { t = { ok: false }; }
+      if (t.ok === false && !t.task) {
+        $("wz-data-msg").textContent = "未读到后台任务状态，不会重复启动；恢复连接后自动重试。";
+        return;
+      }
       const task = t.task || null;
       if (task) {
         state.taskSeen = true;
@@ -262,7 +317,10 @@
         if (!task.running) {
           stopTaskPoll();
           await refresh();
-          if (onDone) onDone(task);
+          if (onDone) {
+            try { await onDone(task); }
+            catch (_) { showResult($("wz-apk-result"), "未能确认拉取结果。请保存安装包路径后重新校验。", false); }
+          }
         }
       } else if (++quiet > 8) {
         stopTaskPoll();
@@ -280,13 +338,19 @@
     const lines = [
       r.message || "",
       r.adb ? "adb：" + r.adb : "",
-      r.serial ? "MuMu 实例：" + r.serial + "（游戏进程 " + r.pid + "）" : "",
+      r.serial ? "MuMu 实例：" + r.serial + (r.pid ? "（游戏进程 " + r.pid + "）" : "") : "",
+      r.android_label || "",
+      Number.isInteger(r.page_size) ? "内存页大小：" + (r.page_size / 1024) + " KiB" : "",
+      r.page_size_message || "",
       r.root ? "Root：已拿到" : "",
       r.version_code ? "游戏版本号：" + r.version_code : "",
       r.scene ? "当前图：" + r.scene : "",
+      r.scene_log_message || "",
+      !r.ok && (r.reason || r.code) ? "错误码：" + (r.reason || r.code) : "",
     ].filter(Boolean);
     showResult($("wz-mumu-result"), lines.join("\n"), !!r.ok);
     if (r.ok) await refresh();
+    return !!r.ok;
   }
 
   // ---------------------------------------------------------------- 第 3 步
@@ -296,7 +360,7 @@
     showResult($("wz-apk-result"), "已开始从 MuMu 拉安装包，进度在下面第 4 步的日志里；也可以先做别的。", true);
     const r = await api("/api/wizard/apk/pull", { method: "POST", body: {} });
     b.disabled = false;
-    if (!r.ok) { showResult($("wz-apk-result"), r.message || "拉取失败", false); return; }
+    if (!r.ok) { showResult($("wz-apk-result"), r.message || "拉取失败。请打开 MuMu 后重试。", false); return false; }
     pollTask(async (task) => {
       if (task && task.ok) {
         await refresh();
@@ -309,21 +373,25 @@
         const message = task.error || task.result?.error || "拉取失败：未知错误";
         const code = task.error_code || task.result?.code || "";
         showResult($("wz-apk-result"), message + (code ? "（错误码：" + code + "）" : ""), false);
+        retryState(b, true);
       }
     });
   }
 
   async function checkApk(auto) {
     const path = $("wz-apk-path").value.trim();
-    if (!path) { showResult($("wz-apk-result"), "先填 APK 路径，或点“从 MuMu 拉安装包”。", false); return; }
+    if (!path) { showResult($("wz-apk-result"), "先填 APK 路径，或点“从 MuMu 拉安装包”。", false); return false; }
     const b = $("wz-apk-check");
     b.disabled = true;
     showResult($("wz-apk-result"), auto ? "拉取完成，正在校验安装包…" : "正在校验安装包…", true);
-    const r = await api("/api/wizard/apk/check", { method: "POST", body: { path: path } });
-    b.disabled = false;
+    let r;
+    try { r = await api("/api/wizard/apk/check", { method: "POST", body: { path: path } }); }
+    finally { b.disabled = false; }
     const code = !r.ok && r.code ? "（错误码：" + r.code + "）" : "";
     showResult($("wz-apk-result"), (r.ok ? "✓ " : "✗ ") + (r.message || "") + code, !!r.ok);
     if (r.ok) await refresh();
+    retryState(b, !r.ok);
+    return !!r.ok;
   }
 
   // ---------------------------------------------------------------- 第 4 步
@@ -342,7 +410,7 @@
       if(!r.ok)throw new Error(r.message || '资源任务启动失败');
       message.textContent='任务已启动，可在本页查看进度。';
       state.resourceTaskRunning=true;pollTask();
-    }catch(error){message.textContent=error.message || '资源任务启动失败';message.setAttribute('role','alert');}
+    }catch(error){message.textContent=(error instanceof TypeError ? '本机服务未响应，请重新打开小光' : (error.message || '资源任务启动失败'))+'，然后重试。';message.setAttribute('role','alert');return false;}
     finally{state.resourceStartBusy=false;$("wz-data-start").disabled=$("wz-props-start").disabled=!!state.cleanupBusy||!!state.resourceTaskRunning;}
   }
   async function startData(){return startResource('data');}
@@ -393,8 +461,9 @@
       const r = await api("/api/device/register", { method: "POST",
         body: { platform: platform(), confirm: true } });
       renderDevice(r);
-      $("wz-device-msg").textContent = r.message || "服务连接正常";
-    } catch (e) { $("wz-device-msg").textContent = e.message || "检查失败，请稍后重试"; }
+      $("wz-device-msg").textContent = r.message || (r.ok ? "服务连接正常" : "连接失败。请确认已配置服务并恢复联网后重试。");
+      return !!r.ok;
+    } catch (_) { $("wz-device-msg").textContent = "服务未回应。请检查网络和服务设置后重试。"; return false; }
     finally { b.disabled = false; }
   }
 
@@ -491,14 +560,15 @@
 
   async function sendSms() {
     const mobile = $("wz-mobile").value.trim();
-    if (!/^\d{11}$/.test(mobile)) { $("wz-login-msg").textContent = "手机号要 11 位数字"; return; }
+    if (!/^\d{11}$/.test(mobile)) { $("wz-login-msg").textContent = "手机号要 11 位数字，改正后重试。"; return false; }
     $("wz-login-msg").textContent = "正在连接私有登录服务…";
-    if (!await ensureDevice()) { $("wz-login-msg").textContent = $("wz-device-msg").textContent || "登录服务暂不可用"; return; }
+    if (!await ensureDevice()) { $("wz-login-msg").textContent = $("wz-device-msg").textContent || "登录服务暂不可用，请检查服务连接后重试。"; return false; }
     const r = await api("/login/send-sms", { method: "POST", body: { mobile: mobile, platform: platform() } });
     $("wz-login-msg").textContent = r.message || (r.ok ? "验证码已发出" : "发送失败");
     if (r.ok) { $("wz-step2").hidden = false; state.pending = r.pending || r.ticket || ""; }
     if (r.manual) showRisk({ tips: r.message, content: r.manual.content, number: r.manual.number });
     if (r.need_risk || r.risk) showRisk(r);
+    return !!r.ok;
   }
 
   async function verifySms() {
@@ -507,23 +577,25 @@
     $("wz-login-msg").textContent = r.message || (r.ok ? "登录成功" : "登录失败");
     if (r.need_risk || r.risk) showRisk(r, verifySms);
     if (r.ok) await loginDone();
+    return !!r.ok;
   }
 
   async function emailLogin() {
     if (state.loginBusy) return;
     state.loginBusy = true;
-    try { await emailLoginInner(); } finally { state.loginBusy = false; }
+    try { return await emailLoginInner(); } finally { state.loginBusy = false; }
   }
 
   async function emailLoginInner() {
     $("wz-login-msg").textContent = "正在连接私有登录服务…";
-    if (!await ensureDevice()) { $("wz-login-msg").textContent = $("wz-device-msg").textContent || "登录服务暂不可用"; return; }
+    if (!await ensureDevice()) { $("wz-login-msg").textContent = $("wz-device-msg").textContent || "登录服务暂不可用，请检查服务连接后重试。"; return false; }
     const r = await api("/login/email", { method: "POST",
       body: { email: $("wz-email").value.trim(), password: $("wz-password").value, platform: platform(),
         remember: !!($("wz-remember") && $("wz-remember").checked) } });
     $("wz-login-msg").textContent = r.message || (r.ok ? "登录成功" : "登录失败");
     if (r.need_risk || r.risk) showRisk(r, emailLogin);
     if (r.ok) await loginDone();
+    return !!r.ok;
   }
 
   async function loginDone() {
@@ -535,6 +607,7 @@
       state.retry = null;
       await refresh(); await ensureDevice();
     }
+    return !!r.ok;
   }
 
   // ---------------------------------------------------------------- 第 5 步（录制遇境）
@@ -542,23 +615,27 @@
     if (!c) return;
     const resetCapture=!!(state.summary && state.summary.resourceReset && state.summary.resourceReset.active && (state.summary.resourceReset.steps || []).includes("capture"));
     const stale = Array.isArray(c.stale) ? c.stale : [];
-    const running = ["starting", "searching", "ready", "waiting", "recording", "registering"].includes(c.state);
+    const running = !!c.worker_pid || ["starting", "searching", "ready", "waiting", "recording", "registering"].includes(c.state);
     const label = { idle: "还没开始", starting: "正在启动", searching: "正在找 MuMu",
       ready: "就绪", waiting: "等进图", recording: "正在录", registering: "正在登记",
       stale: "需要重新录制遇境", error: "出错", stopped: "已停止" }[c.state] || c.state || "—";
     $("wz-cap-state").textContent = resetCapture && !running ? "未生成 · 等待重新采集" : label;
     const m = c.mumu || {};
-    $("wz-cap-mumu").textContent = m.serial ? (m.serial + "（进程 " + m.pid + "，Root " + (m.root ? "有" : "没有") + "）") : "—";
+    const mumuDetails = [m.android_label, m.pid ? "进程 " + m.pid : "",
+      typeof m.root === "boolean" ? "Root " + (m.root ? "有" : "没有") : ""].filter(Boolean);
+    $("wz-cap-mumu").textContent = [m.serial, ...mumuDetails].filter(Boolean).join(" · ") || "—";
     $("wz-cap-scene").textContent = c.scene ? ((c.scene_name || c.scene) + "（" + c.scene + "）") : "—";
     $("wz-cap-recorded").textContent = (c.recorded && c.recorded.length) ? c.recorded.join("、")
       : (stale.length ? ("旧录制：" + stale.map((x) => x.version || "旧版本").join("、")) : "—");
     const staleOnly = !running && stale.length && !(c.recorded && c.recorded.length);
     const staleMsg = c.stale_notice || (staleOnly ? ("游戏已更新到 " + (c.current_version || "新版本") +
       "，之前的遇境录制是 " + (stale[0].version || "旧版本") + " 的，需要用 MuMu 重新录一次遇境（只需遇境一张）。") : "");
-    $("wz-cap-msg").textContent = staleMsg || (c.last_error ? (c.last_error + "；" + (c.message || "")) : (c.message || "—"));
-    if (resetCapture && !running) $("wz-cap-msg").textContent = "清理后的旧录制状态不作为完成证明，请明确重新采集遇境或登记当前有效录制。";
+    $("wz-cap-msg").textContent = c.last_error_code ? (c.message || c.last_error || "录制失败，请重试。") :
+      (staleMsg || c.message || c.last_error || "—");
+    if (resetCapture && !running && !c.last_error_code) $("wz-cap-msg").textContent = "清理后的旧录制状态不作为完成证明，请明确重新采集遇境或登记当前有效录制。";
     $("wz-cap-start").hidden = running;
     $("wz-cap-stop").hidden = !running;
+    if (!running) retryState($("wz-cap-start"), !!c.last_error_code);
     const capDet = c.last_error_detail || {};
     if (c.last_error || capDet.text) {
       $("wz-cap-details").hidden = false;
@@ -577,9 +654,16 @@
     if (state.capTimer) clearInterval(state.capTimer);
     state.capTimer = setInterval(async () => {
       if (state.step !== "capture") { clearInterval(state.capTimer); state.capTimer = null; return; }
-      const c = await api("/api/capture/status");
-      if (c && c.ok !== false && (!c.__http || c.__http === 200)) renderCapture(c);
-      const t = await api("/api/wizard/task");
+      let t;
+      try {
+        const c = await api("/api/capture/status", { timeoutMs: 7000 });
+        if (c && c.ok !== false && (!c.__http || c.__http === 200)) renderCapture(c);
+        else throw new Error("capture status unavailable");
+        t = await api("/api/wizard/task", { timeoutMs: 7000 });
+      } catch (_) {
+        $("wz-cap-msg").textContent = "暂时读不到录图状态；恢复连接后自动重试。若持续失败，请重新打开小光。";
+        return;
+      }
       if (t && t.task) {
         renderTask(t.task);
         if (t.task.kind === "catalog" && t.task.running) {
@@ -608,14 +692,22 @@
     if (state.cleanupBusy) return;
     const r = await api("/api/wizard/capture/start", { method: "POST", body: {} });
     $("wz-cap-msg").textContent = r.message || (r.ok ? "已开始" : "启动失败");
-    if (!r.ok) $("wz-cap-msg").textContent += (r.detail ? ("：" + r.detail) : "");
+    if (!r.ok) {
+      if (r.error_detail) {
+        $("wz-cap-details").hidden = false;
+        $("wz-cap-detail").textContent = detailLines(r.code, r.error_detail);
+      }
+      return false;
+    }
     await refresh();
+    return true;
   }
 
   async function capStop() {
     const r = await api("/api/wizard/capture/stop", { method: "POST", body: {} });
-    $("wz-cap-msg").textContent = r.message || "已停止";
-    await refresh();
+    $("wz-cap-msg").textContent = r.message || (r.ok ? "已停止" : "未停止，请重试。");
+    if (r.ok) await refresh();
+    return !!r.ok;
   }
 
   async function capRegister() {
@@ -630,8 +722,8 @@
       $("wz-cap-detail").textContent = detailLines(r.detail.code, r.detail);
     }
     b.disabled = false;
-    await refresh();
-    if (r.ok) pollCapture();
+    if (r.ok) { await refresh(); pollCapture(); }
+    return !!r.ok;
   }
 
   async function catalogStart() {
@@ -642,8 +734,10 @@
       const r = await api("/api/wizard/catalog/start", { method: "POST", body: {} });
       $("wz-cat-msg").textContent = r.message || (r.ok ? "已开始生成地图目录" : "启动失败");
       if (r.ok) pollTask();
+      return !!r.ok;
     } catch (error) {
       $("wz-cat-msg").textContent = "启动失败：" + (error.message || "请求中断，请重试。");
+      return false;
     } finally {
       state.catalogBusy=false;
       $("wz-catalog-start").disabled = !!state.cleanupBusy;
@@ -655,7 +749,7 @@
     state.aiFilled = true;
     const p = await api("/xiaoguang/ai/providers");
     const cur = await api("/xiaoguang/ai");
-    if (!p.providers) return;
+    if (!Array.isArray(p.providers) || cur.ok === false) throw new Error("AI settings unavailable");
     $("wz-provider").innerHTML = p.providers.map((x) =>
       '<option value="' + esc(x.id) + '">' + esc(x.name) + "</option>").join("");
     const pick = (cur && cur.provider) || "deepseek";
@@ -677,7 +771,7 @@
   async function aiModels() {
     $("wz-models-msg").textContent = "正在拉…";
     const r = await api("/xiaoguang/ai/models", { method: "POST", body: aiPayload() });
-    if (!r.ok) { $("wz-models-msg").textContent = r.error || r.message || "拉取失败，可手填模型"; return; }
+    if (!r.ok) { $("wz-models-msg").textContent = r.error || r.message || "读取失败。请检查地址和 Key 后重试，或手填模型。"; return false; }
     const list = r.models || [];
     $("wz-model-list").innerHTML = list.map((m) => '<option value="' + esc(m) + '"></option>').join("");
     // 原生 datalist 在部分环境里展不开，这里同时渲染一个真正可点的列表。
@@ -686,6 +780,7 @@
     menu.hidden = list.length === 0;
     $("wz-models-msg").textContent = "拉到 " + list.length + " 个，点下面的列表选一个";
     if (!$("wz-model").value && list.length) $("wz-model").value = list[0];
+    return true;
   }
 
   function aiPayload() {
@@ -701,6 +796,7 @@
     showResult($("wz-ai-result"), r.ok ?
       ("回复：" + (r.reply || "") + "\n耗时：" + (r.elapsed_s || "?") + " 秒；工具调用：" + (r.tool_support ? "支持" : "不支持")) :
       (r.message || r.error || "测试失败"), !!r.ok);
+    return !!r.ok;
   }
 
   async function aiSave() {
@@ -708,12 +804,14 @@
     const r = await api("/xiaoguang/ai", { method: "POST", body: aiPayload() });
     $("wz-ai-msg").textContent = r.message || (r.ok ? "已保存" : "保存失败");
     if (r.ok) { $("wz-key").value = ""; await refresh(); }
+    return !!r.ok;
   }
 
   async function aiDone() {
     const r = await api("/api/wizard/ai/done", { method: "POST", body: {} });
     $("wz-ai-msg").textContent = r.message || (r.ok ? "这一步完成了" : "还没配齐");
     if (r.ok) await refresh();
+    return !!r.ok;
   }
 
   // ---------------------------------------------------------------- 第 8 步
@@ -751,8 +849,8 @@
     const list = $("wz-friends");
     list.innerHTML = "";
     const rows = r.friends || r.rows || r.list || (Array.isArray(r) ? r : []);
-    if (!r.ok) { $("wz-friends-msg").textContent = r.message || "读不到好友（先在第 6 步登录）"; return; }
-    if (!rows.length) { $("wz-friends-msg").textContent = "好友列表是空的：先在游戏里互加好友。"; return; }
+    if (!r.ok) { $("wz-friends-msg").textContent = r.message || "读不到好友。先完成第 6 步登录，再重试。"; return false; }
+    if (!rows.length) { $("wz-friends-msg").textContent = "好友列表是空的：先在游戏里互加好友，再重试。"; return false; }
     $("wz-friends-msg").textContent = "点一个好友选为“哥哥”。";
     rows.forEach((f) => {
       const li = document.createElement("li");
@@ -770,6 +868,7 @@
       li.appendChild(b);
       list.appendChild(li);
     });
+    return true;
   }
 
   async function loadPersonas() {
@@ -792,6 +891,7 @@
       persona: $("wz-persona").value } });
     $("wz-owner-msg").textContent = r.message || (r.ok ? "已保存" : "保存失败");
     if (r.ok) await refresh();
+    return !!r.ok;
   }
 
   // ---------------------------------------------------------------- 第 9 步
@@ -799,13 +899,16 @@
     if (state.cleanupBusy) return;
     const b = $("wz-finish");
     b.disabled = true;
-    const r = await api("/api/wizard/finish", { method: "POST", body: {} });
-    if (!r.ok) { $("wz-finish-msg").textContent = r.message || "还没完成"; b.disabled = false; await refresh(); return; }
-    $("wz-finish-msg").textContent = "完成，正在让小光上线…";
-    const go = await api("/xiaoguang/start", { method: "POST", body: {} });
-    $("wz-finish-msg").textContent = go.ok ? "已提交上线，正在回遇境（约半分钟）。" :
-      (go.message || "上线没成功，到面板里点“上线”再试。");
-    setTimeout(() => { location.href = "/desktop"; }, 1200);
+    try {
+      const r = await api("/api/wizard/finish", { method: "POST", body: {} });
+      if (!r.ok) { $("wz-finish-msg").textContent = r.message || "还没完成。请补齐未完成步骤再重试。"; await refresh(); return false; }
+      $("wz-finish-msg").textContent = "完成，正在让小光上线…";
+      const start = await api("/xiaoguang/start", { method: "POST", body: {} });
+      $("wz-finish-msg").textContent = start.ok ? "已提交上线，正在回遇境（约半分钟）。" :
+        (start.message || "上线未完成，请在主界面确认状态后重试。");
+      if (start.ok) setTimeout(() => { location.href = "/desktop"; }, 1200);
+      return !!start.ok;
+    } finally { b.disabled = false; }
   }
 
   // ---------------------------------------------------------------- 绑定
@@ -826,15 +929,16 @@
     $("wz-prev").addEventListener("click", () => go(STEP_IDS[Math.max(0, stepIndex(state.step) - 1)]));
     $("wz-next").addEventListener("click", () => go(STEP_IDS[Math.min(STEP_IDS.length - 1, stepIndex(state.step) + 1)]));
 
-    $("wz-mumu-check").addEventListener("click", checkMumu);
-    $("wz-apk-pull").addEventListener("click", pullApk);
-    $("wz-apk-check").addEventListener("click", () => checkApk(false));
-    $("wz-data-start").addEventListener("click", startData);
-    $("wz-props-start").addEventListener("click", startProps);
-    $("wz-task-stop").addEventListener("click", async () => {
-      await api("/api/wizard/task/stop", { method: "POST", body: {} });
+    bindAction("wz-mumu-check", checkMumu, "wz-mumu-result");
+    bindAction("wz-apk-pull", pullApk, "wz-apk-result");
+    bindAction("wz-apk-check", () => checkApk(false), "wz-apk-result");
+    bindAction("wz-data-start", startData, "wz-data-msg");
+    bindAction("wz-props-start", startProps, "wz-props-state");
+    bindAction("wz-task-stop", async () => {
+      const response = await api("/api/wizard/task/stop", { method: "POST", body: {} });
+      if (!response.ok) { $("wz-data-msg").textContent = response.message || "未停止，请确认状态后重试。"; return false; }
       stopTaskPoll(); await refresh();
-    });
+    }, "wz-data-msg");
     $("wz-tab-sms").addEventListener("click", () => {
       $("wz-pane-sms").hidden = false; $("wz-pane-email").hidden = true;
       $("wz-tab-sms").classList.add("active"); $("wz-tab-email").classList.remove("active");
@@ -843,19 +947,22 @@
       $("wz-pane-sms").hidden = true; $("wz-pane-email").hidden = false;
       $("wz-tab-email").classList.add("active"); $("wz-tab-sms").classList.remove("active");
     });
-    $("wz-send").addEventListener("click", sendSms);
-    $("wz-verify").addEventListener("click", verifySms);
-    $("wz-email-btn").addEventListener("click", emailLogin);
-    $("wz-login-done").addEventListener("click", loginDone);
-    $("wz-device-register").addEventListener("click", reRegisterDevice);
+    bindAction("wz-send", sendSms, "wz-login-msg",
+      "未确认短信是否发送。有收到验证码就用当前验证码；没有收到时稍后重试。");
+    bindAction("wz-verify", verifySms, "wz-login-msg", "登录结果未确认。先检查账号状态，再用当前有效验证码重试。");
+    bindAction("wz-email-btn", emailLogin, "wz-login-msg", "登录结果未确认。请检查账号状态和服务连接后重试。");
+    bindAction("wz-login-done", loginDone, "wz-login-msg");
+    bindAction("wz-device-register", reRegisterDevice, "wz-device-msg");
 
-    $("wz-cap-start").addEventListener("click", capStart);
-    $("wz-cap-stop").addEventListener("click", capStop);
-    $("wz-cap-register").addEventListener("click", capRegister);
-    $("wz-catalog-start").addEventListener("click", catalogStart);
+    bindAction("wz-cap-start", capStart, "wz-cap-msg");
+    bindAction("wz-cap-stop", capStop, "wz-cap-msg");
+    bindAction("wz-cap-register", capRegister, "wz-cap-msg");
+    bindAction("wz-catalog-start", catalogStart, "wz-cat-msg");
 
-    $("wz-provider").addEventListener("change", () => fillProvider(""));
-    $("wz-models").addEventListener("click", aiModels);
+    $("wz-provider").addEventListener("change", () => fillProvider("").catch(() => {
+      $("wz-ai-msg").textContent = "读取服务商配置失败；可以手填地址，也可以切换服务商后重试。";
+    }));
+    bindAction("wz-models", aiModels, "wz-models-msg");
   $("wz-model").addEventListener("focus", () => {
     const m = $("wz-model-menu");
     if (m && m.innerHTML.trim()) m.hidden = false;
@@ -871,11 +978,11 @@
     if (!menu) return;
     if (!e.target.closest("#wz-model-menu") && e.target.id !== "wz-model") menu.hidden = true;
   });
-    $("wz-ai-test").addEventListener("click", aiTest);
-    $("wz-ai-save").addEventListener("click", aiSave);
-    $("wz-ai-done").addEventListener("click", aiDone);
+    bindAction("wz-ai-test", aiTest, "wz-ai-msg", "接口未响应。请核对服务地址、代理和模型，再重试。");
+    bindAction("wz-ai-save", aiSave, "wz-ai-msg");
+    bindAction("wz-ai-done", aiDone, "wz-ai-msg");
 
-    $("wz-friends-refresh").addEventListener("click", refreshFriends);
+    bindAction("wz-friends-refresh", refreshFriends, "wz-friends-msg");
     const recoveryButton = document.createElement("button");
     recoveryButton.id = "wz-friends-recover";
     recoveryButton.type = "button";
@@ -885,8 +992,8 @@
     recoveryButton.addEventListener("click", recoverFriends);
     $("wz-friends-refresh").insertAdjacentElement("afterend", recoveryButton);
 
-    $("wz-owner-save").addEventListener("click", ownerSave);
-    $("wz-finish").addEventListener("click", finishWizard);
+    bindAction("wz-owner-save", ownerSave, "wz-owner-msg");
+    bindAction("wz-finish", finishWizard, "wz-finish-msg", "上线结果未确认。请从主界面检查状态，确认未上线后再重试。");
   }
 
   async function boot() {
@@ -895,12 +1002,23 @@
     window.addEventListener("pywebviewready", setupWindowControls);
     bind();
     mountCleanup();
-    const s = await refresh();
-    if (!s || s.ok === false) return;
-    loadPersonas();
-    const wanted = (location.hash || "").replace("#", "");
-    go(STEP_IDS.includes(wanted) ? wanted : (s.current || (s.completed ? "finish" : "risk")), false);
-    setInterval(refresh, 5000);
+    let initialized = false;
+    async function load() {
+      const s = await refresh();
+      if (!s || s.ok === false) return false;
+      if (!initialized) {
+        initialized = true;
+        loadPersonas().catch(() => {
+          $("wz-owner-msg").textContent = "人设未加载，可先保存称呼；重新打开向导可重试读取。";
+        });
+        const wanted = (location.hash || "").replace("#", "");
+        go(STEP_IDS.includes(wanted) ? wanted : (s.current || (s.completed ? "finish" : "risk")), false);
+        setInterval(refresh, 5000);
+      }
+      return true;
+    }
+    if ($("wz-summary-retry")) $("wz-summary-retry").addEventListener("click", load);
+    await load();
   }
 
   window.addEventListener("xg-service-account-changed", () => { refresh(); });

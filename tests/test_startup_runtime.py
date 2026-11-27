@@ -64,7 +64,7 @@ class StartupFailureTests(unittest.TestCase):
         self.root=Path(self.tmp.name);self.go=self.root/'go.json';self.log=self.root/'go.log';self.runner=self.root/'candidate-runner.out'
         self.log.write_text('{"step":"lease","status":"stopped"}',encoding='utf-8')
         self.write_attempt()
-        ns={'_json':lambda p:json.loads(p.read_text()),'GO':self.go,'GO_LOG':self.log,'OUT':self.root,
+        ns={'_json':lambda p:json.loads(p.read_text(encoding="utf-8")),'GO':self.go,'GO_LOG':self.log,'OUT':self.root,
             'json':json,'xg_account':SimpleNamespace(active_id=lambda:'fixture-account')}
         self.failure=function(ROOT/'app/bot/xg_runtime.py','startup_failure',ns)
 

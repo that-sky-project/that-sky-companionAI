@@ -120,14 +120,14 @@ def _home_live_context(st):
 
 def enabled():
     try:
-        return SWITCH.read_text().strip() != "off"
+        return SWITCH.read_text(encoding="utf-8").strip() != "off"
     except OSError:
         return True
 
 
 def set_enabled(on):
     SWITCH.parent.mkdir(parents=True, exist_ok=True)
-    SWITCH.write_text("on" if on else "off")
+    SWITCH.write_text("on" if on else "off", encoding="utf-8")
 
 
 class Wanderer(threading.Thread):

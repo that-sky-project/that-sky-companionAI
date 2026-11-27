@@ -45,7 +45,7 @@ def kind_of(offer_type):
 
 def _templates():
     if TEMPLATE_FILE.exists():
-        return json.loads(TEMPLATE_FILE.read_text())
+        return json.loads(TEMPLATE_FILE.read_text(encoding="utf-8"))
     import time
     import tools_actor as A
     rows = []
@@ -57,7 +57,7 @@ def _templates():
         b = min(rows, key=lambda r: abs(r[0] - before))[1]
         a = min(rows, key=lambda r: abs(r[0] - at))[1]
         out[kind] = {"before": b.hex(), "at": a.hex()}
-    TEMPLATE_FILE.write_text(json.dumps(out, indent=1))
+    TEMPLATE_FILE.write_text(json.dumps(out, indent=1), encoding="utf-8")
     return out
 
 
@@ -87,7 +87,7 @@ def _set_slot(body, label, slot, zero_floats=None):
 def build(base, partner_slot, kind="once"):
     """base 上加对应的互动状态（对象 = partner_slot）。结果解析校验失败会抛错。"""
     if kind == "once":
-        d = json.loads(HUG_FILE.read_text())
+        d = json.loads(HUG_FILE.read_text(encoding="utf-8"))
         out = _transplant(base, bytes.fromhex(d["before"]), bytes.fromhex(d["at"]), HUG_FIELDS)
         out = _set_slot(out, "0x21df1a8", partner_slot, zero_floats="0x21df1e0")
         return anim_pose.write(out, seated=1)
@@ -125,7 +125,7 @@ def _stand_groups():
     global _STAND_GROUPS
     if _STAND_GROUPS is None:
         f = Path(__file__).with_name("stand_fields.json")
-        _STAND_GROUPS = json.loads(f.read_text()) if f.exists() else {}
+        _STAND_GROUPS = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
     return _STAND_GROUPS
 
 
@@ -207,7 +207,7 @@ def stand_legs(body):
 
     def gap(r):
         return abs((r["heading"] - h + 180) % 360 - 180)
-    ref = min(json.loads(f.read_text()), key=gap)
+    ref = min(json.loads(f.read_text(encoding="utf-8")), key=gap)
     return anim_pose.write_pose_fields(body, anim_pose.rotate_pose(ref["values"], h - ref["heading"]))
 
 

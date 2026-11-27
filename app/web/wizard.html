@@ -65,6 +65,11 @@
 </aside>
 <main class='wz-main' id='wz-main' tabindex='-1'>
 <div class='wz-scroll' tabindex='0' role='region' aria-label='当前步骤内容'>
+<div id='wz-summary-error' class='wz-card' hidden>
+<p id='wz-summary-error-text' class='wz-note' role='alert'></p>
+<button id='wz-summary-retry' class='wz-btn' type='button'>重试读取向导</button>
+</div>
+<p id='wz-environment-warnings' class='wz-result bad' role='status' hidden></p>
 <div id='wz-cleanup' class='xg-reset-host'></div>
 <section class='wz-panel glass-strong' data-panel='risk'>
 <header class='wz-panel-head'>
@@ -91,20 +96,21 @@
 <p class='wz-note wz-lede'>需要：MuMu（Android 15，兼容旧版）、<b>打开「手机 Root 权限」并重启模拟器</b>、在 MuMu 里装好光遇并登进遇境。</p>
 <div class='wz-card'>
 <label class='wz-field'><span>adb.exe 路径（自动找不到时手填）</span><input id='wz-adb' autocomplete='off' spellcheck='false' placeholder='例如 D:&#92;GAME&#92;MuMuPlayer&#92;nx_device&#92;15.0&#92;shell&#92;adb.exe'></label>
-<p class='wz-note'>路径只是示例，请按本机实际安装位置填写；留空自动查找。实例与端口从设备列表读取，无需照抄示例。</p>
+<p class='wz-note'>路径只是示例，请按本机实际安装位置填写；留空自动查找。实例与端口从设备列表读取，也会实时读取 MuMu 管理器中的桥接地址。USB 真机和公网设备不支持。</p>
 <div class='wz-actions'><button class='wz-btn primary' id='wz-mumu-check' type='button'>检查 MuMu</button></div>
 <div class='wz-result' id='wz-mumu-result' hidden role='status' aria-live='polite'></div>
 </div>
 <ol class='wz-tips'>
 <li>MuMu 设置 → 其他设置 → 打开「手机 Root 权限」，然后<b>重启模拟器</b>。</li>
 <li>MuMu 里安装与当前客户端支持版本一致的光遇，登录要给小光用的号，走进遇境。</li>
-<li>如果杀毒软件拦 adb，把 MuMu 目录加进信任。</li>
+<li>如果桥接模式连不上，确认 Windows 与模拟器在同一局域网、当前实例已启用 ADB 调试，然后重试。有多个实例时，先将要用的光遇切到前台。</li>
+<li>如果 adb 被拦截，在 Windows 安全中心查看保护历史记录，核对是否为 MuMu 官方安装的文件后再恢复。</li>
 </ol>
 </section>
 <section class='wz-panel glass-strong' data-panel='apk' hidden>
 <header class='wz-panel-head'>
 <span class='wz-panel-icon' aria-hidden='true'><svg class='wz-icon'><use href='#wz-i-package'></use></svg></span>
-<div class='wz-panel-heading'><span class='wz-eyebrow'>第 3 步 · 环境准备</span><h1>游戏安装包</h1><p class='wz-panel-sub'>要用<b>你自己从 MuMu 里拉出来的</b>安装包生成游戏数据；小光只适配 <b>0.16.7 / 421589</b>，版本不对会明确说明。</p></div>
+<div class='wz-panel-heading'><span class='wz-eyebrow'>第 3 步 · 环境准备</span><h1>游戏安装包</h1><p class='wz-panel-sub'>使用从 MuMu 拉取或手动选择的安装包生成游戏数据。当前需要网易官服 <b>0.16.8 / 421629</b>，版本不对会明确说明。</p></div>
 </header>
 <div class='wz-card'>
 <div class='wz-actions wz-actions-flat'>
@@ -114,7 +120,7 @@
 <button class='wz-btn' id='wz-apk-check' type='button'>校验这个文件</button>
 </div>
 <div class='wz-result' id='wz-apk-result' hidden role='status' aria-live='polite'></div>
-<p class='wz-note'>安装包放在 <code>data&#92;game&#92;0.16.7-421589&#92;apk&#92;</code>；native 库会从安装包里取出来放到 <code>data&#92;runtime&#92;native&#92;</code>，不会随小光安装包分发。</p>
+<p class='wz-note'>Android 分拆安装时，向导会尝试拉取 base 与各 split APK，再校验资源；若镜像不允许读取，可手动选本机的完整 APK。</p>
 </div>
 </section>
 <section class='wz-panel glass-strong' data-panel='data' hidden>
@@ -263,7 +269,7 @@
 </div>
 </div>
 <script src='/static/reset_cleanup.js?v=reset11'></script>
-<script src='/static/wizard.js?v=reset11'></script>
+<script src='/static/wizard.js?v=t114b'></script>
 <script src='/static/auth_service.js'></script>
 <script src="/static/service_account.js"></script></body>
 </html>

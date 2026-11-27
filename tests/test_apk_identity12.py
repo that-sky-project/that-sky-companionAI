@@ -320,12 +320,13 @@ class ApkIdentityTests(unittest.TestCase):
                 Path(args[-1]).write_bytes(b"synthetic pulled bytes")
                 return ""
             raise AssertionError(args)
-        with patch.object(apk, "Progress", QuietProgress), patch.object(apk, "_device_list", return_value=["synthetic"]), \
+        serial = "192.168.3.42:5555"  # synthetic fixture, using a valid bridge serial
+        with patch.object(apk, "Progress", QuietProgress), patch.object(apk, "_device_list", return_value=[serial]), \
              patch.object(apk, "_run_adb", side_effect=run), \
              patch.object(apk, "_merge_apk_view", side_effect=lambda base, splits, out, progress: out), \
              patch.object(apk, "inspect_apk", side_effect=GameDataError("synthetic critical member", "apk_resource_mismatch")):
             with self.assertRaises(GameDataError) as cm:
-                apk.pull_apk(str(adb), "synthetic", self.root / "data")
+                apk.pull_apk(str(adb), serial, self.root / "data")
         return cm.exception
 
     def test_pulled_base_validation_failure_keeps_code_and_stage(self):

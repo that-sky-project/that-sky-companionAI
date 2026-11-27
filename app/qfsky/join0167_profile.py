@@ -112,6 +112,31 @@ def load_cache_profile(private_root, record_relative, *, scene, resource_revisio
                            account_uuid=account_uuid,apk_build=apk_build)
 
 
+# T94（11-22）：中央神坛门开/门关两份场景数据自动选择。
+# 变体出生点 rainbowday(彩虹日)/oreo(奥利奥) 在门里，默认“门开”；主条目默认“门关”(小光原缓存)；
+# 配对换房(只在门开后出现)强制“门开”；加入被 36 拒绝就翻到另一份，之后沿用直到再被拒。
+_T94_OPEN_VARIANTS = frozenset({'rainbowday', 'oreo'})
+_T94 = {'pref': None, 'last': None}
+
+def t94_set_dayhub_pref(value):
+    if value in ('open', 'closed', None):
+        _T94['pref'] = value
+
+def t94_flip_dayhub():
+    cur = _T94['pref'] or _T94['last'] or 'closed'
+    _T94['pref'] = 'closed' if cur == 'open' else 'open'
+    return _T94['pref']
+
+def t94_state():
+    return dict(_T94)
+
+def _t94_variant(profile):
+    try:
+        return object.__getattribute__(profile, '_asset_inputs')._context.variant
+    except Exception:
+        return None
+
+
 def build_from_cache(profile, explicit_fields, *, frame=True):
     if not isinstance(profile,LoadedProfile): raise TypeError('a validated LoadedProfile is required')
     # uid comes from the current authenticated session, not from the cache record.
@@ -124,6 +149,89 @@ def build_from_cache(profile, explicit_fields, *, frame=True):
             'state_extra_u32_b':struct.unpack_from('<I',profile.cache,4)[0],
             'tail_u8':profile.cache[8]}
     native.update(profile.player_fields)
+    # T84（11-21）：官方客户端加入中央神坛 DayHubCave 时状态值 a 每次都是 1（六份抓包 13 次），
+    # 晨岛等为 0；小光 10-31 录的神坛缓存是 0。仅神坛改 1，SKY_T84_DAYHUB_STATE_A=0 回退。
+    if (native['level_id'] == 2394719185 and native['state_extra_u32_a'] == 0
+            and __import__('os').environ.get('SKY_T84_DAYHUB_STATE_A', '1') != '0'):
+        native['state_extra_u32_a'] = 1
+        if fields.get('state_extra_u32_a') == 0:
+            fields.pop('state_extra_u32_a')
+    # T90（11-21 实验）：小光 10-31 录的神坛场景数据停在“门未开”（时间戳位全 0、开关位缺最高位），
+    # 门开后的神坛有人房间一律 36。改用主人号当前神坛场景数据（不含任何身份/会话字节，已核对）。
+    # 文件缺失或头 4 字节(nv0)不符则不替换。SKY_T90_DAYHUB_BLOB=0 回退。
+    # T93（11-22）：通用化——按地图号查 runtime/private/scene_blobs/<level_id>.bin（官方客户端当前
+    # 场景数据，不含身份字节）；神坛另保留旧文件路径兜底。SKY_T90_DAYHUB_BLOB=0 全部关闭。
+    _os = __import__('os')
+    _dir = _os.environ.get('SKY_T93_SCENE_BLOB_DIR') or _os.path.join(_os.environ.get('XG_DATA_DIR') or _os.environ.get('SKY_AI_ROOT') or '.', 'runtime', 'private', 'scene_blobs')
+    _cand = _os.path.join(_dir, '%d.bin' % native['level_id'])
+    if native['level_id'] == 2394719185 and not _os.path.exists(_cand):
+        _cand = _os.environ.get('SKY_T90_DAYHUB_BLOB_FILE',
+            _os.path.join(_os.environ.get('XG_DATA_DIR') or _os.environ.get('SKY_AI_ROOT') or '.', 'runtime', 'private', 't90_dayhub_blob.bin'))
+    _t94_want = 'open'
+    if (native['level_id'] == 2394719185
+            and _os.environ.get('SKY_T94_DAYHUB_AUTO', '1') != '0'):
+        _t94_want = _T94['pref'] or ('open' if _t94_variant(profile) in _T94_OPEN_VARIANTS else 'closed')
+        _T94['last'] = _t94_want
+        if _t94_want == 'closed':
+            # 门关：用小光自己的原缓存；显式字段里若带着门开那份/旧值，一律让位原缓存
+            if 'blob' in fields:
+                fields.pop('blob')
+            if 'state_extra_u32_a' in fields and fields['state_extra_u32_a'] in (0, 1):
+                fields.pop('state_extra_u32_a')
+    if (_t94_want == 'open' and _os.path.exists(_cand)
+            and _os.environ.get('SKY_T90_DAYHUB_BLOB', '1') != '0'):
+        try:
+            _b = open(_cand, 'rb').read()
+            if len(_b) >= 4 and _b[:4] == bytes(native['blob'][:4]):
+                # T90b：换图时上一轮字段里可能带着旧缓存数据或替换后数据，两者都认，
+                # 统一按替换后数据发，避免“explicit blob conflicts”(ValueError)。
+                if 'blob' in fields and bytes(fields['blob']) in (bytes(native['blob']), _b):
+                    fields.pop('blob')
+                if 'state_extra_u32_a' in fields and fields['state_extra_u32_a'] in (0, 1):
+                    fields.pop('state_extra_u32_a')
+                native['blob'] = _b
+                # T97（11-22）：官方客户端门开后每次进房这 3 字节都不同（首字节低 5 位恒 0x1f，
+                # 其余位随机；门关时为 df ff 1f）。小光原来每次都发同一值，疑被当重复拒绝。
+                if (len(_b) > 267 and _b[264:267] != bytes.fromhex('dfff1f')
+                        and _os.environ.get('SKY_T97_RANDOM_264', '0') != '0'
+                        and (_os.environ.get('SKY_T97_AB', '1') == '0' or _os.urandom(1)[0] < 128)):  # T97 对照：一半随机一半固定
+                    _r = bytearray(_os.urandom(3))
+                    _r[0] = (_r[0] & 0xc0) | 0x1f
+                    _bb = bytearray(_b); _bb[264:267] = _r
+                    native['blob'] = bytes(_bb)
+                    if 'blob' in fields:
+                        fields.pop('blob')
+        except OSError:
+            pass
+    # T106（11-22）：跑图模式炸过花的房间，场景里暗石已清零；小光拿“花还在”的缓存进房会被 36 拒。
+    # 进房前对缓存场景块做同样的清零（scene_edit.apply_zero 只在跑图模式开着且该图有登记时改动）。
+    # SKY_T106_JOIN_ZERO=0 回退。
+    try:
+        if _os.environ.get('SKY_T106_JOIN_ZERO', '1') != '0':
+            from qfsky.long0167.scene_edit import apply_zero as _az
+            from qfsky.long0167.scene_record import PUBLIC_ELF_SHA256 as _psha
+            _old = bytes(native['blob'])
+            _nb = _az(_old, map_id=native['level_id'], profile_sha=_psha)
+            _changed = _nb is not None and bytes(_nb) != _old
+            # T106b：房间里花炸没炸事先不知道——同一张图每次进房交替：先原样，被拒后下一次再用清过花的
+            if _changed:
+                _tog = globals().setdefault('_T106_TOGGLE', {})
+                _n = _tog.get(native['level_id'], 0)
+                _tog[native['level_id']] = _n + 1
+                if _n % 2 == 0:
+                    _changed = False
+            try:
+                import json as _j, time as _t
+                with open(_os.path.join(_os.environ.get('XG_DATA_DIR') or _os.environ.get('SKY_AI_ROOT') or '.', 'logs', 't106_join_zero.log'), 'a', encoding='utf-8') as _f:
+                    _f.write(_j.dumps({'ts': _t.strftime('%H:%M:%S'), 'map': native['level_id'], 'changed': _changed, 'size': len(_old)}) + chr(10))
+            except Exception:
+                pass
+            if _changed:
+                if 'blob' in fields and bytes(fields['blob']) in (_old, bytes(_nb)):
+                    fields.pop('blob')
+                native['blob'] = bytes(_nb)
+    except Exception:
+        pass
     for key,value in native.items():
         if key in fields and fields[key]!=value:
             raise ValueError(f'explicit {key} conflicts with selected native cache profile')

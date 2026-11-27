@@ -447,7 +447,7 @@ def main():
     p.add_argument("--token-file")
     p.add_argument("--allow-loopback", action="store_true")
     a = p.parse_args()
-    token = json.loads(Path(a.token_file).read_text())["token"] if a.token_file else getpass.getpass("服务令牌（不回显）: ")
+    token = json.loads(Path(a.token_file).read_text(encoding="utf-8"))["token"] if a.token_file else getpass.getpass("服务令牌（不回显）: ")
     configure(a.url, token, a.allow_loopback)
     Client().request("GET", "/v1/health")
     print("服务连接通过，配置已保存；没有发送游戏账号。")

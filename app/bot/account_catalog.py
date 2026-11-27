@@ -125,7 +125,7 @@ class _locked:
 
     def __enter__(self):
         LOCK.parent.mkdir(parents=True, exist_ok=True)
-        self.f = open(LOCK, 'a+')
+        self.f = open(LOCK, 'a+', encoding="utf-8")
         try:
             import fcntl
             fcntl.flock(self.f, fcntl.LOCK_EX)

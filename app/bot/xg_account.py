@@ -92,7 +92,7 @@ def _items():
 
 def active_id():
     try:
-        v = ACTIVE_FILE.read_text().strip()
+        v = ACTIVE_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         v = ""
     return v or DEFAULT_ACCOUNT
@@ -117,7 +117,7 @@ def account_by_id(account_id):
 
 def owner_uuid():
     try:
-        v = OWNER_FILE.read_text().strip()
+        v = OWNER_FILE.read_text(encoding="utf-8").strip()
         return v if UUID_RE.fullmatch(v) else DEFAULT_OWNER
     except OSError:
         return DEFAULT_OWNER

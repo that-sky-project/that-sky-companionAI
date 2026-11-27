@@ -54,7 +54,7 @@ def _posix_stat(pid):
     if IS_WINDOWS:
         return {}
     try:
-        raw = Path(f"/proc/{int(pid)}/stat").read_text()
+        raw = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8")
         fields = raw.rsplit(") ", 1)[1].split()
         return {"start_ticks": int(fields[19]), "pgid": int(fields[2]),
                 "session": int(fields[3]), "state": fields[0]}

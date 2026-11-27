@@ -137,7 +137,7 @@ class TriggerTests(unittest.TestCase):
     def test_08_corrupt_get_recovers_read_only(self):
         p=CONTROL/'chat_trigger.json';p.write_text('[1,2]',encoding='utf-8')
         self.assertEqual(request('GET','/chat/trigger')[1]['prefix'],'/')
-        self.assertEqual(p.read_text(),'[1,2]')
+        self.assertEqual(p.read_text(encoding="utf-8"),'[1,2]')
 
 class TitleTests(unittest.TestCase):
     @classmethod

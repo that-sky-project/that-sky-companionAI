@@ -65,7 +65,8 @@
       if (!r.ok || !body.ok) throw new Error(body.message || "没有保存成功");
       location.replace("/wizard");
     } catch (e) {
-      msg.textContent = "没有保存成功：" + e.message;
+      msg.textContent = "未能保存同意状态。请确认当前用户可写入小光数据目录后重试；若会话已失效，请重新打开小光。";
+      btn.textContent = "重试 · 同意并继续";
       btn.disabled = false;
     }
   });

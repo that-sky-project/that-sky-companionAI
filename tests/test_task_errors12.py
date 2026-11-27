@@ -88,9 +88,11 @@ runpy.run_path(chain,run_name='__main__')
             p=Path(p);q=p.with_suffix('.pending');q.write_text(json.dumps(doc,ensure_ascii=False),encoding='utf-8');os.replace(q,p)
         spec=importlib.util.spec_from_file_location('task_errors12_detail',APP/'error_detail.py')
         detail=importlib.util.module_from_spec(spec);spec.loader.exec_module(detail)
+        spec=importlib.util.spec_from_file_location('task_errors12_install',APP/'install_support.py')
+        support=importlib.util.module_from_spec(spec);spec.loader.exec_module(support)
         ns=functions('launcher/tasks.py',{'_tail','_parse','_raw_tail','_plan_count','_persist_if_current','current'},
           {'Path':Path,'json':json,'copy':copy,'time':time,'TAIL_BYTES':4*1024*1024,'_status_path':lambda:status,
-           '_alive':lambda doc:False,'error_detail':detail,
+           '_alive':lambda doc:False,'error_detail':detail,'install_support':support,
            'xg_paths':types.SimpleNamespace(read_json=read_json,write_json=write_json)})
         return ns['current'](),status,ns
 

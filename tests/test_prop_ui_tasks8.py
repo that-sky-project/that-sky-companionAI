@@ -111,14 +111,14 @@ class PropsTaskTests(unittest.TestCase):
         self.assertFalse(result['ready']);self.assertEqual(result['state'],'missing');validator.assert_not_called()
 
     def test_state_uses_shared_full_runtime_validator(self):
-        self.props.mkdir();(self.props/'generation.json').write_text('{}');(self.props/'catalog.json').write_text('{}')
+        self.props.mkdir();(self.props/'generation.json').write_text('{}', encoding="utf-8");(self.props/'catalog.json').write_text('{}', encoding="utf-8")
         validator=mock.Mock(return_value={})
         result=self.status(validator)
         self.assertTrue(result['ready']);self.assertEqual(result['count'],3)
         validator.assert_called_once_with(self.props,expected_build=421629)
 
     def test_bad_shard_or_wrong_build_stays_invalid(self):
-        self.props.mkdir();(self.props/'generation.json').write_text('{}');(self.props/'catalog.json').write_text('{}')
+        self.props.mkdir();(self.props/'generation.json').write_text('{}', encoding="utf-8");(self.props/'catalog.json').write_text('{}', encoding="utf-8")
         result=self.status(mock.Mock(side_effect=ValueError('synthetic missing shard')))
         self.assertFalse(result['ready']);self.assertEqual(result['state'],'invalid')
 
@@ -226,7 +226,9 @@ class PropsChainTests(unittest.TestCase):
              'capture_status':lambda *a:{},'catalog_status':lambda **kw:{'certified':True},'_props_status':props,
              '_device_status':lambda:{},'_wizard':lambda:{'completed_at':'fixture'},'WIZARD_VERSION':1,
              'active_account':lambda:'fixture','_apk_path':lambda:'fixture.apk','_ai_configured':lambda:True,
-             'xg_paths':types.SimpleNamespace(GAME_VERSION='fixture',GAME_DIR=ROOT/'tests/fixture-game'),
+             'install_support':types.SimpleNamespace(wizard_warnings=lambda *_:[]),
+             'xg_paths':types.SimpleNamespace(GAME_VERSION='fixture',GAME_DIR=ROOT/'tests/fixture-game',
+                                              INSTALL_ROOT=ROOT,DATA=ROOT/'tests'),
              '_game_data_versions':lambda:[],'resource_reset_status':lambda:{},'_autostart_status':lambda:{}})
         return ns['summary'](),props
 

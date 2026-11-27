@@ -16,11 +16,11 @@ assert(view.detail.includes('result_code'));
 function part(name,async=false){const re=new RegExp('^  '+(async?'async ':'')+'function '+name+'\\([^]*?^  }','m');const m=wizard.match(re);assert(m,name);return m[0];}
 function env(){
   const nodes=new Map(),shown=[];let done;
-  const $=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',value:'',hidden:true,disabled:false});return nodes.get(id);};
+  const $=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',value:'',hidden:true,disabled:false,dataset:{}});return nodes.get(id);};
   const state={resourceTaskRunning:false,cleanupBusy:false};
   const ctx=vm.createContext({$,state,api:async()=>({ok:true}),showResult:(node,text,ok)=>{node.textContent=text;shown.push({text,ok});},
     pollTask:cb=>{done=cb;},refresh:async()=>{},checkApk:async()=>{throw new Error('must not validate failed pull');}});
-  vm.runInContext(part('detailLines')+'\n'+part('renderTask')+'\n'+part('pullApk',true)+'\nglobalThis.render=renderTask;globalThis.pull=pullApk;',ctx);
+  vm.runInContext(part('detailLines')+'\n'+part('retryState')+'\n'+part('renderTask')+'\n'+part('pullApk',true)+'\nglobalThis.render=renderTask;globalThis.pull=pullApk;',ctx);
   return {ctx,$,shown,finish:async t=>done(t)};
 }
 (async()=>{
@@ -45,7 +45,10 @@ function env(){
   f.ctx.refresh=async()=>{refreshes++;};vm.runInContext(part('checkApk',true)+'\nglobalThis.check=checkApk;',f.ctx);
   await f.ctx.check(false);assert.equal(sent.url,'/api/wizard/apk/check');assert.equal(sent.options.body.path,'synthetic.apk');
   assert(f.$('wz-apk-result').textContent.includes(error));assert(f.$('wz-apk-result').textContent.includes(code));assert.equal(refreshes,0);
-  const requestSource=desktop.split('\n').find(line=>line.startsWith('async function resourceRequest('));assert(requestSource);
+  const requestStart=desktop.indexOf('\nfunction mumuCheckText(');
+  const requestEnd=desktop.indexOf('\nfunction currentTask(',requestStart);
+  assert(requestStart>=0&&requestEnd>requestStart);
+  const requestSource=desktop.slice(requestStart,requestEnd);
   const messages=[],failure=Object.assign(new Error(error),{data:{ok:false,message:error,code}});
   const requestContext=vm.createContext({parity:{},syncResourceButtons:()=>{},parityMsg:(id,text,bad)=>messages.push({id,text,bad}),
     parityApi:async()=>{throw failure;},friendlyError:e=>e.message,loadResources:async()=>{throw new Error('must not refresh after rejection');}});
@@ -53,5 +56,9 @@ function env(){
   await assert.rejects(()=>requestContext.run('/api/wizard/apk/check',{path:'synthetic.apk'}));
   assert(messages.at(-1).text.includes(error));assert(messages.at(-1).text.includes(code));assert.equal(messages.at(-1).bad,true);
   await assert.rejects(()=>requestContext.run('/api/wizard/mumu',{}));assert.equal(messages.at(-1).text,error);
+  failure.data.android_label='安卓 15';
+  failure.data.page_size=16384;
+  await assert.rejects(()=>requestContext.run('/api/wizard/mumu',{}));
+  assert.equal(messages.at(-1).text,'安卓 15 · '+error+' · 内存页大小：16 KiB');
   console.log(JSON.stringify({passed:9,failed:0,functions:'actual taskView/renderTask/pullApk/pollTask/checkApk/resourceRequest'}));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

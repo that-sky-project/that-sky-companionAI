@@ -6,25 +6,27 @@ Public state deliberately excludes credentials, account UUIDs and server address
 """
 from __future__ import annotations
 import xg_paths as _xg_paths
-import copy, math, os, re, struct, threading, time
+import copy, math, os, queue, re, struct, threading, time
 from dataclasses import dataclass,field
 from pathlib import Path
 import requests
 from . import current_join,fp,netcfg,handshake0167_fields,register0167_codec
-from .join0167_profile import build_from_cache,uuid_raw
+from .join0167_profile import account_binding,build_from_cache,uuid_raw
 from .receive0167 import validate_pending_enter_game
 from .scene_control0167 import SceneConfirmation,frame_scene_reply
 from .handshake0167_transport import ProbeTransport,ProbeTransportError
 from .type2_dictionary0167 import load_type2_decoder
 from .skyapi import SkyClient,SkyApiError
+from . import ticket_route0167 as route
 
 BUILD=421629
 TICKET_URL='https://live-as-sky-merge.game.163.com/account/find_previous_or_empty'
 PUBLIC_FIELDS={'phase','running','map_id','scene','duration','elapsed_seconds','reply_count',
  'scene_request_count','ignored_scene_requests','http_status','enter_game_valid','registration_transport_acked',
  'matching_generation_observed','reason','finished','generation','transport_closed','disconnect_sent',
- 'error_code','application_packets','received_datagrams','sent_datagrams','crc_failures','ticket_requests','remote_disconnect_code','pending_reliable_commands','connection_kind','long_groups','long_actor_frames','long_controller_frames','long_scene_frames','long_feedback_frames','terminal_message_type','move_received','move_started','move_completed','move_busy_replies','move_ignored','move_graceful_closed','move_forced_closed','move_in_progress'}
+ 'error_code','application_packets','received_datagrams','sent_datagrams','crc_failures','ticket_requests','remote_disconnect_code','pending_reliable_commands','connection_kind','long_groups','long_actor_frames','long_controller_frames','long_scene_frames','long_feedback_frames','terminal_message_type','move_received','move_started','move_completed','move_busy_replies','move_ignored','move_graceful_closed','move_forced_closed','move_in_progress','external_move_action','external_move_error','external_move_received','external_move_adopted','external_move_failed','external_move_busy','external_move_ignored','external_move_duplicate_move','ticket_join_staged','ticket_join_committed','ticket_join_aborted','ticket_join_failed','ticket_join_error','owner_rejoin_requested','owner_rejoin_ticket_miss','owner_rejoin_staged','owner_rejoin_committed','owner_rejoin_aborted','owner_rejoin_action','move_others_injected','owner_in_roster','owner_in_roster_after_move','ticket_dial_attempts','ticket_dial_retries','ticket_dial_source','ticket_origin_source','ticket_fail_replies','ticket_join_server_disconnect','owner_left_room','owner_gone'}
 
+PUBLIC_FIELDS=set(PUBLIC_FIELDS)|{'exception_code'}  # T91
 class ConnectionCancelled(Exception):pass
 class ConnectionFault(Exception):
     def __init__(self,code):self.code=code
@@ -39,6 +41,15 @@ class Prepared:
     resource_revision:str
     long_templates:tuple|None=field(default=None,repr=False)
     current_inputs:object=field(default=None,repr=False)
+
+
+def _t99_hold():
+    """T99 实验：放行单人拆分后 hold_until 之前不追主人。"""
+    try:
+        import json as _j, time as _t
+        return _t.time() < float(_j.load(open(os.environ['SKY_T99_SPLIT_FILE'])).get('hold_until', 0))
+    except Exception:
+        return False
 
 def _validate_account(account,build):
     if build!=BUILD or current_join.mode()!='current':raise ValueError('仅支持当前 0.16.8 / 421629 模式')
@@ -102,12 +113,65 @@ def prepare_home_long(account,build=BUILD,map_id=3526133726):
 
 TICKET_OVERRIDE = {}  # claudework：{'ticket': {uri,move_ts,sig,platform_filter}}，下一次长连接入服用它（WS move 推来的票），用一次就清
 
+# T74-R2：进程级 origin→拨号路由本（配置 + 学习 + 已知边缘 IP）。
+ROUTE_BOOK = route.RouteBook.from_env()
+
 
 def _cw_join_players():
     """CLAUDEWORK_JOIN_PLAYERS=uuid[,uuid]：拉票时请服务器优先分到这些玩家所在的实例（默认空 = 原行为）。"""
     import os
     raw = os.environ.get("CLAUDEWORK_JOIN_PLAYERS", "").strip()
     return [u.strip() for u in raw.split(",") if u.strip()]
+
+
+def _owner_uuid_bytes(owner):
+    """把主人 uuid 转成 16 字节；格式不对返回 None（不抛）。"""
+    if not owner:
+        return None
+    try:
+        return uuid_raw(str(owner))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _fetch_owner_room_ticket(account, owner, level, timeout=4.0):
+    """T73-R2：向 /account/join_friend_game 要一张主人此刻所在房间的入服票。
+
+    每次都新建 SkyClient（run_connection 里的 client 被 SingleSession 限定只能
+    访问 find_previous_or_empty）。失败只返回 {'error': 类型名}，绝不断当前连接；
+    调用方拿到票后走 make-before-break，EnterGame 名单验证通过才换。
+    """
+    client = None
+    try:
+        from .skyapi import SkyClient
+        client = SkyClient(account['user_uuid'], account['session'], account['session2'],
+                           account.get('data_version') or '')
+        response = client._post_once('/account/join_friend_game', {'friend_id': owner},
+                                     True, str(level or 0), None, timeout)
+        data = response.get('data') if isinstance(response.get('data'), dict) else response
+        move = data.get('move_to_game') if isinstance(data, dict) else None
+        if (not isinstance(move, dict) or not move.get('public_ip') or not move.get('port')
+                or not move.get('sig') or not move.get('move_ts')):
+            return {'error': 'no_ticket'}
+        players = [p for p in (move.get('players') or []) if isinstance(p, str)][:7]
+        # T74-R2：public_ip 是票面 origin；响应若另给 ip/speed_host 才是拨号地址。
+        dial = (move.get('ip') or move.get('speed_ip') or move.get('speed_host')
+                or move.get('public_ip'))
+        return {'uri': f"{move['public_ip']}:{int(move['port'])}",
+                'origin_host': move['public_ip'], 'origin_port': int(move['port']),
+                'ip': dial, 'port': int(move['port']),
+                'move_ts': move['move_ts'], 'sig': move['sig'],
+                'platform_filter': move.get('platform_filter', 0),
+                'level': move.get('level'), 'with_owner': True,
+                'other_players': players, 'players': players}
+    except Exception as exc:
+        return {'error': type(exc).__name__}
+    finally:
+        try:
+            if client is not None:
+                client._local.close()
+        except Exception:
+            pass
 
 
 def _catalog_preferred():
@@ -171,9 +235,14 @@ def prepare_current_long(account,build=BUILD,map_id=None,*,variant=None):
         or any(type(x)is not int or not 0<=x<=65535 for x in nv)):
         raise ValueError('map_capture_config_invalid')
     from .map_long0167 import prepare_current_capture
+    from .map_long0167.load_current_capture import expected_netversion_for_capture
+    # 遇境新旧录制共存：期望值取录制自身；只有版本档案候选（63789/36851）才放宽。
+    actual_nv=expected_netversion_for_capture(root,directory,expected_netversion=nv,
+        expected_scene=scene,expected_level_id=map_id,apk_build=build,
+        expected_account_binding=account_binding(account['user_uuid']))
     capture=prepare_current_capture(root,directory,expected_account_uuid=account['user_uuid'],
         expected_scene=scene,expected_resource_revision=revision,expected_level_id=map_id,
-        expected_netversion=nv,apk_build=build)
+        expected_netversion=actual_nv,apk_build=build)
     decoder=_dictionary(doc);fp.device(account['user_uuid'])
     return Prepared(copy.deepcopy(account),capture.profile,decoder,scene,map_id,revision,
         current_inputs=capture.inputs)
@@ -240,15 +309,59 @@ def _transport_bounds(duration,remaining):
         return max(3.0,min(86400.0,remaining)),max(8192,duration*48),max(16384,duration*32)
     return min(180.0,remaining),min(8192,max(512,duration*24)),min(16384,max(4096,duration*48))
 
-def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
-    """One HTTP ticket; bounded server-directed Home Move. Owner closes all peers."""
+def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None,external_moves=None,
+                   owner_uuid=None,owner_attached=None,owner_present=None,route_book=None,
+                   on_pump_event=None):
+    """One HTTP ticket; bounded server-directed Home Move. Owner closes all peers.
+
+    T73: external_moves is a queue of chat-WS same-map move tickets. They are
+    adopted on the connection thread as in-band migrations (make-before-break),
+    never as fresh Join sessions. A rejected ticket leaves the current room up.
+
+    T73-R2: owner_uuid enables a real re-entry into the owner's room. A friend
+    ticket is fetched while the current connection stays alive; the new peer
+    must get an EnterGame roster containing the owner before the old peer is
+    retired. Failure keeps the current room.
+    """
     start=time.monotonic();deadline=start+duration;client=None;transport=None;engine=None;pump=None;same_peer_attempt_started=False
+    book=route_book if route_book is not None else ROUTE_BOOK
+    owner_raw=_owner_uuid_bytes(owner_uuid)
+    rejoin_enabled=bool(owner_raw is not None and os.environ.get('SKY_T73_R2_REJOIN','1')!='0')
+    # T74-R2：主人从当前房间消失（被服务器单独挪走）后也要跟随；不能只等“自己被 Move”。
+    owner_seen_once=False;owner_gone_since=None
+    try:rejoin_max=max(0,int(os.environ.get('SKY_T73_R2_MAX_REJOIN','3')))
+    except (TypeError,ValueError):rejoin_max=3
+    rejoin_requests=queue.Queue(maxsize=2);rejoin_tickets=queue.Queue(maxsize=2)
+    rejoin_stats={'requested':0,'miss':0}
+    rejoin_worker=None;rejoin_due=None;rejoin_why='';rejoin_inflight=False
+    t75_observe_arrival=False
+    rejoin_attempts=0;rejoin_cooldown_until=0.0
+    r3_window=r3_flight=None
+    def r3_log(event,**fields):
+        if on_pump_event is not None:
+            try:on_pump_event(dict(event=event,**fields))
+            except Exception:pass
+    def r3_stop(reason):
+        nonlocal r3_window,rejoin_due
+        if r3_window is not None:
+            r3_log('t75_r3_recovery_end',reason=reason,polls=r3_window.polls)
+            r3_window=None
+            if rejoin_why=='after_solo_move':rejoin_due=None
+    def r3_due(now,first=False):
+        nonlocal rejoin_due,rejoin_why
+        if r3_window is None:return
+        at=r3_window.next_poll(now,rejoin_cooldown_until,rejoin_max-rejoin_attempts,first=first)
+        if at is None:
+            r3_stop('budget_or_deadline')
+        else:
+            rejoin_due=at;rejoin_why='after_solo_move'
     is_current=prepared.current_inputs is not None
     is_long=is_current or prepared.long_templates is not None
     result={'phase':'preflight','running':True,'finished':False,'ticket_requests':0,
        'enter_game_valid':False,'registration_transport_acked':False,'matching_generation_observed':False,
        'reply_count':0,'scene_request_count':0,'ignored_scene_requests':0,'http_status':None,'error_code':'',
        'transport_closed':None,'disconnect_sent':False,'reason':'正在检查连接参数',
+       'external_move_action':None,'external_move_error':None,
        'connection_kind':'current_long' if is_current else 'home_long' if is_long else 'short','long_groups':0,'long_actor_frames':0,
        'long_controller_frames':0,'long_scene_frames':0,'long_feedback_frames':0}
     def update(**values):
@@ -286,7 +399,18 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
                 level_hash=prepared.profile.record['netversion_u16'][0],level_id=prepared.map_id,
                 single_attempt=True,timeout=ticket_timeout)
         check();data=response.get('data') if isinstance(response.get('data'),dict) else response
-        ticket={key:data[key] for key in ('uri','move_ts','sig','platform_filter')}
+        # T74-R2：票面 origin 与拨号地址必须分开。旧代码只留 4 个字段，把
+        # HTTP 响应里的 ip/speed_host 丢掉，于是只能拨 origin。
+        ticket={key:data[key] for key in ('uri','move_ts','sig','platform_filter') if key in data}
+        for key in ('ip','port','origin_host','origin_port','public_ip','speed_host',
+                    'speed_ip','connect_addr','dial_host','pharos_ip'):
+            if key in data:ticket[key]=data[key]
+        if 'uri' not in ticket:raise ConnectionFault('ticket_uri_missing')
+        ticket_origin=route.ticket_origin(ticket)
+        if ticket_origin is None:raise ConnectionFault('ticket_origin_invalid')
+        # Join 里的 ticket_ipv4 永远是票面 origin（原生四条 Join 均如此）。
+        ticket['uri']='%s:%d'%ticket_origin
+        handshake0167_fields.initial_ticket_fields(ticket)
         initial=handshake0167_fields.fresh_initial_record(prepared.profile,ticket,
             account_uuid=a['user_uuid'],newly_allocated_connection=True)
         handshake0167_fields.validate_fresh_ticket(initial,ticket)
@@ -297,7 +421,15 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
         peer=handshake0167_fields.peer_key(a['user_uuid'])
         fields.update(uid=uuid_raw(a['user_uuid']),session=bytes.fromhex(a['session']),peer_key=peer)
         payload=build_from_cache(prepared.profile,fields,frame=True)
-        host,port=ticket['uri'].rsplit(':',1)
+        dial_candidates=book.candidates(ticket)
+        if not dial_candidates:dial_candidates=[(ticket_origin[0],ticket_origin[1],'origin')]
+        # Claude 审核：首次入服仍直拨票面 origin（数月稳定）；“已知边缘”候选只用于迁移 ticket join。
+        # 03:07 实测首次入服拨 known_edge 连续 server_ended_or_changed_connection 约 2 分钟。
+        if os.environ.get("SKY_T74_INITIAL_EDGE", "0") != "1":
+            dial_candidates=[(ticket_origin[0],ticket_origin[1],"origin")]
+        host,port,dial_source=dial_candidates[0]
+        result['ticket_origin_source']='initial'
+        result['ticket_dial_source']=dial_source
         remaining=deadline-time.monotonic()
         if remaining<3:raise ConnectionFault('deadline')
         TransportClass=CurrentTransport
@@ -320,6 +452,9 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
         update(phase='connecting',reason='正在建立游戏连接');check();transport.connect()
         if not transport.wait_until_connected(timeout_sec=min(5.0,deadline-time.monotonic())):
             raise ConnectionFault('connect_timeout')
+        # T74-R2：成功连上后学习 origin→实际拨号 路由（下一张同 origin 的票可直接复用）。
+        try:book.learn(ticket_origin,tuple(transport.remote))
+        except Exception:pass
         update(phase='join',reason='等待账号和场景匹配的入服消息');transport.send_join(payload)
         entered=None;entered_body=None;pending=[];enter_deadline=min(deadline,time.monotonic()+8)
         def inspect(message):
@@ -381,10 +516,56 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
                     max_application_packets=_transport_bounds(duration,remaining)[1],max_datagrams=_transport_bounds(duration,remaining)[2])
             def make_engine(next_transport,enter_body,now,local_idle):
                 return make_long_engine(next_transport,enter_body,now,local_idle)
+            def make_ticket_join(ticket,*,origin_endpoint=None,previous_endpoint=None,
+                                 level=None,others=()):
+                """T74-R2：给一张真票生成**原生迁移形状**的 Join 明文。
+
+                与原生 door.pcap 四条 Join 一致：
+                  - ticket_ipv4 = 票面 origin（不是实际拨号 speed host）；
+                  - previous_address/port = 当前活动连接的**票面 origin**；
+                  - previous_level_id = 当前 level、tail 1/0、others = 票面同行者。
+                旧实现是 fresh 形状（tag=0/空/port=0），服务器不会按“从旧房间
+                迁过来”处理。这里不经过 handoff0167.prepare_*_join。
+                """
+                core={k:ticket[k] for k in ('move_ts','sig','platform_filter') if k in ticket}
+                origin=origin_endpoint or route.ticket_origin(ticket)
+                if origin is None:raise ValueError('ticket_origin_missing')
+                core['uri']='%s:%d'%origin
+                initial=handshake0167_fields.fresh_initial_record(prepared.profile,core,
+                    account_uuid=a['user_uuid'],newly_allocated_connection=True)
+                handshake0167_fields.validate_fresh_ticket(initial,core)
+                values=dict(initial['fields'])
+                values['previous_address']=bytes.fromhex(values['previous_address'])
+                values.update(handshake0167_fields.initial_ticket_fields(core))
+                if previous_endpoint is None:
+                    previous_endpoint=ticket_origin
+                values=handshake0167_fields.apply_native_migration(values,
+                    previous_endpoint=previous_endpoint,level_id=level or prepared.map_id,
+                    others=others)
+                values.update(uid=uuid_raw(a['user_uuid']),session=bytes.fromhex(a['session']),
+                    peer_key=peer)
+                return build_from_cache(prepared.profile,values,frame=True)
             pump=Pump(transport=transport,engine=engine,peer_key=peer,
                 profile=prepared.profile,account_uuid=a['user_uuid'],resource_revision=prepared.resource_revision,
                 current_join_fields=fields,registration_body=body,make_transport=make_transport,
-                make_engine=make_engine,check=check,deadline=deadline,on_terminal=inspect,**pump_options)
+                make_engine=make_engine,check=check,deadline=deadline,on_terminal=inspect,
+                owner_uuid=owner_raw,make_ticket_join=make_ticket_join,
+                owner_attached=owner_attached,initial_origin=ticket_origin,
+                route_book=book,**pump_options)
+            if rejoin_enabled:
+                def rejoin_worker():
+                    """只负责取票，不碰 pump/socket；HTTP 慢不阻塞连接线程。"""
+                    while not cancel.is_set():
+                        try:req=rejoin_requests.get(timeout=0.25)
+                        except queue.Empty:continue
+                        if req is None:return
+                        ticket=_fetch_owner_room_ticket(prepared.account,owner_uuid,
+                            req.get('level') or prepared.map_id,timeout=req.get('timeout',4.0))
+                        try:rejoin_tickets.put_nowait(ticket)
+                        except queue.Full:pass
+                rejoin_worker=threading.Thread(target=rejoin_worker,daemon=True,
+                    name='t73-owner-rejoin')
+                rejoin_worker.start()
         update(phase='observing',registration_transport_acked=True,reason='连接已建立，等待本次连接的场景确认')
         def handle(body):
             nonlocal counter
@@ -402,7 +583,178 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
         while time.monotonic()<deadline-.05:
             check()
             if pump is not None:
+                if external_moves is not None and is_current:
+                    # T73: adopt a chat-WS same-map ticket as an in-band Move on
+                    # this connection thread. Never publish a new Join session.
+                    try:ticket=external_moves.get_nowait()
+                    except __import__('queue').Empty:ticket=None
+                    if ticket is not None:
+                        try:outcome=pump.adopt_external_move(ticket)
+                        except Exception as exc:outcome={'action':'error','error':type(exc).__name__}
+                        action=outcome.get('action')
+                        result['external_move_action']=action
+                        if action=='staged':
+                            update(reason='同图 move 票已按连接内迁移提交，等待新 endpoint 入服')
+                        elif action=='busy':
+                            # T74-R3：pump 正忙（例如同一秒还有 owner_rejoin）时
+                            # 不能把这张配对票丢掉——原生的配对窗口有 6s，票还能用。
+                            try:external_moves.put_nowait(dict(ticket))
+                            except __import__('queue').Full:pass
+                            result['external_move_busy_retry']=(
+                                result.get('external_move_busy_retry') or 0)+1
+                        elif action not in (None,'duplicate','same_endpoint'):
+                            update(reason='同图 move 票未采用：'+str(action))
                 pump.step()
+                # T73-R2：消费 pump 事件（Move 是否把主人带进新名单），并在
+                # “单独被 Move 走”后主动要一张主人房好友票，新 peer 验证名单
+                # 后才换；不结束当前房间。
+                event_now=time.monotonic()
+                for event in pump.pop_events():
+                    kind=event.get('event')
+                    # T74-R3：每次 ticket join 的即时日志（staged/connected/
+                    # join_sent/enter/committed/aborted/换签名/换候选），
+                    # 不再只等 segment_end 汇总。
+                    if on_pump_event is not None:
+                        try:on_pump_event(dict(event))
+                        except Exception:pass
+                    if kind=='move_committed':
+                        if r3_window is not None:r3_stop('room_changed')
+                        result['owner_in_roster_after_move']=event.get('owner_in_roster')
+                        if (rejoin_enabled and event.get('owner_in_roster') is False
+                                and not event.get('external')
+                                and rejoin_attempts<rejoin_max
+                                and event_now>=rejoin_cooldown_until):
+                            rejoin_due=event_now+0.25;rejoin_why='after_solo_move'
+                        if rejoin_enabled and getattr(pump,'_t75_r3_pair_anchor',None) is not None:
+                            from .t75_r3_recovery import Window
+                            r3_window=Window.open(pump,event,event_now,rejoin_max-rejoin_attempts,rejoin_inflight)
+                            if r3_window is not None:
+                                r3_log('t75_r3_recovery_open',until_monotonic=r3_window.until,
+                                       wait_seconds=round(r3_window.until-event_now,2),budget=r3_window.limit)
+                                r3_due(event_now,first=True)
+                    elif kind=='ticket_join_aborted':
+                        # T74-R2：配对窗口只有 ~1.25s。连接级失败 2s 后允许换一条
+                        # 路由/再要一张票；服务器明确 36 拒绝则冷却 20s，别刷。
+                        reason=str(event.get('reason') or '')
+                        if reason.startswith('server_disconnect_'):
+                            # T85（11-21）：配对换房(ws_same_map)被拒后主人马上会被单独挪进临时房，
+                            # 必须立刻追（上午 2s 冷却时能追进去）；20s 只留给追主人本身被拒。
+                            rejoin_cooldown_until=event_now+(1.0 if (event.get('origin')=='ws_same_map'
+                                and os.environ.get('SKY_T85_PAIR_FAIL_FAST_REJOIN','1')!='0') else 20.0)
+                        elif reason.startswith('pending_') or reason.startswith('ticket_join_'):
+                            rejoin_cooldown_until=event_now+2.0
+                        else:
+                            rejoin_cooldown_until=event_now+5.0
+                        if r3_window is not None and event.get('origin')=='owner_rejoin_after_solo_move':
+                            if r3_window.on_36(event['origin'],reason):
+                                r3_log('t75_r3_recovery_ticket',action='old_origin_rejected_36',
+                                       old_origin=True,poll=r3_window.polls)
+                                r3_due(event_now)
+                            else:
+                                r3_stop('friend_attempt_ended')
+                    elif kind=='owner_left_room':
+                        result['owner_left_room']=pump._stats.get('owner_left_room',0)
+                if r3_window is not None:
+                    why=r3_window.invalid(pump,event_now,getattr(owner_present,'_t75_r3_roster_after',None))
+                    if why:r3_stop(why)
+                    elif rejoin_due is not None:rejoin_due=max(rejoin_due,rejoin_cooldown_until)
+                # T74-R2：主人从当前房间消失（服务器把主人单独挪走）时，不能只
+                # 等“自己被 Move”；在旧连接上直接做 owner_rejoin 的 make-before-break。
+                if (rejoin_enabled and owner_present is not None and pump.pending is None
+                        and pump.active.stage=='active'):
+                    try:owner_now=bool(owner_present())
+                    except Exception:owner_now=True
+                    if owner_now:
+                        owner_seen_once=True;owner_gone_since=None
+                        result['owner_gone']=False
+                    else:
+                        result['owner_gone']=True
+                        if owner_seen_once:
+                            if owner_gone_since is None:owner_gone_since=event_now
+                            elif (event_now-owner_gone_since>=route.owner_gone_sec() and not _t99_hold()
+                                  and r3_window is None and rejoin_due is None and rejoin_attempts<rejoin_max
+                                  and event_now>=rejoin_cooldown_until):
+                                try:pump.mark_owner_left()
+                                except Exception:pass
+                                rejoin_due=event_now;rejoin_why='owner_left_room'
+                                owner_gone_since=None
+                if rejoin_enabled:
+                    if (rejoin_due is not None and event_now>=rejoin_due and not rejoin_inflight
+                            and rejoin_attempts<rejoin_max and pump.pending is None
+                            and pump.active.stage=='active'):
+                        rejoin_attempts+=1;rejoin_inflight=True;rejoin_due=None
+                        rejoin_stats['requested']+=1
+                        try:
+                            rejoin_requests.put_nowait({'why':rejoin_why,'level':pump._map_id,'timeout':4.0})
+                            r3_flight=r3_window
+                            if r3_flight is not None:r3_flight.polls+=1
+                            t75_observe_arrival=(pump._map_id==2394719185 and
+                                rejoin_why=='after_same_peer_arrival' and os.environ.get('SKY_T75_DAYHUB_PAIRING','1')!='0')
+                        except queue.Full:rejoin_inflight=False
+                    try:rejoin_ticket=rejoin_tickets.get_nowait()
+                    except queue.Empty:rejoin_ticket=None
+                    guarded=r3_flight if rejoin_ticket is not None else None
+                    if guarded is not None:
+                        r3_flight=None
+                        if guarded is not r3_window:
+                            rejoin_ticket=None;rejoin_inflight=False  # 已换图/名单已更新/过期的请求。
+                        else:
+                            ep=route.ticket_origin(rejoin_ticket) if isinstance(rejoin_ticket,dict) else None
+                            action=guarded.classify(rejoin_ticket,ep)
+                            if action in ('same_rejected_origin','invalid_target'):
+                                r3_log('t75_r3_recovery_ticket',action=action,
+                                       old_origin=(ep==guarded.old),poll=guarded.polls)
+                                rejoin_ticket=None;rejoin_inflight=False
+                                if action=='invalid_target':r3_stop('invalid_target')
+                                else:r3_due(event_now)
+                    if rejoin_ticket is not None:
+                        rejoin_inflight=False
+                        if not isinstance(rejoin_ticket,dict) or rejoin_ticket.get('error'):
+                            rejoin_stats['miss']+=1
+                            try:pump._stats['owner_rejoin_action']='ticket_miss'
+                            except Exception:pass
+                            rejoin_cooldown_until=event_now+15.0
+                        else:
+                            try:
+                                plan=pump.plan_from_ticket(rejoin_ticket,expected_owner=owner_raw,
+                                    origin='owner_rejoin_'+rejoin_why)
+                                outcome=pump.stage_ticket_join(plan) if plan is not None else {'action':'failed'}
+                            except Exception as exc:
+                                outcome={'action':'failed','error':type(exc).__name__}
+                                try:pump._stats['ticket_join_error']=type(exc).__name__
+                                except Exception:pass
+                            try:pump._stats['owner_rejoin_action']=outcome.get('action')
+                            except Exception:pass
+                            if outcome.get('action')=='same_endpoint':
+                                # 此刻已经和主人同房：这不是“失败尝试”，
+                                # 不消耗次数；等服务器单独 Move 后再用一次。
+                                rejoin_attempts=max(0,rejoin_attempts-1)
+                                rejoin_cooldown_until=event_now+5.0
+                            elif outcome.get('action')!='staged':
+                                rejoin_cooldown_until=event_now+15.0
+                        if guarded is not None and guarded is r3_window:
+                            valid=isinstance(rejoin_ticket,dict) and not rejoin_ticket.get('error')
+                            status=outcome.get('action') if valid else 'ticket_miss'
+                            if status=='staged':guarded.staged_origin=plan.origin_endpoint
+                            r3_log('t75_r3_recovery_ticket',action=status if status in
+                                   ('staged','same_endpoint','ticket_miss','other_map','stale','busy') else 'not_staged',
+                                   old_origin=(ep==guarded.old if ep else None),poll=guarded.polls)
+                            if status in ('ticket_miss','same_endpoint','busy'):r3_due(event_now)
+                            elif status!='staged':r3_stop('not_staged')
+                        if t75_observe_arrival and pump._map_id==2394719185:
+                            try:
+                                valid=isinstance(rejoin_ticket,dict) and not rejoin_ticket.get('error')
+                                ep=route.ticket_origin(rejoin_ticket) if valid else None
+                                pump._event('t75_arrival_ticket', map_id=pump._map_id,
+                                    action=outcome.get('action') if valid else 'ticket_miss',
+                                    ticket_level=rejoin_ticket.get('level') if valid else None,
+                                    target=route.endpoint_key(ep), active_origin=route.endpoint_key(pump.active.ticket_origin),
+                                    same_origin=(ep==pump.active.ticket_origin if ep and pump.active.ticket_origin else None))
+                            except Exception:
+                                pass  # 观测失败不能影响原来的好友票处理
+                        t75_observe_arrival=False
+                    result['owner_rejoin_requested']=rejoin_stats['requested']
+                    result['owner_rejoin_ticket_miss']=rejoin_stats['miss']
                 if same_peer_moves is not None and is_current:
                     try:request=same_peer_moves.get_nowait()
                     except __import__('queue').Empty:request=None
@@ -433,6 +785,12 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
                         same_peer_attempt_started=False
                         try:request['report'](detail)
                         except Exception:pass  # telemetry must not tear down an ACKed migration
+                        if rejoin_enabled and rejoin_attempts<rejoin_max:
+                            # 到达目标图先试一次“指名主人”的真实入服。若此刻
+                            # 已同房，好友票会指回当前 endpoint → same_endpoint，
+                            # 不换 peer、不拆手；真正有用的是被单独 Move 之后那次。
+                            rejoin_due=time.monotonic()+2.0
+                            rejoin_why='after_same_peer_arrival'
                 result.update(pump.metrics())
             else:
                 transport.service()
@@ -451,6 +809,46 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
     except ConnectionCancelled:
         update(phase='stopped',reason='已停止本次连接')
     except Exception as exc:
+        # T75 第二轮：异常跳出 pump 后不会再 pop_events，直接交给现有日志回调。
+        # 不读取异常消息、源码行或帧局部变量；未知代码名不外发。
+        try:
+            if (type(exc) is ValueError and on_pump_event is not None and
+                    getattr(pump, '_map_id', None) == 2394719185 and
+                    getattr(pump, '_registration', None) is not None and
+                    getattr(pump, '_t75_r2_pair_registration', None) is pump._registration and
+                    os.environ.get('SKY_T75_DAYHUB_PAIRING', '1') != '0' and
+                    os.environ.get('SKY_T75_R2_DAYHUB_PAIRING', '1') != '0'):
+                def stage_of(slot):
+                    stage = getattr(slot, 'stage', None)
+                    return stage if stage in ('active','registration','connect','enter','retired') else None
+                allowed_files = {'connection0167.py','home_handoff_runtime0167.py',
+                    'current_map_handoff_runtime0167.py','current_map_handoff0167.py','handoff0167.py',
+                    'handshake0167_transport.py','long_transport0167.py','enet.py','receive0167.py',
+                    'map_long0167.py','long0167.py','same_peer_level_update_v31.py','ticket_route0167.py',
+                    't75_dayhub_pairing.py','t75_reject_text.py','join0167_codec.py','register0167_codec.py',
+                    'scene_control0167.py','long_runner.py','asset_pending_join_v32.py'}
+                tb = exc.__traceback__
+                stack = []
+                while tb is not None:
+                    c = tb.tb_frame.f_code
+                    file = c.co_filename.replace(chr(92), '/').rsplit('/', 1)[-1]
+                    known = file in allowed_files
+                    fn = c.co_name
+                    # 原生 <lambda> 等合成名不含自身业务身份，单独映射。
+                    if fn == '<lambda>':
+                        fn = 'lambda'
+                    elif not (fn.isascii() and fn.isidentifier() and len(fn) <= 64):
+                        fn = None
+                    stack.append({'file':file if known else None,
+                                  'function':fn if known else None,'line':tb.tb_lineno})
+                    if len(stack) > 6:
+                        del stack[0]
+                    tb = tb.tb_next
+                on_pump_event({'event':'t75_r2_fault_site','frames':stack,
+                               'active':stage_of(getattr(pump, 'active', None)),
+                               'pending':stage_of(getattr(pump, 'pending', None))})
+        except Exception:
+            pass  # 不得替换原异常、吞掉 close 或改变下面的分类。
         if is_long and os.environ.get('QFLY_DATA_DIR'):
             # Sensitive diagnostic text stays in excluded local runtime storage.
             try:
@@ -476,6 +874,12 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
                 'application receive bounds reached':'receive_bound_reached','datagram count bound reached':'datagram_bound_reached',
                 'application message count bound reached':'message_queue_bound_reached'}
             code=exc.code if isinstance(exc,ConnectionFault) else ('http_rejected' if isinstance(exc,SkyApiError) else 'connection_failed')
+            if code=='connection_failed':update(exception_class=type(exc).__name__[:64])  # claudework：只记类型名，不记内容
+            # T91：本地自定义的纯代码型 ValueError（如 same_peer_counter）不含隐私，记下来便于排查。
+            try:
+                _m=str(exc)
+                if isinstance(exc,ValueError) and __import__('re').fullmatch(r'[a-z0-9_]{3,64}',_m):update(exception_code=_m)
+            except Exception:pass
             if is_long and pump is not None and isinstance(exc,HandoffRuntimeError):code=exc.code
             if isinstance(exc,ProbeTransportError):
                 code=codes.get(str(exc),'transport_protocol_error')
@@ -483,6 +887,13 @@ def run_connection(prepared,duration,cancel,emit,*,same_peer_moves=None):
             if same_peer_attempt_started:code='same_peer_level_update_failed'
             update(phase='failed',error_code=code,reason='连接未通过；请检查会话、缓存或服务响应，不会自动重试')
     finally:
+        if r3_window is not None:r3_stop('segment_end')
+        # T73-R2：停掉取票线程（它只做 HTTP，不持 socket）。
+        if rejoin_worker is not None:
+            try:rejoin_requests.put_nowait(None)
+            except queue.Full:pass
+            try:rejoin_worker.join(timeout=0.5)
+            except Exception:pass
         if pump is not None:
             try:result.update(pump.close())
             except Exception:result['transport_closed']=False

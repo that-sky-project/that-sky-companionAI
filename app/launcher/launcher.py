@@ -42,7 +42,8 @@ def bootstrap(data_dir=None):
     data = Path(data_dir).expanduser().resolve() if data_dir else default_data_dir().resolve()
     os.environ["SKY_AI_ROOT"] = str(APP)
     os.environ["XG_DATA_DIR"] = str(data)
-    os.environ.setdefault("XG_PYTHON", sys.executable)
+    bundled = APP.parent / "runtime/python/python.exe"
+    os.environ.setdefault("XG_PYTHON", str(bundled) if os.name == "nt" and bundled.is_file() else sys.executable)
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     parts = [str(APP), str(APP / "bot"), str(APP / "src")]
@@ -186,4 +187,9 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, OSError, ValueError):
+            pass
     raise SystemExit(main())

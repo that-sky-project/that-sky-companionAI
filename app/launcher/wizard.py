@@ -25,6 +25,7 @@ import xg_account        # noqa: E402
 import xg_exec           # noqa: E402
 import xg_paths          # noqa: E402
 import error_detail      # noqa: E402
+import install_support   # noqa: E402
 from capture import device, gamedata, native_lib  # noqa: E402
 import capture_ctl       # noqa: E402
 import tasks             # noqa: E402
@@ -775,6 +776,7 @@ def summary():
     game_data["props"] = props
     return {"ok": True, "version": WIZARD_VERSION, "steps": rows, "current": current,
             "device": _device_status(),
+            "environmentWarnings": install_support.wizard_warnings(xg_paths.INSTALL_ROOT, xg_paths.DATA),
             "completed": is_complete(rows),
             "completed_at": _wizard().get("completed_at"),
             "account": active_account(), "apk": _apk_path(),
@@ -786,6 +788,7 @@ def summary():
             "task": task.get("task"), "taskRunning": bool(task.get("running")),
             "catalog": certificate, "props": props, "resourceReset": resource_reset_status(),
             "capture": {"state": cap.get("state"), "message": cap.get("message"),
+                        "worker_pid": cap.get("worker_pid"),
                         "scene": cap.get("scene"), "scene_name": cap.get("scene_name"),
                         "recorded": cap.get("recorded") or [], "stale": cap.get("stale") or [],
                         "stale_notice": cap.get("stale_notice") or "",
@@ -796,6 +799,9 @@ def summary():
                         "last_registered_stale": cap.get("last_registered_stale"),
                         "mumu": cap.get("mumu") or {},
                         "last_error": cap.get("last_error") or "",
+                        "last_error_code": cap.get("last_error_code") or "",
+                        "last_error_detail": cap.get("last_error_detail"),
+                        "last_record_dir": cap.get("last_record_dir") or "",
                         "catalog": cap.get("catalog") or {}},
             "autostart": _autostart_status()}
 
@@ -811,7 +817,7 @@ def _autostart_status():
 # ------------------------------------------------------------------ 第 2 步
 def check_mumu(adb_path=None):
     r = device.check_device(adb_path)
-    if adb_path and r.get("adb"):
+    if adb_path and r.get("adb") and r.get("reason", r.get("code")) != "adb_path_invalid":
         cfg = _cfg()
         cfg.setdefault("capture", {})["adb"] = str(adb_path)
         if r.get("mumu_dir"):
@@ -819,10 +825,14 @@ def check_mumu(adb_path=None):
         xg_paths.save_config(cfg)
     if r.get("ok"):
         mark("mumu", True, detail={k: r.get(k) for k in
-                                   ("adb", "mumu_dir", "serial", "pid", "root", "version_code", "scene")},
+                                   ("adb", "mumu_dir", "serial", "pid", "root", "version_code", "scene",
+                                    "android_version", "android_label")},
              message=r.get("message", ""))
         cfg = _cfg()
-        cfg.setdefault("capture", {}).update({"adb": r.get("adb"), "serial": r.get("serial")})
+        # Keep only explicit overrides. Saving an auto-discovered bridge serial
+        # or adb path would outrank fresh manager data after DHCP or an upgrade.
+        if r.get("mumu_dir"):
+            cfg.setdefault("capture", {})["mumu_dir"] = r["mumu_dir"]
         xg_paths.save_config(cfg)
     return r
 
@@ -832,12 +842,16 @@ def pull_apk():
     adb, mumu = device.find_adb()
     if not adb:
         return {"ok": False, "message": "没找到 MuMu/adb：先做第 2 步，或手填 adb.exe 路径"}
-    game = device.find_game(adb)
+    diagnostics = {}
+    game = device.find_game(adb, mumu_dir=mumu, diagnostics=diagnostics)
+    android = {k: diagnostics[k] for k in ("android_version", "android_label") if diagnostics.get(k)}
     if not game:
-        return {"ok": False, "message": "没找到正在跑光遇的 MuMu：先打开游戏、登进遇境"}
+        return {"ok": False, "code": diagnostics.get("reason") or "game_missing",
+                "message": diagnostics.get("message") or "请在 MuMu 前台打开光遇，进入遇境后重新拉取。",
+                **android}
     plan = tasks.command_for("pull-apk", adb=str(adb), serial=game["serial"])
     out = tasks.start("pull-apk", plan, label="从 MuMu 拉游戏安装包",
-                      meta={"adb": str(adb), "serial": game["serial"]})
+                      meta={"adb": str(adb), "serial": game["serial"], **android})
     if out.get("ok"):
         w = _wizard()
         w.setdefault("apk", {})["from"] = "mumu"
@@ -848,13 +862,15 @@ def pull_apk():
 def _version_ok(final):
     code = final.get("version_code") or final.get("versionCode") or final.get("build")
     ver = final.get("version") or final.get("app_version") or ""
-    from qfsky.version_profile import profile_for_version, CURRENT_BUILD
-    profile = profile_for_version(code) or profile_for_version(ver)
+    from qfsky.version_profile import CURRENT_BUILD, profile_for_build, profile_for_version
+    profile = _profile_candidate(code) if code is not None else profile_for_version(ver)
+    supported = profile_for_build(CURRENT_BUILD) or {}
+    expected = f"{supported.get('version', '当前版本')} / {CURRENT_BUILD}"
     if profile is None:
-        return False, f"版本不对：装的是 {code or ver or '未知'}，小光只适配 0.16.8 / 421629"
+        return False, f"不支持这个安装包版本：{code or ver or '未知'}。请换成网易国服 {expected} 安装包后重新校验。"
     if profile["legacy"]:
-        return False, (f"识别为旧版 {profile['version']} / {profile['version']}；"
-                       "0.16.7 只保留识别，不再用于生成数据，请升级到 0.16.8 / 421629")
+        return False, (f"识别为旧版 {profile['version']} / {profile.get('build', code)}，"
+                       f"不能用于生成当前资源。请升级到网易国服 {expected} 后重新校验。")
     return True, ""
 
 
@@ -868,7 +884,7 @@ def check_apk(path):
     r = gamedata.run(["check-apk", "--apk", str(p)], timeout=1800)
     final = r.get("final") or {}
     if not r.get("ok"):
-        return {"ok": False, "message": final.get("message") or final.get("error") or "APK 校验没通过",
+        return {"ok": False, "message": final.get("message") or final.get("error") or "APK 校验没通过，请换完整安装包后重试。",
                 **{key: final[key] for key in ("code", "members", "difference_count", "stage", "child_code")
                    if key in final}}
     okv, why = _version_ok(final)
@@ -881,7 +897,9 @@ def check_apk(path):
         try:
             native = native_lib.ensure_native_library(apk_final)
         except Exception as exc:
-            return {"ok": False, "message": str(exc), "detail": final}
+            problem = install_support.problem(exc)
+            return {"ok": False, "message": problem["message"] if problem else str(exc),
+                    "code": problem["code"] if problem else "native_library", "detail": final}
     cfg = _cfg()
     cfg.setdefault("capture", {})["apk"] = str(apk_final)
     cfg.setdefault("gamedata", {})["apk"] = str(apk_final)

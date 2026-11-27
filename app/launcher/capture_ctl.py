@@ -16,6 +16,7 @@ for _p in (str(APP), str(APP / "bot")):
 import xg_paths   # noqa: E402
 import xg_proc    # noqa: E402
 import error_detail  # noqa: E402
+import install_support  # noqa: E402
 
 
 def _status_path():
@@ -35,7 +36,8 @@ def status():
             doc["worker_pid"] = None
             if doc.get("state") not in (None, "stopped"):
                 doc["state"] = "stopped"
-                doc["message"] = "录图进程已经不在了（可能被关掉或出错退出）。"
+                if not doc.get("last_error_code"):
+                    doc["message"] = "录图进程已退出。请检查本机日志或点“开始录图”重试。"
     if not doc:
         doc = {"state": "idle", "message": "还没开始录图。", "worker_pid": None,
                "recorded": [], "catalog": {"needed": False}}
@@ -63,10 +65,14 @@ def start():
     env.update({"PYTHONPATH": os.pathsep.join(parts), "PYTHONUTF8": "1",
                 "PYTHONIOENCODING": "utf-8", "SKY_AI_ROOT": str(xg_paths.ROOT),
                 "XG_DATA_DIR": str(xg_paths.DATA)})
-    proc, ident = xg_proc.spawn_detached(
-        [xg_paths.python_exe(), "-B", "-m", "capture.worker"],
-        cwd=xg_paths.APP, stdout=xg_paths.LOGS / "capture.out",
-        stderr=xg_paths.LOGS / "capture.out", env=env)
+    try:
+        proc, ident = xg_proc.spawn_detached(
+            [xg_paths.python_exe(), "-B", "-m", "capture.worker"],
+            cwd=xg_paths.APP, stdout=xg_paths.LOGS / "capture.out",
+            stderr=xg_paths.LOGS / "capture.out", env=env)
+    except (OSError, MemoryError) as exc:
+        issue = install_support.problem(exc, default="本机录图工具未启动。请核对随包 Python 和安全软件拦截记录，再重试。")
+        return {"ok": False, **issue, "error_detail": error_detail.describe(exc, code=issue["code"])}
     # 给 worker 一点时间写第一份状态
     end = time.monotonic() + 5
     doc = {}
@@ -83,17 +89,20 @@ def start():
             detail = (xg_paths.LOGS / "capture.out").read_text(encoding="utf-8", errors="replace")[-400:]
         except OSError:
             pass
+        issue = install_support.problem(detail)
+        code = (issue or {}).get("code", "worker_start")
+        message = (issue or {}).get("message", "录图进程未启动。请确认完整解压，查看本机 capture.out 后重试。")
         failed = dict(doc or {})
-        failed.update(state="error", message="录图进程没起来", last_error="录图进程没起来",
-                      last_error_code="worker_start",
+        failed.update(state="error", message=message, last_error=message,
+                      last_error_code=code,
                       last_error_detail=error_detail.describe(
-                          None, code="worker_start",
+                          None, code=code,
                           text=detail or "capture.worker exited before writing status"))
         try:
             xg_paths.write_json(xg_paths.CAPTURE_STATUS, failed, private_file=False)
         except OSError:
             pass
-        return {"ok": False, "message": "录图进程没起来", "detail": detail, "pid": proc.pid,
+        return {"ok": False, "message": message, "code": code, "pid": proc.pid,
                 "status": failed}
     return {"ok": True, "pid": proc.pid, "identity": ident, "status": doc}
 

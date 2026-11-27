@@ -151,6 +151,7 @@ class RoomTracker:
         self.room_generation = 0
         self.ready = False
         self._engine = None
+        self.closed_map_id = None   # 2026-11-19：同一段连接里旧 engine 关闭时的图（服务器同图挪房间用）
         self._terrain_slots = set()  # 地图元数据只限制地形采样，不删除同房身份/跟随位置
         self.position_observed = {}  # slot -> (Unix seconds, monotonic seconds)
         self._room_actor_presence_v20 = {}  # RAM-only, current private receiver + occupant binding
@@ -177,6 +178,7 @@ class RoomTracker:
             getattr(self, name).clear()
         self.releases.clear()
         self.level_changes.clear()
+        self.level_owner = None                 # T70-10
         self.social_events.clear()
         self._attachment_events.clear()
         self._attachment_wire_seqs.clear()
@@ -190,6 +192,7 @@ class RoomTracker:
             self._clear_room_locked()
             self.pending_map_id, self.epoch, self.ready = map_id, None, False
             self._engine = None
+            self.closed_map_id = None
             LAST_EPOCH = None
 
     def end_segment(self):
@@ -197,6 +200,7 @@ class RoomTracker:
         with self.lock:
             self.ready, self.epoch, self.pending_map_id = False, None, None
             self._engine = None
+            self.closed_map_id = None
             self._clear_room_locked()
             LAST_EPOCH = None
 
@@ -206,6 +210,7 @@ class RoomTracker:
         with self.lock:
             if engine is not self._engine:
                 return False
+            self.closed_map_id = self.confirmed_map_id if self.ready else None
             self._engine, self.ready, self.epoch = None, False, None
             self._clear_room_locked()
             LAST_EPOCH = None
@@ -235,6 +240,30 @@ class RoomTracker:
             # Roster updates come only after the engine accepts the whole message.
             if m.message_type == 14 and len(body) >= 4 and body[:1] == b"\x02":
                 self._rpcs(body)
+            elif m.message_type == 14 and len(body) >= 6 and body[:1] in (b"\x08", b"\x09"):
+                self._level_role(body)          # T70-10：房主选举/撤销
+
+    def _level_role(self, body):
+        """T70-10：记下关卡数据所有者（房主）的玩家编号。解析失败静默忽略。"""
+        owner = None
+        try:
+            if body[0] == 9:
+                owner = body[3]
+            else:
+                from qfsky.long0167.level_authority import SnapshotReceiveState
+                data = SnapshotReceiveState().accept(body[3:]).data
+                if data:
+                    owner = data[0]
+        except Exception:
+            return
+        if owner is None:
+            return
+        with self.lock:
+            if not self.ready or body[1] != self.epoch:
+                return
+            self.level_owner = {"slot": owner, "kind": "elect" if body[0] == 8 else "revoke",
+                                "mono": time.monotonic(), "at": time.time(),
+                                "generation": self.room_generation}
 
     RELEASE_KEYS = {0x5BCC196F: "hold", 0x32D2F05A: "carry"}   # AvatarDetachFollowerNetRpc / DisconnectCarriedRpc
     CHANGE_LEVEL = 0x4D84A062                                   # ChangeLevelWithFadeRpc
@@ -260,6 +289,14 @@ class RoomTracker:
                             return
                         self.level_changes.append((time.monotonic(), body[off + 7], scene.decode()))
                         del self.level_changes[:-20]
+                    try:   # T72：记下原生换图消息原文（看两个尾字段怎么填）
+                        if not _os.environ.get("XG_RESEARCH_LOG"): raise OSError("research log off")
+                        with open(_os.path.join(str(CONTROL_DIR), "change_level_seen.log"), "a", encoding="utf-8") as _fh:
+                            _fh.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "from": body[off + 7],
+                                                  "scene": scene.decode(errors="replace"),
+                                                  "body": bytes(body[off + 7:off + 7 + size]).hex()}) + "\n")
+                    except Exception:
+                        pass
             if kind and size >= 2:
                 with self.lock:
                     if (not self.ready or room_generation != self.room_generation
@@ -709,13 +746,13 @@ class RoomTracker:
         if not (ctl / "record_owner").exists():
             return
         try:
-            owner = (ctl / "owner_uuid").read_text().strip()
+            owner = (ctl / "owner_uuid").read_text(encoding="utf-8").strip()
         except OSError:
             return
         if self.slots.get(slot) != owner:
             return
         f = ctl / "owner_actor.jsonl"
-        with f.open("a") as out:
+        with f.open("a", encoding="utf-8") as out:
             out.write(json.dumps({"t": round(now, 2), "hex": body.hex()}) + "\n")
 
     def ground_y(self, x, z):
@@ -789,7 +826,19 @@ class RoomTracker:
                     target = status["value"].get("social", {}).get("candle_target_slot")
                     if target:
                         candles[key] = hex(target)
+            lo, level_owner = getattr(self, "level_owner", None), None
+            if lo is not None and lo.get("generation") == self.room_generation:
+                try:
+                    own = self._own_social_binding_locked()
+                except Exception:
+                    own = None
+                level_owner = {"slot": hex(lo["slot"]) if lo["slot"] else None,
+                               "uuid": self.slots.get(lo["slot"]) if lo["slot"] else None,
+                               "is_me": bool(lo["slot"] and own is not None and lo["slot"] == own),
+                               "own_slot": hex(own) if own else None, "kind": lo["kind"],
+                               "age_seconds": round(now_mono - lo["mono"], 1)}
             return {"map_id": self.confirmed_map_id, "pending_map_id": self.pending_map_id,
+                    "level_owner": level_owner,
                     "room_generation": self.room_generation, "connected": self.ready,
                     "generated_at": generated_at, "status_schema_version": ROOM_STATUS_SCHEMA,
                     "status_max_age_seconds": PLAYER_STATUS_MAX_AGE,
@@ -1654,7 +1703,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             if follow.get('target'):
                 prefer.append(slot_of(follow['target']))
             try:
-                owner = (Path(self.path).parent / 'owner_uuid').read_text().strip()
+                owner = (Path(self.path).parent / 'owner_uuid').read_text(encoding="utf-8").strip()
             except OSError:
                 owner = None
             if owner:
@@ -1735,6 +1784,39 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                  placement_wire_y=None if wire is None else round(wire, 3),
                  seed_source=self._seed_source, seed_origin=self._seed_origin(),
                  override_origin=self._override_origin())
+        return True
+
+    def _spawn_y_fix(self, why):
+        """T70-11：control/spawn_y_fix.json = {map_id: {"wire": 目录高度, "delta": 真实地面-目录}}（离线由静态地形算）。
+        仍站在目录出生点时立即把高度改到真实地面，不等地形 worker（大图要几十秒）。只往上抬 0.03~0.5 m（往下的大差值多是查到下层地形，不信）。"""
+        path = Path(self.path).parent / "spawn_y_fix.json"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return False
+        cache = getattr(self, "_spawn_fix_cache", None)
+        if cache is None or cache[0] != mtime:
+            cache = (mtime, json.loads(path.read_text(encoding="utf-8")))
+            self._spawn_fix_cache = cache
+        row = cache[1].get(str(getattr(self, "map_id", None)))
+        if not isinstance(row, dict):
+            return False
+        wire, delta = row.get("wire"), row.get("delta")
+        if not isinstance(wire, (int, float)) or not isinstance(delta, (int, float)):
+            return False
+        x, y, z = self.home
+        if abs(y - wire) > 0.05 or not (0.03 <= delta <= 0.5):
+            return False
+        new_y = wire + delta
+        self.home = (x, new_y, z)
+        self.seed = anim_pose.write_origin(self.seed, self.home)
+        self.base = anim_pose.write_origin(self.base, self.home)
+        self.position = self.home
+        self._terrain_last_position = self.position
+        if not (self.holding or self.social):
+            self._set_override(self.base)
+        self.log("spawn_y_fix", why=why, map_id=getattr(self, "map_id", None),
+                 y_before=round(y, 3), y_after=round(new_y, 3))
         return True
 
     def _reground_position(self, why="social_end"):
@@ -1942,7 +2024,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
         """在线换站姿：改种子和当前底板里装扮块的站姿值，马上开始发。"""
         if not 0 <= value <= 14:
             return
-        (CONTROL_DIR / "attitude").write_text(str(value))
+        (CONTROL_DIR / "attitude").write_text(str(value), encoding="utf-8")
         old_seed = self.seed
         self.seed = with_attitude(old_seed)
         if self.base is old_seed or self.base == old_seed:
@@ -1978,7 +2060,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             self.log("voice_skipped", value=value, reason="not_owned")
             return False
         try:
-            (CONTROL_DIR / "voice").write_text(str(value))
+            (CONTROL_DIR / "voice").write_text(str(value), encoding="utf-8")
         except OSError:
             pass
         old_seed = self.seed
@@ -2424,12 +2506,32 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                  seed_origin=self._seed_origin(), **probe, **self._landing_diag())
         return True
 
+    def _spawn_y_fix(self, why):
+        """只对仍在目录出生点的本地位姿向上微调；不依赖采集数据。"""
+        x, y, z = self.home
+        new_y = xg_paths.corrected_spawn_y(self.map_id, y)
+        if new_y == y:
+            return False
+        home = (x, new_y, z)
+        try:
+            seed = anim_pose.write_origin(self.seed, home)
+            base = anim_pose.write_origin(self.base, home)
+        except (TypeError, ValueError, IndexError, struct.error):
+            # 首次安装或部分图缺本地姿态素材，沿用原位置，不写半套状态。
+            return False
+        self.seed, self.base = seed, base
+        self.home = self.position = self._terrain_last_position = home
+        if not (self.holding or self.social):
+            self._set_override(base)
+        self.log("spawn_y_fix", why=why, map_id=self.map_id)
+        return True
+
     def _arrival_snap_tick(self):
         """换图后“到达贴身”：等到带路人在新房间的新鲜位置，就把落单的小光挪到他身边（每次换图一次）。"""
         return arrival_snap.tick(self)
 
     def _hold_attach(self, soc, now, pos, heading, body, posed):
-        """牵手：站到带路方右侧、同朝向；按带路方的位移估速度，在动就播走路（同 walk 的写法）。"""
+        """牵手：保持初次贴近的一侧、同朝向；按带路方的位移估速度，在动就播走路（同 walk 的写法）。"""
         o = self.tracker.origins.get(soc["slot"])
         if o is None:
             return pos, heading, body, posed
@@ -2437,7 +2539,18 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
         h = anim_pose.yaw_heading(yaw) if yaw is not None else (heading or 0.0)
         import math
         r = math.radians(h)
-        x, z = o[0] + math.cos(r) * HOLD_DISTANCE, o[2] - math.sin(r) * HOLD_DISTANCE
+        # 2026-11-20 T70-12/13：右侧单位向量 = (-cos, +sin)（主人实测：旧的 (+cos,-sin) 是左侧）。
+        # 游戏按接受时被牵方在哪一侧决定牵哪只手，所以第一次贴身时按小光当时的位置定左右，整段牵手不变；
+        # 否则松手后主人那边会从手边滑到另一侧。
+        side = soc.get("hold_side")
+        if side not in (1, -1):
+            px, pz = pos[0] - o[0], pos[2] - o[2]
+            side = 1 if (px * -math.cos(r) + pz * math.sin(r)) >= 0 else -1
+            soc["hold_side"] = side
+            self.log("hold_side", side=("right" if side == 1 else "left"), heading=round(h, 1),
+                     rel=[round(px, 2), round(pz, 2)])
+        x = o[0] - side * math.cos(r) * HOLD_DISTANCE
+        z = o[2] + side * math.sin(r) * HOLD_DISTANCE
         # 他脚下就是真实地面：优先查当前场景地形；查不到再用他的 y。都不加站立偏移。
         g = self.terrain_ground(x, z, o[1])
         if g is None and not self._grounded and self._placement_wire_y is not None:
@@ -2665,6 +2778,11 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                 except Exception:
                     pass
                 self._terrain_owned = False
+        try:
+            if not named and not self._grounded and tuple(self.position) == tuple(self.home):
+                self._spawn_y_fix(why)
+        except Exception as exc:
+            self.log("spawn_y_fix_failed", error=str(exc)[:120])
         self.log("pose_reset", why=why, map_id=self.map_id, variant=self.variant,
                  seed_source=self._seed_source, seed_origin=self._seed_origin(),
                  home=[round(v, 3) for v in self.home],
@@ -4221,7 +4339,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             return
         f = Path(self.path).parent / f"walk_{map_id}.json"
         try:
-            d = json.loads(f.read_text())
+            d = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             d = {"map_id": map_id, "cell": HEIGHT_CELL, "points": []}
         layers = {}
@@ -4238,7 +4356,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                     hit[1] += 1
         d["points"] = [[k[0] * HEIGHT_CELL, y, k[1] * HEIGHT_CELL, c] for k, ls in sorted(layers.items()) for y, c in ls]
         tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(d))
+        tmp.write_text(json.dumps(d), encoding="utf-8")
         tmp.replace(f)
 
     # ------------------------------------------------------------------ #
@@ -4915,7 +5033,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             return self._air_cfg
         self._air_cfg_at = now
         try:
-            doc = json.loads((Path(self.path).parent / AIR_CONTROL_FILE).read_text())
+            doc = json.loads((Path(self.path).parent / AIR_CONTROL_FILE).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             doc = None
         self._air_cfg = doc if isinstance(doc, dict) else None
@@ -5046,7 +5164,8 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             self._air_cancel("disabled", now)
             return True
         if (self.social is not None or self.sitting is not None or self.holding
-                or self.candle is not None or self._active_running()):
+                or self.candle is not None or self._active_running()) and not (
+                air.plan.get("tour_flight") and self._tour_leading_hold()):
             self._air_cancel("social", now)
             return True
         if air.plan.get("stuck_recovery"):
@@ -5056,6 +5175,8 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                 if flight is not None:
                     flight["resume_cancelled"] = True
             return True  # 固定就近落点；不追着跟随目标改航，也不要求 seat/explore 有 follow。
+        if air.plan.get("tour_flight"):
+            return True  # T70 巡游：飞向固定路点，不需要 follow。
         follow = self.follow or {}
         if not follow:
             self._air_cancel("no_follow", now)
@@ -5138,7 +5259,7 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
     def _air_start(self, plan, now, *, _commit_guard=None):
         """Create AirMotion from a planner result and take movement ownership."""
         self._once_before_motion('air')
-        if not prop_motion_guard.covers(getattr(self, "_terrain_adapter", None), plan):
+        if not plan.get("tour_forced") and not prop_motion_guard.covers(getattr(self, "_terrain_adapter", None), plan):
             self._air_log_plan(now, kind="none", reason="props_path_coverage_missing")
             return False
         # T23-4：AirMotion 和旧 hop 不能同时驱动。这里先 hard-cancel hop 再接管；
@@ -5187,6 +5308,144 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
                  cruise=None if plan.get("cruise_height") is None else round(plan["cruise_height"], 2),
                  seconds=round(motion.seconds, 2), phases=len(plan.get("phases") or ()))
         return True
+
+    def _tour_chain_tick(self, air, now):
+        """T70-3：巡航中离本段落点 ≤TOUR_CHAIN_M 且终点还远：用 plan_from_air 在空中接下一段。"""
+        goal = air.plan.get("tour_goal")
+        land = air.plan.get("landing")
+        if goal is None or land is None or getattr(air, "_tour_chained", False):
+            return
+        if now < getattr(air, "_tour_chain_next", 0.0):
+            return
+        try:
+            if air.phase(now) != "cruise":
+                return
+            pos = tuple(air.pos(now))
+        except Exception:
+            return
+        import math as _m
+        if _m.hypot(land[0] - goal[0], land[2] - goal[2]) <= 2.0:
+            return                                   # 这一段已经落到终点边上
+        if _m.hypot(pos[0] - land[0], pos[2] - land[2]) > TOUR_CHAIN_M:
+            return
+        air._tour_chain_next = now + 0.3             # 接不上就 0.3 s 后再试，直到开始下降
+        terrain = self._air_terrain()
+        if terrain is None:
+            return
+        new = None
+        for nxt, follow in _tour_tries(pos, goal):
+            new = air_planner.plan_from_air(terrain, pos, nxt, follow)
+            if new is not None:
+                break
+        if new is None:
+            # T70-4：空中接不上就直接强制飞到终点（不落地）
+            new = self._tour_forced_plan(terrain, pos, goal, airborne=True)
+            if new is not None:
+                self.log("tour_fly_forced", reason="chain_failed", cruise=round(new["cruise_height"], 1))
+        if new is None:
+            if not getattr(air, "_tour_chain_logged", False):
+                air._tour_chain_logged = True
+                self.log("tour_fly_chain_retry", at=[round(v, 2) for v in pos])
+            return
+        air._tour_chained = True
+        new["tour_flight"] = True
+        new["tour_goal"] = goal
+        self._air_log_plan(now, src="tour_chain", **air_planner.describe(new))
+        if self._air_start(new, now):
+            self.log("tour_fly_chain", at=[round(v, 2) for v in pos],
+                     landing=[round(v, 2) for v in new.get("landing", ())])
+
+    def _tour_forced_plan(self, terrain, start, goal, airborne=False):
+        """T70-6 直线直飞（主人：直接飞向蜡烛位置）：地面起飞先抬 1 m，直线飞到蜡烛上方 0.4 m，落下。
+        不做碰撞校验、不按地形爬高。落点高度用地面层查到的蜡烛脚下（查不到就用蜡烛坐标）。"""
+        import math as _m
+        try:
+            start = tuple(float(v) for v in start)
+            gx, gy, gz = (float(v) for v in goal)
+            g = self.terrain_ground(gx, gz, gy)
+            landing = (gx, g if g is not None and abs(g - gy) <= 3.0 else gy, gz)
+            p1 = start if airborne else (start[0], start[1] + 1.0, start[2])
+            p2 = (landing[0], landing[1] + 0.4, landing[2])
+            d = _m.dist(p1, p2)
+            phases = []
+            if not airborne:
+                phases.append({"phase": "climb", "mode": "linear", "duration": 0.35, "from": start, "to": p1})
+            phases.append({"phase": "cruise", "mode": "linear", "duration": max(0.3, d / TOUR_FLY_SPEED),
+                           "from": p1, "to": p2})
+            phases.append({"phase": "land", "mode": "linear", "duration": 0.3, "from": p2, "to": landing})
+            return {"kind": "fly", "reason": "tour_forced", "start": start, "target": tuple(goal),
+                    "goal": landing, "takeoff": start, "landing": landing,
+                    "cruise_height": float(max(p1[1], p2[1])), "walk_distance": 0.0,
+                    "flight_distance": float(_m.hypot(gx - start[0], gz - start[2])), "takeoff_tries": 0,
+                    "phases": phases, "waypoints": air_planner._waypoints(phases),
+                    "airborne_start": bool(airborne), "tour_forced": True}
+        except Exception as exc:
+            self.log("tour_fly_forced_failed", error=repr(exc)[:120])
+            return None
+
+    def _tour_leading_hold(self):
+        """小光自己领路牵着别人（active_offer 已接受的 hold），且没有别的社交/坐/举烛。"""
+        active = getattr(self, "_active_offer", None)
+        return bool(self.social is None and self.sitting is None and not self.holding
+                    and self.candle is None and active and active.get("phase") == "accepted"
+                    and active.get("accepted_profile") == "hold")
+
+    def _tour_fly_to(self, cmd):
+        """T70-5 巡游：直接飞到蜡烛/花脚下（主人定：卡住也别管、中间不落地、到了才停）。
+        只用 _tour_forced_plan（沿途查十几次地面高度），不调用耗时的规划器；在空中收到新目标就从空中改航。"""
+        x, y, z = (float(v) for v in cmd["to"])
+        goal = (x, y, z)
+        now = time.monotonic()
+        why = None
+        airborne = getattr(self, "_air_motion", None) is not None and self.motion is self._air_motion
+        if air_planner is None or air_motion is None:
+            why = "no_air_modules"
+        elif airborne and not self._air_motion.plan.get("tour_flight"):
+            why = "already_airborne"
+        else:
+            if not airborne:
+                why = self._air_block_reason(now)
+                if why == "social" and self._tour_leading_hold():
+                    why = None                  # T70-2：小光领着主人的手，可以牵着飞
+            clips = self._air_clips() if why is None else None
+            terrain = self._air_terrain() if why is None else None
+            if why is None and (clips is None or not clips.ok):
+                why = "no_clips"
+            elif why is None and terrain is None:
+                why = "no_terrain"
+            if why is None:
+                if airborne:
+                    air = self._air_motion
+                    if tuple(air.plan.get("tour_goal") or ()) == goal:
+                        return                  # 同一个目标还在飞：不打断
+                    start, from_air = tuple(air.pos(now)), True
+                else:
+                    start, from_air = tuple(self.position), False
+                t0 = time.monotonic()
+                plan = self._tour_forced_plan(terrain, start, goal, airborne=from_air)
+                ms = round((time.monotonic() - t0) * 1000, 1)
+                if plan is not None:
+                    plan["tour_flight"] = True
+                    plan["tour_goal"] = goal
+                    if self._air_start(plan, now):
+                        self.state = {"pose": "walk", "tour": "fly"}
+                        self.log("tour_fly", to=[round(v, 2) for v in goal], from_air=from_air,
+                                 cruise=round(plan["cruise_height"], 1),
+                                 seconds=round(getattr(getattr(self, "_air_motion", None), "seconds", 0.0) or 0.0, 1),
+                                 plan_ms=ms)
+                        return
+                    why = "air_start_refused"
+                else:
+                    why = "forced_plan_failed"
+        self.log("tour_fly_fallback_walk", reason=str(why)[:60], to=[round(x, 2), round(y, 2), round(z, 2)])
+        if airborne:
+            return                              # 别的航班（非巡游）在飞：不打断
+        g = self.terrain_ground(x, z, y)
+        if g is not None:
+            y = g
+        self.walk_to((x, y, z), "point")
+        if self.motion is not None:
+            self.state = {"pose": "walk", "tour": "walk"}
 
     def _air_maybe(self, spot, who, distance, now):
         """Ask the planner; start an AirMotion when it says jump/drop/fly."""
@@ -6250,7 +6509,8 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
         active = getattr(self, "_active_offer", None)
         if self._active_running() and not (active["phase"] == "accepted" and
                 active.get("accepted_profile") in ("hold", "carrier") and
-                pose in ("walk", "explore", "face", "attitude", "anim")):
+                (pose in ("walk", "explore", "face", "attitude", "anim")
+                 or (cmd.get("src") == "tour" and pose in ("fly_to", "stop")))):
             self._active_end("other_command")
         if pose not in ("anim", "explore"):
             self.route = []                            # 别的命令打断正在走的路线
@@ -6378,6 +6638,8 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             return self._set_outfit(cmd.get("outfit") or {}, cmd.get("changes"))
         elif cmd.get("pose") == "explore":
             return self._explore(cmd.get("toward"))
+        elif cmd.get("pose") == "fly_to":
+            return self._tour_fly_to(cmd)
         elif cmd.get("pose") == "walk":
             if "to" in cmd:
                 x, y, z = (float(v) for v in cmd["to"])
@@ -6424,6 +6686,13 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
             except Exception:
                 seats_here = 0
             room = self.tracker.snapshot()
+        lo = room.get("level_owner") if isinstance(room, dict) else None
+        key = (room.get("map_id") if isinstance(room, dict) else None,
+               lo and lo.get("slot"), lo and lo.get("is_me"))
+        if lo and key != getattr(self, "_level_owner_logged", None):
+            self._level_owner_logged = key
+            self.log("level_owner", map_id=key[0], slot=lo.get("slot"), is_me=lo.get("is_me"),
+                     own_slot=lo.get("own_slot"), kind=lo.get("kind"))
         state = dict(self.state, room=room, offers=self.tracker.offers_to_me(), seats_here=seats_here,
                      ts=time.strftime("%H:%M:%S"), generated_at=room["generated_at"])
         if home_seat_status is not None:
@@ -6452,6 +6721,33 @@ class PoseController(SeatTiltControllerMixin, threading.Thread):
         if getattr(self, "_active_result", None) is not None:
             with self._active_lock:
                 state["active_offer_result"] = dict(self._active_result)
+        try:
+            here = getattr(self, "_terrain_last_position", None) or self.position
+            air = getattr(self, "_air_motion", None)
+            state["self"] = {"position": [round(float(v), 3) for v in tuple(here)[:3]],
+                             "moving": self.motion is not None,
+                             "flying": air is not None and self.motion is air}
+            led, tr, now_m = [], self.tracker, time.monotonic()
+            state["self"]["led_by_me"] = led
+        except Exception:
+            pass
+        try:
+            led, tr, now_m = [], self.tracker, time.monotonic()
+            with tr.lock:
+                own = tr._own_social_binding_locked()
+                latest = {}
+                for e in tr._attachment_events:
+                    if (e.get("room_generation") == tr.room_generation
+                            and 0 <= now_m - e.get("observed_mono", -1e9) <= 2.0
+                            and (e["slot"] not in latest or e["sample_seq"] > latest[e["slot"]]["sample_seq"])):
+                        latest[e["slot"]] = e
+            for e in latest.values():
+                v = e.get("value") if isinstance(e.get("value"), dict) else {}
+                if own is not None and v.get("leader_slot") == own and v.get("hold_state") in (0, 1):
+                    led.append(e.get("uuid"))
+            state["self"]["led_by_me"] = led
+        except Exception:
+            pass
         tmp = self.path.with_suffix(".state.tmp")
         tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(self.path.with_suffix(".state.json"))
@@ -6471,6 +6767,40 @@ class _LazyWalkMap:
 
 
 _SmoothWalkMap = _LazyWalkMap()
+
+
+TOUR_FLY_SPEED = 8.0                        # T70-7：巡游直飞速度 m/s（原 6.5，主人觉得比拍翼慢）
+TOUR_LEG_TRIES = (24.0, 36.0, 14.0, 8.0)   # T70-3：巡游每段航线依次尝试的水平距离
+TOUR_CHAIN_M = 12.0                         # 离本段落点 12 m 内开始在空中接下一段（巡航阶段反复试）
+
+
+def _tour_tries(start, goal):
+    """依次尝试的 (航段目标, 落点偏移)：终点在够得着的距离内就直接落在蜡烛/花脚下（偏移 0），
+    站不住再偏 1.2 m、2.2 m；终点还远就按 24/36/14/8 m 取中间点（中间点只是航段，空中会接力）。"""
+    import math as _m
+    d = _m.hypot(goal[0] - start[0], goal[2] - start[2])
+    tries = []
+    for leg in TOUR_LEG_TRIES:
+        if d <= leg:
+            g = tuple(float(v) for v in goal)
+            tries += [(g, 0.0), (g, 1.2), (g, 2.2)]
+            break
+        tries.append((_tour_leg_point(start, goal, leg), 1.2))
+    if d > TOUR_LEG_TRIES[-1]:
+        tries += [(_tour_leg_point(start, goal, leg), 1.2) for leg in TOUR_LEG_TRIES if leg < d
+                  and (_tour_leg_point(start, goal, leg), 1.2) not in tries]
+    return tries
+
+
+def _tour_leg_point(start, goal, leg):
+    """从 start 朝 goal 走 leg 米（水平），高度按比例插值；不够远就是 goal 本身。"""
+    import math as _m
+    d = _m.hypot(goal[0] - start[0], goal[2] - start[2])
+    if d <= leg:
+        return tuple(float(v) for v in goal)
+    f = leg / d
+    return (start[0] + (goal[0] - start[0]) * f, start[1] + (goal[1] - start[1]) * f,
+            start[2] + (goal[2] - start[2]) * f)
 
 
 OUTFIT_GROUP = "0x21df444|1"         # Actor 装扮块（同服务器 get_outfit：各部位，再 height scale voice attitude refreshVersion seed）
@@ -6703,7 +7033,7 @@ def _patch_counter(body, n):
 def with_attitude(seed):
     """control/attitude 有数字（0~14）就把 Actor 装扮块里的站姿改成它，外观变了计数 +1。"""
     try:
-        v = int((CONTROL_DIR / "attitude").read_text().strip())
+        v = int((CONTROL_DIR / "attitude").read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return seed
     if not 0 <= v <= 14:
@@ -6738,7 +7068,7 @@ def _owned_voice_ids():
 def _control_voice():
     """control/voice 里的叫声编号（0~15，且在已拥有名单里）；没有/非法返回 None。"""
     try:
-        v = int((CONTROL_DIR / "voice").read_text().strip())
+        v = int((CONTROL_DIR / "voice").read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return None
     return v if 0 <= v <= 15 and v in _owned_voice_ids() else None
@@ -6758,7 +7088,7 @@ def with_appearance(seed):
     如果 control/outfit_slots.json 记录了显式改过的部位，只写这些部位（允许 0 = 脱掉）；
     没有记录时才退回“只写非 0 id”，避免把服务器 0 覆盖掉 Actor 里的默认件。"""
     try:
-        v = int((CONTROL_DIR / "attitude").read_text().strip())
+        v = int((CONTROL_DIR / "attitude").read_text(encoding="utf-8").strip())
         if not 0 <= v <= 14:
             v = None
     except (OSError, ValueError):
@@ -6786,7 +7116,7 @@ def set_outfit_counter(body, fingerprint=None):
     fp = fingerprint or outfit_fingerprint(body)
     f = CONTROL_DIR / "outfit_counter"
     try:
-        rec = json.loads(f.read_text())
+        rec = json.loads(f.read_text(encoding="utf-8"))
         n, last = int(rec["counter"]), rec.get("fingerprint")
     except (OSError, ValueError, KeyError, TypeError):
         n, last = here, None
@@ -6919,6 +7249,10 @@ def _apply_validated_room(tracker, ctl, engine, body):
     同图保留当前位置/朝向（坐着且座位还在就继续坐）；换图才回新房间种子。
     """
     was_ready = bool(getattr(tracker, "ready", False))
+    # 2026-11-19 18:45:39 雨林：长连接没断，服务器在同一张图里把小光挪了一次房间（move_completed 0→1），
+    # 旧 engine 先 close → ready 清掉 → 新 engine 校验时被当成“新房间”传回出生点、牵手也断了。
+    # 同一段连接里旧 engine 刚关掉的图 == 新图 → 按同图重校验处理。段开始/结束会清掉，重连照旧回种子。
+    closed_map = None if was_ready else getattr(tracker, "closed_map_id", None)
     old_map = getattr(tracker, "confirmed_map_id", None) if was_ready else getattr(ctl, "map_id", None)
     old_sitting = getattr(ctl, "sitting", None)
     old_event = getattr(ctl, "event", None)
@@ -6930,7 +7264,9 @@ def _apply_validated_room(tracker, ctl, engine, body):
     if not tracker.begin_room(engine, body):
         return False
     new_map = getattr(tracker, "confirmed_map_id", None)
-    same_room = bool(was_ready and old_map is not None and new_map == old_map)
+    rebuilt = bool(closed_map is not None and new_map == closed_map)
+    tracker.closed_map_id = None
+    same_room = bool((was_ready and old_map is not None and new_map == old_map) or rebuilt)
     keep_seat = bool(new_map != HOME_MAP_ID and old_sitting is not None and (
         old_sitting in getattr(ctl, "seats", {})
         or old_sitting in old_seat_book
@@ -6940,7 +7276,7 @@ def _apply_validated_room(tracker, ctl, engine, body):
     ctl.last_social = None
     ctl.candle_reply = None           # 不恢复旧房间举烛前暂停的跟随
     ctl.hold_prev = ctl.hold_v = None
-    ctl.log("validated_room_reset", same_room=same_room, keep_seat=keep_seat,
+    ctl.log("validated_room_reset", same_room=same_room, keep_seat=keep_seat, engine_rebuilt=rebuilt,
             old_map_id=old_map, map_id=new_map,
             old_sitting=old_sitting,
             at=[round(v, 3) for v in ctl.position])

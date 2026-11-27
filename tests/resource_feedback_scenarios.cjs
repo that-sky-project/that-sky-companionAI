@@ -44,7 +44,7 @@ test('manual registration is in an explicitly advanced section',()=>assert.match
 function environment(responses){
   const nodes=new Map();
   const byId=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',disabled:false,hidden:false,checked:false,value:0,dataset:{},attributes:{},classList:{toggle(){}},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];if(k==='value')this.value=null;}});return nodes.get(id);};
-  const ctx=vm.createContext({console,Number,Array,Promise,Error,Map,document:{hidden:false},state:{page:'resources'},window:{setTimeout(){return 1;},clearTimeout(){}},
+  const ctx=vm.createContext({console,Number,Array,Promise,Error,Map,document:{hidden:false},state:{page:'resources'},window:{addEventListener(){},setTimeout(){return 1;},clearTimeout(){}},
     byId,setText(id,value){byId(id).textContent=value||'';},friendlyError:e=>e.message||String(e),ApiError:class extends Error{},messageFrom:(r,f)=>r?.message||f,
     request:async (url,options)=>{assert(!options?.method||options.method==='GET','tests must never mutate runtime');const value=responses[url];if(value instanceof Error)throw value;return value??{ok:true};}});
   const prefix=source.indexOf("'use strict';const PAGE_TITLES");assert(prefix>end);
@@ -55,6 +55,13 @@ function responses(summary,taskReply,capture){return {'/api/wizard':summary,'/ap
 async function uiTest(name,summary,taskReply,capture,check){const env=environment(responses(summary,taskReply,capture));await vm.runInContext('loadResources()',env.ctx);check(env);results.push({name,ok:true});return env;}
 
 (async()=>{
+ await uiTest('DOM identifies the current MuMu Android image', {...pending(), capture:{mumu:{serial:'emulator-5554',android_label:'安卓 15'}}},
+    null, cap(), env=>assert.equal(env.byId('resource-environment').textContent,'安卓 15'));
+ await uiTest('DOM marks a saved image version as the last check', {...pending(), steps:[{id:'mumu',detail:{android_label:'安卓 12'}}]},
+    null, cap(), env=>assert.equal(env.byId('resource-environment').textContent,'上次检查：安卓 12'));
+ const diag=environment(responses(pending(),null,cap()));
+ assert.equal(vm.runInContext("mumuCheckText({android_label:'安卓 15',page_size:16384,scene_log_message:'日志缓冲不可读取'},'检查中')",diag.ctx),
+   "安卓 15 · 检查中 · 内存页大小：16 KiB · 日志缓冲不可读取");
  await uiTest('DOM shows registered home and numeric catalog progress',pending(),wrap(task()),cap(),env=>{assert.equal(env.byId('resource-capture-panel').dataset.state,'success');assert.equal(env.byId('resource-catalog-progress').value,65);assert.match(env.byId('resource-catalog-detail').textContent,/75\/115/);assert.equal(env.byId('resource-catalog-start').disabled,true);});
  await uiTest('DOM success includes 100 percent and next action',ready(),wrap(task({running:false,ok:true})),cap(),env=>{assert.equal(env.byId('resource-catalog-progress').value,100);assert.equal(env.byId('resource-catalog-panel').dataset.state,'success');assert.match(env.byId('resource-catalog-state').textContent,/构建成功/);assert.match(env.byId('resource-task-state').textContent,/构建成功/);assert.match(env.byId('resource-catalog-detail').textContent,/完成安装设置/);});
  await uiTest('DOM failed job is not transport failure',pending(),wrap(task({running:false,ok:false,error:'fixture catalog failure'})),cap(),env=>{assert.match(env.byId('resource-catalog-message').textContent,/fixture catalog failure/);assert.equal(env.byId('resource-catalog-start').textContent,'重试构建地图目录');assert.equal(env.byId('resource-catalog-progress').hidden,true);assert.doesNotMatch(env.byId('resource-task-state').textContent,/状态读取失败/);});

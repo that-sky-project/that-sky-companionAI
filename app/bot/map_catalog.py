@@ -34,7 +34,7 @@ def zh_name(scene):
 
 def _config():
     try:
-        return json.loads(CFG.read_text()).get("maps", {})
+        return json.loads(CFG.read_text(encoding="utf-8")).get("maps", {})
     except (OSError, ValueError):
         return {}
 

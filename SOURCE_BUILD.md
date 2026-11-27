@@ -12,6 +12,14 @@
 
 脚本创建隔离的 `.build-env`，安装 `requirements-desktop.txt` 中的构建依赖，输出 `XiaoGuang.exe`。这一步只构建窗口宿主，不会登录游戏、生成地图或部署服务；它不自动打包便携运行时。
 
+不联网构建时，请准备完整的 Python 3.12 和包含桌面依赖及其传递依赖的本地 wheel 目录，运行：
+
+```powershell
+.\tools\build_desktop.ps1 -Python C:\Python312\python.exe -Offline -Wheelhouse C:\build\desktop-wheels
+```
+
+若 `.build-env` 已预装所需依赖，可省略 `-Wheelhouse`。便携 Python 用于运行后台与测试，不含构建宿主所需的 pip、venv 和 PyInstaller。启动更新检查依赖新宿主的 WebView2 桥接，替换网页或后台源码不会给旧版 `XiaoGuang.exe` 添加这个能力。
+
 ## 组装完整客户端
 
 - 将可信的**同版本 Windows 发行包**里的 `runtime` 放在 `XiaoGuang.exe` 旁；它包含便携 Python、Node 及已安装依赖。不要复制任何旧 `data`、日志、账号或令牌文件。

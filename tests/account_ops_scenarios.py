@@ -70,7 +70,7 @@ class Cases(unittest.TestCase):
         with patch.object(login,'Client',return_value=client):result=login.cmd_renew({'account':'fixture-a'})
         client.renew.assert_called_once_with('fixture-a')
         self.assertNotIn('SECRET',json.dumps(result))
-        self.assertEqual(paths.ACTIVE_ACCOUNT.read_text(),'fixture-b')
+        self.assertEqual(paths.ACTIVE_ACCOUNT.read_text(encoding="utf-8"),'fixture-b')
 
     def test_renew_unknown_never_contacts_service(self):
         with patch.object(login,'Client') as client:

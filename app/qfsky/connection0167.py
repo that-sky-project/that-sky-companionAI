@@ -129,9 +129,15 @@ def prepare_current_long(account,build=BUILD,map_id=None):
         or any(type(x)is not int or not 0<=x<=65535 for x in nv)):
         raise ValueError('map_capture_config_invalid')
     from .map_long0167 import prepare_current_capture
+    from .map_long0167.load_current_capture import expected_netversion_for_capture
+    from .join0167_profile import account_binding
+    # 遇境新旧录制共存：期望值取录制自身；只有版本档案里的候选值才放宽。
+    actual_nv=expected_netversion_for_capture(root,directory,expected_netversion=nv,
+        expected_scene=scene,expected_level_id=map_id,apk_build=build,
+        expected_account_binding=account_binding(account['user_uuid']))
     capture=prepare_current_capture(root,directory,expected_account_uuid=account['user_uuid'],
         expected_scene=scene,expected_resource_revision=revision,expected_level_id=map_id,
-        expected_netversion=nv,apk_build=build)
+        expected_netversion=actual_nv,apk_build=build)
     decoder=_dictionary(doc);fp.device(account['user_uuid'])
     return Prepared(copy.deepcopy(account),capture.profile,decoder,scene,map_id,revision,
         current_inputs=capture.inputs)

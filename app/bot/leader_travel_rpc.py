@@ -95,7 +95,7 @@ def build_change_level_frame(frame_factory, **kwargs):
     return frame_factory(14, build_change_level_game(**kwargs), True, channel=0)
 
 
-def build_current_slot_game(*, epoch, own_slot, scene, attachment_kind, wire_layout):
+def build_current_slot_game(*, epoch, own_slot, scene, attachment_kind, wire_layout, source_map=None):
     """Encode the existing game's observed current-room byte-slot layout.
 
     This is NOT a claim about the native stream's internal mode. Its mode 1
@@ -107,9 +107,45 @@ def build_current_slot_game(*, epoch, own_slot, scene, attachment_kind, wire_lay
     if wire_layout != "room_slot_u8":
         raise ValueError("explicit_current_room_slot_wire_layout_required")
     # Byte layout equals mode-1 serialization, but no native mode is inferred.
+    tail0, tail1 = _test_tail(scene, source_map)
     return build_change_level_game(epoch=epoch, own_slot=own_slot,
         leader_player_id=own_slot, stream_mode=1, scene=scene,
-        attachment_kind=attachment_kind)
+        attachment_kind=attachment_kind, tail0=tail0, tail1=tail1)
+
+
+def _tail_file():
+    import os as _o
+    try:
+        import xg_paths as _xp
+        p = _xp.CONTROL / "change_level_tail.json"
+        return str(p if p.is_file() else _xp.APP / "config" / "change_level_tail.json")
+    except Exception:
+        return "change_level_tail.json"
+
+
+_TAIL_FILE = _tail_file()
+
+
+def _test_tail(scene, source_map=None):
+    """T72 试验：control/change_level_tail.json = {scene: {"tail0": u32, "tail1": u32, "label": str}}。
+    没有文件/没有该图 = 原生默认 (0, 0)。每次用到都追加一行 change_level_tail.log。"""
+    try:
+        import json as _json, time as _time
+        row = _json.load(open(_TAIL_FILE, encoding="utf-8")).get(scene)
+        if not isinstance(row, dict):
+            return 0, 0
+        t0, t1 = int(row.get("tail0", 0)), int(row.get("tail1", 0))
+        if row.get("from_map") is not None and row.get("from_map") != source_map:
+            return 0, 0
+        if not (0 <= t0 < 1 << 32 and 0 <= t1 < 1 << 32):
+            return 0, 0
+        if __import__("os").environ.get("XG_RESEARCH_LOG"):
+          with open(_TAIL_FILE[:-5] + ".log", "a", encoding="utf-8") as fh:
+            fh.write(_json.dumps({"ts": _time.strftime("%Y-%m-%d %H:%M:%S"), "scene": scene,
+                                  "tail0": t0, "tail1": t1, "label": row.get("label"), "source_map": source_map}, ensure_ascii=False) + "\n")
+        return t0, t1
+    except Exception:
+        return 0, 0
 
 
 def build_current_slot_frame(frame_factory, **kwargs):

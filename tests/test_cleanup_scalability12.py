@@ -158,12 +158,12 @@ class ScalabilityTests(unittest.TestCase):
         self.assertTrue(any(e['bytes_done']==2*dc.COPY_CHUNK+13 for e in copies))
 
     def test_exdev_small_file_root(self):
-        rel=dc.RELEASE+'/multimap-catalog.json';p=self.root/rel;p.parent.mkdir(parents=True);p.write_text('{}');real=os.rename
+        rel=dc.RELEASE+'/multimap-catalog.json';p=self.root/rel;p.parent.mkdir(parents=True);p.write_text('{}', encoding="utf-8");real=os.rename
         def cross(a,b):
             if Path(a)==p:raise OSError(errno.EXDEV,'fixture')
             return real(a,b)
         with patch.object(dc.os,'rename',side_effect=cross):self.execute()
-        self.restore();self.assertEqual(p.read_text(),'{}')
+        self.restore();self.assertEqual(p.read_text(encoding="utf-8"),'{}')
 
     def test_copy_failure_removes_only_partial_stage_and_keeps_source(self):
         self.put('a.bin',b'abc');pre=self.preview();real=os.rename
@@ -215,12 +215,12 @@ class ScalabilityTests(unittest.TestCase):
 
     def test_journal_duplicate_fingerprint_alias_rejected(self):
         self.put();r=self.execute();p=self.root/r['trash_path']/dc.MANIFEST;doc=json.loads(p.read_bytes())
-        doc['items'][0]['fingerprint'].append(doc['items'][0]['fingerprint'][1]);p.write_text(json.dumps(doc))
+        doc['items'][0]['fingerprint'].append(doc['items'][0]['fingerprint'][1]);p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.s.restore_preview()['error_code'],'untrusted_trash')
 
     def test_v1_small_hash_still_checked(self):
         self.put();r=self.execute();p=self.root/r['trash_path']/dc.MANIFEST;doc=json.loads(p.read_bytes());doc.pop('fingerprint_version')
-        doc['items'][0]['fingerprint'][1][4]='a'*64;p.write_text(json.dumps(doc))
+        doc['items'][0]['fingerprint'][1][4]='a'*64;p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.s.restore_preview()['error_code'],'trash_changed')
 
     def test_source_mutation_during_copy_preserved_and_not_claimed_success(self):
@@ -278,12 +278,12 @@ class ScalabilityTests(unittest.TestCase):
 
     def test_transfer_id_path_injection_is_rejected(self):
         self.put();r=self.execute();p=self.root/r['trash_path']/dc.MANIFEST;doc=json.loads(p.read_bytes())
-        doc['items'][0]['transfer']={'direction':'out','id':'../outside'};p.write_text(json.dumps(doc))
+        doc['items'][0]['transfer']={'direction':'out','id':'../outside'};p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.s.restore_preview()['error_code'],'untrusted_trash')
 
     def test_journal_file_parent_alias_is_rejected(self):
         self.put();r=self.execute();p=self.root/r['trash_path']/dc.MANIFEST;doc=json.loads(p.read_bytes())
-        row=doc['items'][0]['fingerprint'][1];row[0]='missing/positions.f32';p.write_text(json.dumps(doc))
+        row=doc['items'][0]['fingerprint'][1];row[0]='missing/positions.f32';p.write_text(json.dumps(doc), encoding="utf-8")
         self.assertEqual(self.s.restore_preview()['error_code'],'untrusted_trash')
 
     def test_legacy_binary_sensitive_key_spellings(self):

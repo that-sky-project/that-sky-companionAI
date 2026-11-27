@@ -208,7 +208,7 @@ def _template():
     global _TEMPLATE
     if _TEMPLATE is None:
         try:
-            doc = json.load(open(TEMPLATE_FILE))
+            doc = json.load(open(TEMPLATE_FILE, encoding="utf-8"))
             idle_b, cand_b = bytes.fromhex(doc["idle"]), bytes.fromhex(doc["candle"])
         except FileNotFoundError:
             if D is None:
@@ -217,7 +217,7 @@ def _template():
             _, cand_b = D.at(CAP, MUMU, CANDLE_AT)
             json.dump({"source": CAP, "slot": hex(MUMU), "idle_at": IDLE_AT, "candle_at": CANDLE_AT,
                        "target_slot": hex(MUMU_TARGET_SLOT), "idle": idle_b.hex(), "candle": cand_b.hex()},
-                      open(TEMPLATE_FILE, "w"), indent=1)
+                      open(TEMPLATE_FILE, "w", encoding="utf-8"), indent=1)
         _TEMPLATE = (tokens(idle_b), tokens(cand_b), labels(idle_b), labels(cand_b))
     return _TEMPLATE
 

@@ -1,24 +1,23 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.17",
-  "client_revision": "r10.2-terrainfix.17",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
+  "client_revision": "r10.2-terrainfix.19",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
-    "source_tests_status": "completed_with_missing_input_skip",
     "all_source_tests_passed": true,
     "all_source_tests_executed": false,
-    "candidate_live_game_retested": false,
-    "new_archive_live_login_retested": false,
-    "backend_smoke_passed": false,
     "external_services_used": false,
-    "exe_host_rebuilt": false,
-    "exe_host_reused_from_revision": "r9",
-    "private_server_modified_in_this_patch": false,
-    "source_unittest_cases_run": 1143,
-    "source_unittest_cases_passed": 1142,
+    "published": false,
+    "source_tests_status": "completed_with_missing_input_skip",
+    "source_unittest_cases_run": 1307,
+    "source_unittest_cases_passed": 1306,
     "source_unittest_cases_failed": 0,
-    "source_unittest_cases_skipped": 1
+    "source_unittest_cases_skipped": 1,
+    "candidate_live_game_retested": false,
+    "backend_smoke_passed": false,
+    "exe_host_rebuilt": false,
+    "source_unittest_cases_restricted": 10
   },
   "inherited_r8_release_record": {
     "base_version": "1.0.5",
@@ -75,7 +74,7 @@
     "compact_960x640_checked": true,
     "packaged_window_tested": false
   },
-  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.16",
+  "previous_package_release": "1.0.5-desktop-ui.10.2-terrainfix.17",
   "terrain_generation_patch": {
     "revision": "terrainfix.1",
     "date": "2026-11-11",
@@ -1370,5 +1369,84 @@
     "deployed": false,
     "published": false,
     "readme_unchanged": true
+  },
+  "inherited_terrainfix17_verification": {
+    "source_tests_status": "completed_with_missing_input_skip",
+    "all_source_tests_passed": true,
+    "all_source_tests_executed": false,
+    "candidate_live_game_retested": false,
+    "new_archive_live_login_retested": false,
+    "backend_smoke_passed": false,
+    "external_services_used": false,
+    "exe_host_rebuilt": false,
+    "exe_host_reused_from_revision": "r9",
+    "private_server_modified_in_this_patch": false,
+    "source_unittest_cases_run": 1143,
+    "source_unittest_cases_passed": 1142,
+    "source_unittest_cases_failed": 0,
+    "source_unittest_cases_skipped": 1
+  },
+  "terrainfix_18": {
+    "状态": "离线维护工作树，尚未完成发行",
+    "日期": "2026-11-22",
+    "同步": [
+      "保留同连接同图重建保留位置、牵手按侧、出生高度修正及注册期精确重复去重。",
+      "核对 r12 T103 公开路线字段；只读巡游预览精确地图名优先，兼容 UTF-8 BOM。"
+    ],
+    "体检": [
+      "清理保护巡游路线、出生高度、场景块、蜡烛运行命令和未知待处理文件；拒绝设备路径。",
+      "统一 Windows 长路径与本地目录缓存检查，兼容双字节字符、共享锁及短路径回退。",
+      "旧控制台的预览帮助和错误信息兼容。"
+    ],
+    "未接入": [
+      "线上巡游执行、点蜡烛及神坛换房系列、在线场景替换、T100、T101。"
+    ],
+    "完整发行包已生成": false,
+    "离线测试": {
+      "modules": 44,
+      "run": 732,
+      "passed": 722,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "restricted": 10,
+      "static_methods": 1196,
+      "not_executed": 464,
+      "full_suite": false
+    },
+    "完整发行包隐私扫描": "未执行：没有生成完整包"
+  },
+  "terrainfix.18": {
+    "date": "2026-11-22",
+    "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
+    "tests": {
+      "modules": 65,
+      "run": 1206,
+      "failed": 0,
+      "skipped": 1,
+      "passed": 1205,
+      "failing_modules": []
+    },
+    "summary": "同步 2026-11-19～11-22 服务器修复：同图换房不回出生点；牵手站位按侧不再滑到另一边；三张图到达高度修正；巡游模式（/巡游 /停下 /继续跑 /继续巡游，T103 逐部件新路线，随包精简路线）；点蜡烛；中央神坛换房系列（单人拆分回忙、神坛状态、被拒后追主人、场景块替换机制——数据不随包、门开门关自动选、配对等待 2.5 秒）；T100 按原生格式每 2.56 秒上报对主人的亲密度（服务器不再单独拆开小光与主人）；T101 进新房时 EnterGame 前的换图/进出通知不再导致自己放弃进房。另：清理数据与超长中文路径、文件被占用写入、服务器路径全部改为用户数据目录等新电脑体检修复。",
+    "finished_by": "Claude",
+    "deployed": false,
+    "published": false,
+    "readme_unchanged": true
+  },
+  "terrainfix.19": {
+    "date": "2026-11-28",
+    "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
+    "tests": {
+      "modules": 1,
+      "run": 1307,
+      "failed": 0,
+      "skipped": 1,
+      "passed": 1306,
+      "failing_modules": []
+    },
+    "summary": "启动联网检查更新（GitHub Release 弹窗、默认浏览器打开、可跳过此版本、设置里手动检查/自动检查开关）；MuMu 全面适配（MuMuManager 实时取实例地址，支持网络桥接/NAT/多开/DHCP 换 IP，局域网串号放行，自带 adb 优先且不再 kill 别人的 adb 服务，Root 开关/正式构建/进程权限/日志权限分别诊断，安卓 9/12/15 镜像，split APK 与随机安装目录，ABI 识别，显示安卓版本）；WebView2 缺失检测、安装与启动失败可重试的中文提示；同步服务器 T105（跑图被选房主采用选举场景）、T106/T106b（炸过花的房间进房前清零暗石，交替尝试）、T107（只在有可烧花的 26 张图清暗石）；巡游在客户端默认关闭（CLAUDEWORK_TOUR=1 才开）。",
+    "finished_by": "Claude+Codex",
+    "deployed": false,
+    "published": false
   }
 }

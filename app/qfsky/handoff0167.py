@@ -313,11 +313,19 @@ def preflight_pending_batch(messages):
         _uint(m.message_type, 8, 'pending_outer_type_width')
         if type(m.body) is not bytes:
             raise HandoffError('pending_message_body_type')
+    # T101（11-22）：EnterGame 前新房先发的名单类通知（外 6 进人、7 离开、8 换图）原生只是名单更新；
+    # 以前一律当“不支持的控制”否决，会让小光在主人已进新房时自己中止（12:08 奥利奥）。
+    # 这些在 EnterGame 之前到达的通知直接忽略（EnterGame 名单更新），SKY_T101_PENDING_IGNORE= 置空即回滚。
+    import os as _os
+    _ign = tuple(int(x) for x in _os.environ.get('SKY_T101_PENDING_IGNORE', '6,7,8').split(',') if x.strip())
+    if _ign:
+        _first = next((i for i, m in enumerate(messages) if m.message_type == 17), len(messages))
+        messages = [m for i, m in enumerate(messages) if not (i < _first and m.message_type in _ign)]
     types = tuple(m.message_type for m in messages)
     terminal = tuple(t for t in types if t in (1, 2))
     if terminal:
         return BatchDecision('veto', 'server-rejection', types, terminal)
-    unsupported = tuple(t for t in types if t not in (12, 14, 17))
+    unsupported = tuple(t for t in types if t not in (12, 14, 17) + _ign)
     if unsupported:
         return BatchDecision('veto', 'unsupported-pending-control', types, unsupported)
     enters = tuple(m for m in messages if m.message_type == 17)

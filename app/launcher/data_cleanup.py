@@ -35,6 +35,14 @@ MANIFEST = '.xg-cleanup.json'
 INDEX = '.xg-cleanup-index.json'
 SCAN_LIMIT=1024*1024
 COPY_CHUNK=1024*1024
+# 仅由离线地形 worker 生成；普通 JSON、用户路线以及私有场景块不是缓存。
+HOP_NAME = re.compile(r'hop-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.json(?:\.pending)?\Z')
+HOP_LIMIT = 8 * 1024 * 1024
+HOP_SCHEMAS = frozenset(('bounded-hop-proof-v21-contact', 'bounded-aerial-proof-v22'))
+PROTECTED_NAMES = frozenset(('.env', 'config.json', 'settings.json', 'tour_routes.json',
+    'spawn_y_fix.json', 'scene_blobs', 'light_candle.json', 'zero_darkstones.json'))
+_DOS_DEVICE = re.compile(r'(?i)(?:con|prn|aux|nul|conin\$|conout\$|(?:com|lpt)[1-9¹²³])\Z')
+
 MAX_JSON = 32 * 1024 * 1024
 SENSITIVE = re.compile(r'(?i)(?:^|[_.\- ])(?:secrets?|credentials?|passwords?|passwd|passphrase|'
     r'tokens?|cookies?|sessions?|session3|login|accounts?|ai[_-]?keys?|api[_-]?keys?|'
@@ -196,10 +204,36 @@ class _Spans:
         return (b'\xef\xbb\xbf' if self.bom else b'')+text.encode('utf-8')
 
 
+class _DiskPath(type(Path())):
+    """仅在 Windows I/O 边界使用长路径前缀，日志、清单和比较仍用普通路径。"""
+    def __fspath__(self):
+        value=str(self)
+        if (os.name=='nt' and self.is_absolute() and not value.startswith(('\\\\?\\','\\\\.\\'))
+                and (len(value)>=224 or len(value.encode('utf-16-le', 'surrogatepass'))>=448)):
+            return ('\\\\?\\UNC\\'+value[2:]) if value.startswith('\\\\') else ('\\\\?\\'+value)
+        return value
+
+    def canonical(self):
+        value=str(self.resolve())
+        if os.name=='nt' and value.startswith('\\\\?\\UNC\\'):value='\\\\'+value[8:]
+        elif os.name=='nt' and value.startswith(chr(92)*2+'?'+chr(92)) and value[4:5].isalpha() and value[5:7]==':'+chr(92):value=value[4:]
+        return _DiskPath(value)
+
+
 class CleanupService:
     def __init__(self, data_root, *, is_online, is_busy, clock=time.time, preview_ttl=120, progress=None):
-        root=Path(data_root)
-        if not root.is_absolute() or root == Path(root.anchor):
+        if os.name=='nt':
+            # 允许普通扩展盘符/UNC，不允许设备命名空间绕过 data 根的目录检查。
+            value=os.fspath(data_root).replace('/', '\\')
+            if value.startswith('\\\\.\\'):_reject('invalid_data_root')
+            if value.startswith('\\\\?\\'):
+                tail=value[4:]
+                if tail[:4].casefold()=='unc\\':value='\\\\'+tail[4:]
+                elif re.match(r'^[A-Za-z]:\\',tail):value=tail
+                else:_reject('invalid_data_root')
+            data_root=value
+        root=_DiskPath(data_root)
+        if not root.is_absolute() or root == Path(root.anchor) or '..' in root.parts:
             _reject('invalid_data_root','data 根必须是明确的绝对目录')
         self.root=root
         self.clock=clock
@@ -211,7 +245,8 @@ class CleanupService:
         self._check_path(root)
         if not root.is_dir():
             _reject('invalid_data_root','data 根不存在')
-        self.root=root.resolve()
+        self.root=root.canonical()
+        if self.root == Path(self.root.anchor):_reject('invalid_data_root')
 
     def set_progress(self, callback):
         # The API uses one job slot and sets this before entering a core method.
@@ -235,7 +270,7 @@ class CleanupService:
         if not isinstance(value,str) or not value or any(c in value for c in '\\:<>"|?*'):return False
         parts=value.split('/')
         return all(p and p not in ('.','..') and not p.endswith((' ','.')) and
-                   not re.fullmatch(r'(?i)(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?',p)
+                   not _DOS_DEVICE.fullmatch(p.partition('.')[0].rstrip(' '))
                    and not any(ord(c)<32 for c in p) for p in parts)
 
     @staticmethod
@@ -252,7 +287,7 @@ class CleanupService:
                 if not subset and row[:4]!=old[:4]:return False
             elif partial:
                 if row[2]>old[2]:return False
-            elif row[:4]!=old[:4] or (row[2]<=SCAN_LIMIT and row[4]!=old[4]):return False
+            elif row[:4]!=old[:4] or (row[4] is not None and row[4]!=old[4]):return False
         return True
 
     @staticmethod
@@ -285,7 +320,7 @@ class CleanupService:
             return re.fullmatch(r'[A-Za-z0-9_-]+\.json',parts[3]) is not None
         if len(parts)==2 and parts[0]=='hop-proofs':
             # 2026-11-16: hop proof records written by the terrain hop worker.
-            return re.fullmatch(r'hop-[0-9a-f-]{36}\.json',parts[1]) is not None
+            return HOP_NAME.fullmatch(parts[1]) is not None
         if len(parts)>=4 and parts[0]=='game' and parts[2]=='terrain':tail='/'.join(parts[3:])
         elif '/'.join(parts)==RELEASE+'/multimap-catalog.json':return True
         elif '/'.join(parts).startswith(RELEASE+'/assets/'):tail='assets/'+ '/'.join(parts[len(PurePosixPath(RELEASE).parts)+1:])
@@ -310,7 +345,7 @@ class CleanupService:
         return any(re.fullmatch(pattern,tail) for pattern in patterns)
 
     def _check_path(self,path):
-        path=Path(path)
+        path=_DiskPath(path)
         # Never resolve first: doing so would conceal junction/symlink ancestors.
         for part in [*reversed(path.parents),path]:
             try:
@@ -330,7 +365,7 @@ class CleanupService:
             _reject('unsafe_path')
         path=self.root.joinpath(*parts)
         self._check_path(path)
-        if not path.resolve().is_relative_to(self.root):
+        if not path.canonical().is_relative_to(self.root):
             _reject('unsafe_path')
         return path
 
@@ -363,7 +398,15 @@ class CleanupService:
             with temp.open('xb') as stream:
                 stream.write(raw);stream.flush();os.fsync(stream.fileno())
             self._check_path(path)
-            os.replace(temp,path)
+            # 共享冲突常见于杀软瞬时扫描。只重试原子替换，不覆盖写原件。
+            for delay in (0.03, 0.09, 0.18, None):
+                try:
+                    self._check_path(temp);self._check_path(path)
+                    os.replace(temp,path)
+                    break
+                except PermissionError:
+                    if delay is None:raise
+                    time.sleep(delay)
         finally:
             if temp.exists():
                 temp.unlink()
@@ -378,7 +421,7 @@ class CleanupService:
             return len(parts)==3 and parts[2] in {'terrain':('terrain',),'catalog':('catalog',),
                 'names':('names','catalog-inputs'),'captures':(),'props':('props',)}[category]
         if category=='terrain':
-            return rel in (RELEASE+'/assets',RELEASE+'/terrain',RELEASE+'/multimap-catalog.json')
+            return (len(parts)==2 and parts[0]=='hop-proofs' and HOP_NAME.fullmatch(parts[1]) is not None) or rel in (RELEASE+'/assets',RELEASE+'/terrain',RELEASE+'/multimap-catalog.json')
         if category=='catalog':
             return rel==RELEASE+'/asset-catalog-v32c' or (rel.startswith(RELEASE+'/asset-catalog-acct/')
                 and len(parts)==len(PurePosixPath(RELEASE).parts)+2 and
@@ -398,6 +441,11 @@ class CleanupService:
                         found.extend((category,'game/'+version.name+'/'+name) for name in names)
         if selection['terrain']:
             found.extend(('terrain',RELEASE+'/'+name) for name in ('assets','terrain','multimap-catalog.json'))
+            proofs=self._path('hop-proofs')
+            if proofs.is_dir():
+                for entry in sorted(proofs.iterdir()):
+                    if HOP_NAME.fullmatch(entry.name):
+                        found.append(('terrain','hop-proofs/'+entry.name))
         if selection['catalog']:
             found.append(('catalog',RELEASE+'/asset-catalog-v32c'))
             accounts=self._path(RELEASE+'/asset-catalog-acct')
@@ -411,14 +459,21 @@ class CleanupService:
     def _tree(self,rel,*,sensitivity=True,policy_rel=None,partial=False):
         base=self._path(rel);rows=[];files=0;size=0
         self._emit('inventory','正在按目录元数据扫描')
+        logical_parts=PurePosixPath(policy_rel or rel).parts
+        if logical_parts[:1]==('trash',):logical_parts=logical_parts[2:]
+        hop=HOP_NAME.fullmatch(logical_parts[-1]) if len(logical_parts)==2 and logical_parts[0]=='hop-proofs' else None
         def visit(path):
             nonlocal files,size
             info=path.lstat();self._check_entry(info)
             local=path.relative_to(base).as_posix()
             if not self._safe_relative(local,dot=True):_reject('unsafe_path')
             name=path.name.lower()
-            if sensitivity and (SENSITIVE.search(name) or name in ('.env','config.json','settings.json')):
+            if name.startswith('.xg-write-') and name.endswith('.pending'):
+                _reject('unclassified_pending','未完成的通用写入可能含私有配置，保留原件',rel)
+            if ('memdump' in name or name.removesuffix('.pending') in PROTECTED_NAMES
+                    or (sensitivity and SENSITIVE.search(name))):
                 _reject('sensitive_data','所选目录含敏感文件名',rel)
+            if hop and not stat.S_ISREG(info.st_mode):_reject('unknown_generated_file','跳跃证明必须为普通文件',rel)
             if stat.S_ISDIR(info.st_mode):
                 rows.append([local,'dir',0,info.st_mtime_ns])
                 for child in sorted(path.iterdir(),key=lambda p:p.name):visit(child)
@@ -429,16 +484,22 @@ class CleanupService:
                     (suffix not in EXTENSIONS and name not in TEXT_FILES)):
                     _reject('unknown_generated_file','所选目录含非生成文件',rel)
                 digest=None
-                if info.st_size<=SCAN_LIMIT:
+                if hop and info.st_size>HOP_LIMIT:_reject('large_text_unverified','跳跃证明超过生成器上限',rel)
+                if info.st_size<=SCAN_LIMIT or hop:
                     if info.st_size:
-                        with path.open('rb') as stream:raw=stream.read(SCAN_LIMIT+1)
+                        with path.open('rb') as stream:raw=stream.read((HOP_LIMIT if hop else SCAN_LIMIT)+1)
                     else:raw=b''
                     if len(raw)!=info.st_size:_reject('preview_stale')
                     if sensitivity:
                         if (re.search(rb'-----BEGIN [A-Z ]*PRIVATE KEY-----',raw) or
                             re.search(rb'(?i)["\x27](?:api[_-]?key|password|passwd|session3|access[_-]?token|refresh[_-]?token|private[_-]?key)["\x27]\s*:',raw)):
                             _reject('sensitive_data','所选目录含敏感内容',rel)
-                        if not partial and suffix=='.json' and _secret(_json(raw)):_reject('sensitive_data',path=rel)
+                        if not partial and suffix=='.json':
+                            content=_json(raw)
+                            if hop and (not isinstance(content,dict) or content.get('schema') not in HOP_SCHEMAS
+                                    or content.get('hopId')!=hop[1]):
+                                _reject('unknown_generated_file','名称与生成凭据不匹配，保留文件',rel)
+                            if _secret(content):_reject('sensitive_data',path=rel)
                     digest=_digest(raw)
                 elif suffix=='.json' or name in TEXT_FILES or suffix in ('.obj','.mtl'):
                     logical=(PurePosixPath(policy_rel or rel)/(local if local!='.' else '')).as_posix()
@@ -607,14 +668,19 @@ class CleanupService:
         path=self._path('trash/'+INDEX)
         if not path.exists():return {'magic':MAGIC,'batches':[]}
         doc=_json(self._read(path))
-        if (not isinstance(doc,dict) or set(doc)!={'magic','batches'} or doc.get('magic')!=MAGIC
+        if (not isinstance(doc,dict) or set(doc) not in ({'magic','batches'},{'magic','batches','retiring'}) or doc.get('magic')!=MAGIC
             or not isinstance(doc.get('batches'),list) or _secret(doc)):_reject('untrusted_trash')
         if len(doc['batches'])>10000 or any(not isinstance(x,str) or not BATCH.fullmatch(x) for x in doc['batches']):_reject('untrusted_trash')
+        if 'retiring' in doc and doc['retiring'] not in doc['batches']:_reject('untrusted_trash')
         return doc
 
     def _batch(self,batchid):
         if not isinstance(batchid,str) or not BATCH.fullmatch(batchid):_reject('untrusted_trash')
         path=self._path('trash/'+batchid+'/'+MANIFEST)
+        if not path.exists() and self._index().get('retiring')==batchid:
+            # 在最后一个 journal 已移除、index 尚未提交时断电。只能收尾空目录。
+            if path.parent.exists() and (not path.parent.is_dir() or any(path.parent.iterdir())):_reject('untrusted_trash')
+            return {'batch_id':batchid,'status':'purging','items':[],'selection':{k:False for k in CATEGORIES}}
         doc=_json(self._read(path))
         if (not isinstance(doc,dict) or set(doc) not in ({'magic','batch_id','root_hash','created_at','status','selection','items'}, {'magic','batch_id','root_hash','created_at','status','selection','items','fingerprint_version'})
             or doc.get('magic')!=MAGIC or doc.get('batch_id')!=batchid or _secret(doc)
@@ -845,15 +911,18 @@ class CleanupService:
                         m=member.relative_to(self.root/batch);allowed.add(m.as_posix())
                         allowed.update(p.as_posix() for p in m.parents if str(p)!='.')
         folder=self._path(batch)
-        for current,dirs,files in os.walk(folder,followlinks=False):
-            for name in dirs+files:
-                path=Path(current)/name;self._check_entry(path.lstat())
-                rel=path.relative_to(folder).as_posix()
+        pending=[folder] if folder.exists() else []
+        while pending:
+            directory=pending.pop();self._check_path(directory)
+            for path in directory.iterdir():
+                info=path.lstat();self._check_entry(info)
+                rel=path.relative_to(folder).as_posix();is_dir=stat.S_ISDIR(info.st_mode)
                 if rel not in allowed:
-                    # Empty structural parents can remain after successful restore.
+                    # 恢复成功后可留下只含目录的树；不遍历未登记的陌生目录。
                     structural=any(item['action']=='move' and PurePosixPath(rel) in PurePosixPath(item['path']).parents for item in doc['items'])
-                    if not (path.is_dir() and structural):_reject('untrusted_trash','回收目录含非本服务内容')
-                info=path.stat();rows.append([rel,'dir' if path.is_dir() else 'file',info.st_size,info.st_mtime_ns])
+                    if not (is_dir and structural):_reject('untrusted_trash','回收目录含非本服务内容')
+                rows.append([rel,'dir' if is_dir else 'file',info.st_size,info.st_mtime_ns])
+                if is_dir:pending.append(path)
         return sorted(rows)
 
     def _restore_doc(self,doc,*,rollback=False):
@@ -957,19 +1026,28 @@ class CleanupService:
                 for batchid in plan['signatures']:
                     self._state();folder=self._path('trash/'+batchid)
                     doc=self._batch(batchid);self._archive(doc)
-                    doc['status']='purging';self._save_batch(doc)
+                    if index.get('retiring')!=batchid:
+                        doc['status']='purging';self._save_batch(doc)
                     try:
-                        # Checked individual files only, never rmtree(data/trash).
-                        for current,dirs,files in os.walk(folder,topdown=False,followlinks=False):
-                            for name in files:
-                                path=Path(current)/name
-                                if path.name==MANIFEST:continue
-                                self._check_entry(path.lstat());bytes_done+=path.stat().st_size;path.unlink();files_done+=1
+                        # 绝不重新遍历并删除目录中的全部项目；预览后新增文件属于用户。
+                        rows=plan['signatures'][batchid]
+                        for rel,kind,size,mtime in sorted(rows,key=lambda row:row[0].count('/'),reverse=True):
+                            if rel==MANIFEST:continue
+                            path=self._path('trash/'+batchid+'/'+rel)
+                            info=path.lstat();self._check_entry(info)
+                            if kind=='dir' and stat.S_ISDIR(info.st_mode):path.rmdir()
+                            elif kind=='file' and stat.S_ISREG(info.st_mode) and (size,mtime)==(info.st_size,info.st_mtime_ns):
+                                path.unlink();bytes_done+=size;files_done+=1
                                 if files_done%128==0:self._emit('purge','正在删除已确认回收内容',files_done,None,bytes_done,None)
-                            for name in dirs:
-                                path=Path(current)/name;self._check_entry(path.lstat());path.rmdir()
-                        self._check_path(folder/MANIFEST);(folder/MANIFEST).unlink();folder.rmdir()
-                        removed.append(batchid);index['batches'].remove(batchid);self._write_doc(self._path('trash/'+INDEX),index)
+                            else:_reject('trash_changed','待清空项目已变化，保留现场')
+                        manifest=folder/MANIFEST;self._check_path(manifest)
+                        if folder.exists() and any(c.name!=MANIFEST for c in folder.iterdir()):_reject('untrusted_trash')
+                        if index.get('retiring')!=batchid:
+                            index['retiring']=batchid;self._write_doc(self._path('trash/'+INDEX),index)
+                        if manifest.exists():manifest.unlink()
+                        if folder.exists():folder.rmdir()
+                        index['batches'].remove(batchid);index.pop('retiring',None);self._write_doc(self._path('trash/'+INDEX),index)
+                        removed.append(batchid)
                     except OSError:
                         return {'ok':False,'error_code':'purge_partial','message':'永久删除部分完成；已删除内容不可恢复，剩余内容可重新预览后继续删除',
                                 'batch_id':batchid,'purged':removed}

@@ -932,7 +932,7 @@ def _make_client():
     sys.path.insert(0, str(xg_paths.BOT_CODE))
     import long_runner as L
     from qfsky.skyapi import SkyClient
-    acc = L.load_account((root / "control/active_account").read_text().strip())
+    acc = L.load_account((root / "control/active_account").read_text(encoding="utf-8").strip())
     return root, SkyClient(acc["user_uuid"], acc["session"], acc["session2"], acc.get("data_version") or "")
 
 

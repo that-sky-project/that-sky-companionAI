@@ -362,8 +362,8 @@ def stable_info(max_age=300):
         return _stable_cache["value"]
     import hashlib
     try:
-        label = (STABLE / "CURRENT").read_text().strip()
-        sums = (STABLE / label / "SHA256SUMS.release").read_text().splitlines()
+        label = (STABLE / "CURRENT").read_text(encoding="utf-8").strip()
+        sums = (STABLE / label / "SHA256SUMS.release").read_text(encoding="utf-8").splitlines()
     except OSError:
         value = {"label": None, "matches": None, "changed": []}
         _stable_cache.update(at=now, value=value)

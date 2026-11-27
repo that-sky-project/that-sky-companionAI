@@ -13,7 +13,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import xg_exec
+import xg_adb
+from .android_compat import (adb_connection_error, detect_root_shell,
+                             find_package_pid, read_page_size, read_threadtime_log, threadtime_lines)
+from .device_scope import is_supported_emulator_serial
 from .native_log import bind
 from .native_profile import NATIVE_SHA256, BUILD, BINDING_ALGORITHM, account_binding
 
@@ -39,16 +42,16 @@ _SHELL_ERROR_MARKERS = (
     b'su: inaccessible or not found',
     b'su: not found',
     b'sh: su: inaccessible or not found',
-    b'inaccessible or not found',
+    b'sh: su: not found',
+    b'/system/bin/sh: su: inaccessible or not found',
+    b'/system/bin/sh: su: not found',
+    b'su: permission denied',
+    b'su: invalid uid/gid',
 )
 
 
 def _shell_error(raw):
-    head = (raw or b'')[:512]
-    for marker in _SHELL_ERROR_MARKERS:
-        if marker in head:
-            return head.decode('utf-8', 'replace').strip()[:300]
-    return ''
+    return (raw or b'')[:512].strip().lower().startswith(_SHELL_ERROR_MARKERS)
 
 
 def sha256_file(path):
@@ -78,13 +81,15 @@ def elf_loads(path):
 def parse_maps(text):
     out=[]
     for line in text.splitlines():
-        m=re.match(r'([0-9a-f]+)-([0-9a-f]+) ([rwxps-]+) ([0-9a-f]+) \S+ \d+(?:\s+(.*))?$',line)
-        if m: out.append({'lo':int(m[1],16),'hi':int(m[2],16),'flags':m[3],
+        m=re.fullmatch(r'([0-9a-f]+)-([0-9a-f]+)\s+([rwxps-]+)\s+([0-9a-f]+)\s+\S+\s+\d+(?:\s+(.*))?',
+                       line.strip(), flags=re.IGNORECASE)
+        if m: out.append({'lo':int(m[1],16),'hi':int(m[2],16),'flags':m[3].lower(),
                          'offset':int(m[4],16),'path':m[5] or ''})
     return out
 
 
 def load_bias(mappings, loads):
+    # Legacy build-pinned capture path; validated_context rejects known non-4 KiB guests.
     biases=[]
     for m in mappings:
         if not m['path'].endswith('/libBootloader.so'): continue
@@ -108,11 +113,12 @@ def validate_native_path(path):
 
 def latest_scene(logtext, *, pid, scene, revision):
     # Restrict to target PID without changing adjacency in that process's log.
-    lines=[]
-    for line in logtext.splitlines():
-        m=re.match(r'^\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}\s+(\d+)\s+',line)
-        if m and int(m[1])==pid: lines.append(line)
-    rows=bind(lines,revision,'entered-world')
+    try:
+        rows=bind(threadtime_lines(logtext, pid),revision,'entered-world')
+    except ValueError as exc:
+        if str(exc).startswith('没有相邻的 NetVersion/levelName 行'):
+            raise ValueError('capture_scene_log_missing') from None
+        raise
     row=rows[-1]
     if row['scene']!=scene: raise ValueError('latest exact native scene event differs from requested scene')
     return row
@@ -121,50 +127,79 @@ def latest_scene(logtext, *, pid, scene, revision):
 class Device:
     def __init__(self, adb, serial):
         # adb 可以是路径，也可以是命令前缀列表（测试用 python 脚本模拟 adb）
+        if not is_supported_emulator_serial(serial):
+            raise ValueError('capture_device_scope')
         self.adb = list(adb) if isinstance(adb, (list, tuple)) else [str(adb)]
         self.serial = serial
         self.reads = []
+        self._root_prefix = None
 
     def _run(self, args):
         # 2026-11-08 Claude：录图后台是无控制台进程（DETACHED_PROCESS），adb.exe 拿不到有效的
         # 标准输入句柄会失败（“adb 命令失败”，前台跑就好）。统一走 xg_exec：Windows 上
         # stdin=DEVNULL、CREATE_NO_WINDOW；POSIX 不变。
-        return xg_exec.run([*self.adb, '-s', self.serial, *args],
-                           capture_output=True, timeout=30)
+        try:
+            return xg_adb.run(self.adb, ['-s', self.serial, *args],
+                              capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError('capture_adb_timeout') from None
+        except FileNotFoundError:
+            raise RuntimeError('capture_adb_missing') from None
+        except PermissionError:
+            raise RuntimeError('capture_adb_permission') from None
+        except OSError as exc:
+            kind = ('capture_adb_permission' if getattr(exc, 'winerror', None) in (225, 226)
+                    else 'capture_adb_launch_failed')
+            raise RuntimeError(kind) from None
 
-    def _root_shell(self):
-        """adbd 自己是不是 root（MuMu 开 Root 后是 uid=0，且往往没有 su 可执行文件）。
-
-        2026-11-08 Claude：`exec-out` 不回传远端退出码，`su: inaccessible or not found`
-        会以返回码 0 + 报错文本的形式回来，被当成内存数据（short native read）。
-        所以先探测一次：adbd 已是 root 就把所有 `su -c` 改成 `sh -c`。
-        """
-        if getattr(self, "_rootsh", None) is None:
-            try:
-                p = self._run(['shell', 'id'])
-                text = p.stdout or b''
-                self._rootsh = (p.returncode == 0 and
-                                (b'uid=0(' in text or re.search(rb'\buid=0\b', text) is not None))
-            except Exception:
-                self._rootsh = False
-        return self._rootsh
+    def _run_tuple(self, *args):
+        p = self._run(list(args))
+        if (p.stderr or b'').startswith(xg_adb.SERVER_CONFLICT.encode('ascii')):
+            raise RuntimeError('capture_adb_conflict')
+        # exec-out may carry binary output; do not scan successful reads for text.
+        if adb_connection_error(p.stdout if p.returncode or not args or args[0] != 'exec-out' else b'', p.stderr):
+            raise RuntimeError('capture_adb_disconnected')
+        return p.returncode, p.stdout or b'', p.stderr or b''
 
     def call(self, args):
-        if args and isinstance(args[-1], str) and args[-1].startswith("su -c ") and self._root_shell():
-            args = [*args[:-1], "sh -c " + args[-1][len("su -c "):]]
-        p = self._run(args)
-        if p.returncode and args and isinstance(args[-1], str) and args[-1].startswith("su -c "):
-            # MuMu 开了 Root 后 adbd 自己就是 root，sh -c 与 su -c 等价；
-            # 有些实例没有 su 可执行文件，这里自动降级一次。
-            p = self._run([*args[:-1], "sh -c " + args[-1][len("su -c "):]])
-        if p.returncode:
-            raise RuntimeError('adb operation failed; no game data printed; inspect local device connection/root status')
-        if len(p.stdout) > 16 * 1024 * 1024:
+        if args and isinstance(args[-1], str) and args[-1].startswith('su -c '):
+            if not self._root_prefix:
+                self._root_prefix = detect_root_shell(lambda command: self._run_tuple('shell', command))
+            if not self._root_prefix:
+                raise RuntimeError('capture_root_unavailable')
+            args = [*args[:-1], self._root_prefix + args[-1][len('su -c '):]]
+        code, out, err = self._run_tuple(*args)
+        if len(out) > 16 * 1024 * 1024:
             raise RuntimeError('adb response exceeds bound')
-        shell_error = _shell_error(p.stdout)
-        if shell_error:
-            raise RuntimeError('remote root shell unavailable: ' + shell_error)
-        return p.stdout
+        if _shell_error(out) or _shell_error(err):
+            raise RuntimeError('capture_root_unavailable')
+        if args and '/maps' in args[-1]:
+            report = (err[:512] + b'\n' + out[:512]).lower()
+            if b'permission denied' in report or b'operation not permitted' in report:
+                raise RuntimeError('capture_maps_denied')
+            if b'no such file or directory' in report:
+                raise RuntimeError('capture_game_exited')
+        if args and (proc_match := re.search(r'/proc/[0-9]+/mem\b', args[-1])):
+            # Binary exec-out is not searched as general text: only an explicit
+            # utility error prefix can identify a denial on stdout.
+            report = err[:512].lower()
+            if out.startswith(b'dd:') and proc_match[0].encode('ascii') in out[:512]:
+                report += b'\n' + out[:512].lower()
+            if b'permission denied' in report or b'operation not permitted' in report:
+                raise RuntimeError('capture_mem_denied')
+        if code:
+            raise RuntimeError('adb operation failed')
+        return out
+
+    def game_pid(self):
+        return find_package_pid(lambda command: self._run_tuple('shell', command), PACKAGE)
+
+    def scene_log(self, pid):
+        diagnostics = {}
+        text = read_threadtime_log(self._run_tuple, pid, diagnostics=diagnostics)
+        if diagnostics.get('scene_log_reason') == 'capture_logcat_denied':
+            raise RuntimeError('capture_logcat_denied')
+        return text
 
     def read(self,address,size,label,*,digest=True):
         if not 0<size<=16384 or not any(m['lo']<=address and address+size<=m['hi'] and 'r' in m['flags'] for m in self.maps):
@@ -215,13 +250,16 @@ def validated_context(a):
         raise ValueError('unknown local native library; redo cross-version analysis instead of reusing offsets')
     loads=elf_loads(a.native_library)
     d=Device(a.adb,a.serial)
-    pid=d.call(['shell','pidof '+PACKAGE]).decode().strip()
-    if not re.fullmatch(r'\d+',pid): raise ValueError('expected exactly one running official game process')
-    d.pid=int(pid)
+    d.pid=d.game_pid()
+    if d.pid is None: raise ValueError('expected exactly one running official game process')
+    page_size=read_page_size(lambda command: d._run_tuple('shell', command))
+    if page_size is not None and page_size!=4096:
+        raise RuntimeError('capture_page_size_unsupported')
     package=d.call(['shell','dumpsys package '+PACKAGE]).decode('utf-8','replace')
     if not re.search(r'\bversionCode=421629\b',package): raise ValueError('installed package build is not421629')
     del package
-    d.maps=parse_maps(d.call(['shell',f"su -c 'cat /proc/{d.pid}/maps'"]).decode())
+    d.maps=parse_maps(d.call(['shell',f"su -c 'cat /proc/{d.pid}/maps'"]).decode('utf-8','replace'))
+    if not d.maps: raise ValueError('capture_maps_empty')
     paths={m['path'] for m in d.maps if m['path'].endswith('/libBootloader.so')}
     if len(paths)!=1: raise ValueError('missing or ambiguous loaded libBootloader path')
     native_path=next(iter(paths))
@@ -239,7 +277,7 @@ def validated_context(a):
     nv_raw=d.read(n+0x99b78,12,'netversion_before')
     nv=list(struct.unpack('<6H',nv_raw))
     if nv[2:]!=[23536,0,0,25536]: raise ValueError('native NetVersion build invariants mismatch')
-    logs=d.call(['logcat','-d','-v','threadtime','--pid='+pid]).decode('utf-8','replace')
+    logs=d.scene_log(d.pid)
     observation=latest_scene(logs,pid=d.pid,scene=a.scene,revision=a.resource_revision)
     del logs
     if observation['netversion_u16']!=nv: raise ValueError('native scene event/NetVersion mismatch')

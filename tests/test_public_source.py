@@ -30,7 +30,7 @@ class PublicSourceTests(unittest.TestCase):
         self.assertFalse(list(APP.rglob('*.b64')))
         self.assertFalse(list(APP.rglob('accounts.json')))
         pins=APP/'escort-v31-server/qfsky/map_long0167/catalog_account_pins.json'
-        self.assertEqual(json.loads(pins.read_text()),{})
+        self.assertEqual(json.loads(pins.read_text(encoding="utf-8")),{})
 
     def test_real_client_imports_offline(self):
         code=r'''
@@ -87,12 +87,12 @@ print('public-imports-offline-ok')
 
     def test_engine_lockfiles_match_declared_dependencies(self):
         for directory in (APP/'engine',APP/'xg_gamedata/terrain/pipeline/engine'):
-            package=json.loads((directory/'package.json').read_text())
-            lock=json.loads((directory/'package-lock.json').read_text())
+            package=json.loads((directory/'package.json').read_text(encoding="utf-8"))
+            lock=json.loads((directory/'package-lock.json').read_text(encoding="utf-8"))
             self.assertEqual(lock['packages']['']['dependencies'],package['dependencies'])
 
     def test_release_and_entrypoints_exist(self):
-        self.assertRegex(json.loads((ROOT/'BUILD.json').read_text())['client_revision'],
+        self.assertRegex(json.loads((ROOT/'BUILD.json').read_text(encoding="utf-8"))['client_revision'],
                          r'^r10(?:\.\d+)?(?:-terrainfix\.\d+)?$')
         for rel in ('desktop.py','tools/build_desktop.ps1','app/bot/control_api.py','app/bot/account_login.py','app/web/desktop.html','app/web/desktop.js','app/web/desktop.css','app/launcher/supervisor_sixhour.py','LICENSE','NOTICE','THIRD_PARTY_NOTICES'):
             self.assertTrue((ROOT/rel).is_file(),rel)

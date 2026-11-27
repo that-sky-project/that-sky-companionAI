@@ -9,6 +9,9 @@ _SEAL = object()
 
 
 def next_counter(value):
+    # T91（11-21）：配对/追主人换房后新连接按原生从 0 起，0 的下一个就是 1。
+    if type(value) is int and value == 0:
+        return 1
     if type(value) is not int or not 1 <= value <= 255:
         raise ValueError('same_peer_counter')
     return 1 if value == 255 else value + 1

@@ -46,6 +46,8 @@ class OfflineBase(unittest.TestCase):
         self.cfg=self.mock('_capture_config',return_value={})
         self.proc=self.mock('_process_executable_paths',return_value=[])
         self.mock('_registry_roots',return_value=[])
+        self.mock('_registry_uninstall_roots',return_value=[])
+        self.mock('xg_adb._server_protocol',return_value=None)
         self.mock('shutil.which',return_value=None)
         self.exec_guard=patch.object(device.xg_exec,'run',side_effect=AssertionError('real external execution forbidden')).start();self.addCleanup(patch.stopall)
         patch.dict(os.environ,{},clear=True).start()
@@ -248,21 +250,25 @@ class FindGameTests(OfflineBase):
     def test_nondefault_connected_tcp_serial_is_discovered(self):
         adb=self.flow({'127.0.0.1:19123':'device'},{'127.0.0.1:19123':4321})
         self.assertEqual(device.find_game(adb),{'serial':'127.0.0.1:19123','pid':4321});self.assertFalse(any(c[0][0]=='connect' for c in self.calls))
-    def test_usb_and_emulator_ready_never_connect_before_pid(self):
-        for serial in ['R5USB123','emulator-5588']:
-            with self.subTest(serial=serial):
-                self.calls=[];adb=self.flow({serial:'device'},{serial:123})
-                self.assertEqual(device.find_game(adb),{'serial':serial,'pid':123});self.assertFalse(any(c[0][0]=='connect' for c in self.calls))
+    def test_emulator_ready_never_connects_before_pid(self):
+        serial='emulator-5588';adb=self.flow({serial:'device'},{serial:123})
+        self.assertEqual(device.find_game(adb),{'serial':serial,'pid':123})
+        self.assertFalse(any(c[0][0]=='connect' for c in self.calls))
+    def test_usb_device_is_not_queried(self):
+        serial='R5USB123';adb=self.flow({serial:'device'},{serial:123});diag={}
+        self.assertIsNone(device.find_game(adb,diagnostics=diag))
+        self.assertEqual(diag['reason'],'unsupported_device_scope')
+        self.assertFalse(any(c[1]==serial for c in self.calls))
     def test_automatic_local_instance_preferred_when_usb_is_listed_first(self):
         for local in ['127.0.0.1:19123','localhost:19123','[::1]:19123','emulator-5588']:
             with self.subTest(local=local):
                 self.calls=[];adb=self.flow({'R5USB123':'device',local:'device'},{'R5USB123':1,local:2})
                 self.assertEqual(device.find_game(adb),{'serial':local,'pid':2})
                 self.assertFalse(any(c[0][0]=='connect' for c in self.calls))
-    def test_explicit_usb_override_beats_automatic_local_instance(self):
+    def test_explicit_usb_override_is_refused_with_local_fallback(self):
         adb=self.flow({'emulator-5588':'device','R5USB123':'device'},{'emulator-5588':1,'R5USB123':2})
-        with patch.dict(os.environ,{'XG_ADB_SERIAL':'R5USB123'}):self.assertEqual(device.find_game(adb)['serial'],'R5USB123')
-        self.assertFalse(any(c[0][0]=='connect' for c in self.calls))
+        with patch.dict(os.environ,{'XG_ADB_SERIAL':'R5USB123'}):self.assertEqual(device.find_game(adb)['serial'],'emulator-5588')
+        self.assertFalse(any(c[0][0]=='connect' or c[1]=='R5USB123' for c in self.calls))
     def test_ready_instance_without_game_does_not_hide_later_ready_game(self):
         adb=self.flow({'emulator-5588':'device','emulator-5600':'device'},{'emulator-5600':2})
         self.assertEqual(device.find_game(adb)['serial'],'emulator-5600')

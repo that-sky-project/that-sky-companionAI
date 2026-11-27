@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import re
 
+from .android_compat import THREADTIME
+
 MASK = 0xffffffff
 TYPE_FIELD = 23536
 BUILD = 421629
@@ -20,7 +22,6 @@ NET_RE = re.compile(r"\bNetVersion\s*:\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,"
 SCENE_RE = re.compile(r"\bscene=([A-Za-z0-9_]{1,96})\b")
 LEVEL_NAME_RE = re.compile(r"\blevelName:\s*([A-Za-z0-9_]{1,96})\s+levelId:\s*(\d+)\b")
 LEVEL_LABEL_RE = re.compile(r"\bLevel:\s*([A-Za-z0-9_]{1,96})\s+LevelId:\s*(\d+)\b")
-PREFIX = re.compile(r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d{3})\s+(\d+)\s+(\d+)\s+[VDIWEF]\s+.*?:\s*(.*)$")
 
 
 def scene_marker(line: str):
@@ -58,18 +59,18 @@ def bind(lines, resource_revision, phase):
     """把 NetVersion 行与紧邻的 levelName 行绑成一条“进图完成”观察。"""
     out = []
     for i in range(len(lines) - 1):
-        a, b = PREFIX.match(lines[i]), PREFIX.match(lines[i + 1])
-        if not a or not b or a.group(1, 2, 3) != b.group(1, 2, 3):
+        a, b = THREADTIME.fullmatch(lines[i]), THREADTIME.fullmatch(lines[i + 1])
+        if not a or not b or a.group('timestamp', 'pid', 'tid') != b.group('timestamp', 'pid', 'tid'):
             continue
-        if not NET_RE.search(a.group(4)):
+        if not NET_RE.search(a['message']):
             continue
-        marker = scene_marker(b.group(4))
-        if not marker or "levelName:" not in b.group(4):
+        marker = scene_marker(b['message'])
+        if not marker or "levelName:" not in b['message']:
             continue
-        row = log_observations([a.group(4)], resource_revision=resource_revision)[0]
+        row = log_observations([a['message']], resource_revision=resource_revision)[0]
         row.update(scene=marker["scene"], level_id=marker["level_id"],
                    scene_binding="adjacent-native-init-lines-exact-timestamp-pid-tid",
-                   source_lines=[i + 1, i + 2], native_timestamp=a.group(1),
+                   source_lines=[i + 1, i + 2], native_timestamp=a['timestamp'],
                    observed_phase=phase, online_join_verified=False,
                    map_transition_verified=False, evidence="native-init-observed")
         row.pop("source_line", None)

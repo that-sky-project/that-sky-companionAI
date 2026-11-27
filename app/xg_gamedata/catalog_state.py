@@ -47,7 +47,7 @@ def _paths(data):
 
 
 def _json(path, limit=2 * 1024 * 1024):
-    with Path(path).open("rb") as stream:
+    with open(xg_paths.win_path(path), "rb") as stream:
         raw = stream.read(limit + 1)
     if len(raw) > limit:
         raise ValueError("metadata_size")
@@ -59,7 +59,7 @@ def _json(path, limit=2 * 1024 * 1024):
 
 def _identity(path):
     try:
-        st = path.stat()
+        st = os.stat(xg_paths.win_path(path))
         return (str(path), st.st_size, st.st_mtime_ns, st.st_ctime_ns)
     except OSError:
         return (str(path), None)
@@ -68,13 +68,16 @@ def _identity(path):
 def _fingerprint(xg, folder):
     paths = [xg.PROFILES_JSON, xg.RUNTIME_PRIVATE / "catalog_sources.json",
              xg.RUNTIME_PRIVATE / "catalog_account_pins.json"]
-    if folder.is_dir():
-        paths.extend(p for p in folder.rglob("*") if p.is_file())
-    if xg.CURRENT_PROFILES.is_dir():
+    folder_fs = Path(xg_paths.long_path(folder, force=True))
+    if folder_fs.is_dir():
+        paths.extend(folder / p.relative_to(folder_fs) for p in folder_fs.rglob("*") if p.is_file())
+    profiles_fs = Path(xg_paths.long_path(xg.CURRENT_PROFILES, force=True))
+    if profiles_fs.is_dir():
         # Only runtime source parts, never inspect account/token/connection keys.
-        for child in xg.CURRENT_PROFILES.iterdir():
+        for child in profiles_fs.iterdir():
             if child.is_dir():
-                paths.extend(child / name for name in ("record.json", "actor.bin", "scene.bin", "cache.bin"))
+                paths.extend(xg.CURRENT_PROFILES / child.name / name
+                             for name in ("record.json", "actor.bin", "scene.bin", "cache.bin"))
     return tuple(_identity(p) for p in sorted(set(paths), key=str))
 
 
@@ -207,7 +210,7 @@ def _qianniao_precheck(manifest, folder):
     if not isinstance(row, dict) or any(row.get(k) != policy[k] for k in ("scene", "placement_sha256", "annotation_sha256")):
         raise ValueError(QIANNIAOCHENG_STALE_CODE)
     # Fixed relative path, not a path supplied by untrusted manifest metadata.
-    with (folder / "SunsetEnd2/variants/qianniaocheng/placement.json").open("rb") as stream:
+    with open(xg_paths.win_path(folder / "SunsetEnd2/variants/qianniaocheng/placement.json"), "rb") as stream:
         raw = stream.read(128 * 1024 + 1)
     if len(raw) > 128 * 1024:
         raise ValueError("metadata_size")
@@ -261,7 +264,7 @@ def certify(data, account, account_uuid, profile=None):
     xg = _paths(data)
     folder = xg.ASSET_RELEASE / "asset-catalog-acct" / account
     manifest_path = folder / "manifest.json"
-    if not manifest_path.is_file():
+    if not Path(xg_paths.win_path(manifest_path)).is_file():
         return row
     try:
         # Fingerprint before reading metadata: a concurrent atomic replacement must
