@@ -30,15 +30,15 @@ DOC = {"tag_name": TAG, "html_url": URL, "name": "新版发布", "body": "\n".jo
 class VersionTests(unittest.TestCase):
     def test_uses_real_build_file_and_all_version_axes(self):
         current = current_version(json.loads((ROOT / "BUILD.json").read_text(encoding="utf-8")))
-        self.assertEqual(current.display(), "v1.0.5-r10.2-terrainfix.19")
+        self.assertEqual(current.display(), "v1.0.5-r10.2-terrainfix.20")
         for old in ("v1.0.4-r99-terrainfix.99", "v1.0.5-r10.1-terrainfix.99",
                     "v1.0.5-r10.2-terrainfix.9", "v1.0.5-r10.2-terrainfix.18"):
             self.assertLess(parse_tag(old), current)
-        for new in ("v1.0.5-r10.2-terrainfix.20", "v1.0.5-r10.12-terrainfix.1",
+        for new in ("v1.0.5-r10.2-terrainfix.21", "v1.0.5-r10.12-terrainfix.1",
                     "v1.0.5-r11", "v1.0.6-r1", "v1.1.0-r1"):
             self.assertGreater(parse_tag(new), current)
-        self.assertEqual(parse_tag(TAG), current)
-        self.assertEqual(parse_tag("v1.0.5-r10.02.0-terrainfix.019"), current)
+        self.assertEqual(parse_tag("v1.0.5-r10.2-terrainfix.20"), current)
+        self.assertEqual(parse_tag("v1.0.5-r10.02.0-terrainfix.020"), current)
 
     def test_current_release_fallbacks_and_invalid_tags(self):
         self.assertEqual(current_version({"release": BUILD["release"]}), current_version(BUILD))
@@ -175,7 +175,7 @@ class UpdateCheckerTests(unittest.TestCase):
             self.opener.side_effect = HTTPError(LATEST_URL, code, "fixture", {}, io.BytesIO(b""))
             checker.start()
             self.assertEqual(self.status(checker)["status"], "silent")
-            self.log.assert_called_with("update_check_http_failure", status=code)
+            self.log.assert_any_call("update_check_http_failure", status=code)
         self.opener.side_effect = URLError("sensitive proxy url")
         checker.start()
         self.assertEqual(self.status(checker)["status"], "silent")

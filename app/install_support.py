@@ -11,6 +11,9 @@ import shutil
 REEXTRACT = "关闭小光，把整个压缩包重新解压到有写权限的短路径（例如 D:\\XiaoGuang）；保留 runtime 和 app，再重试。"
 WEBVIEW = ("请通过 Microsoft 官方渠道安装或修复 Microsoft Edge WebView2 Evergreen Runtime，"
            "然后重新打开小光；受管理的电脑可请管理员安装。")
+DOTNET = ("小光的窗口组件需要 Microsoft .NET Framework 4.8（Windows 10/11 一般自带）。"
+          "请从微软官网下载安装 .NET Framework 4.8（或用“启用或关闭 Windows 功能”勾选 .NET Framework 4.8 高级服务），"
+          "并安装最新的 Microsoft Visual C++ 2015-2022 x64 运行库，重启电脑后再打开小光。")
 DATA_WRITE = ("请确认当前 Windows 用户对小光数据目录有写入权限；使用默认的 %LOCALAPPDATA% 目录，"
               "或换到自己可写的本地目录后重试。无需以管理员身份启动小光。")
 DISK = "请清理小光数据目录所在盘及系统临时目录所在盘的空间，或迁移到有足够空间的磁盘，再重试。"
@@ -57,6 +60,12 @@ def problem(error=None, *, stage="", default=None):
     if stage == "webview":
         if isinstance(error, ModuleNotFoundError):
             return diagnostic("desktop_runtime_missing", "桌面宿主缺少界面组件。" + REEXTRACT)
+        chain = reason
+        cause = getattr(error, "__cause__", None) or getattr(error, "__context__", None)
+        if cause is not None:
+            chain += " " + str(cause).casefold()
+        if re.search(r"\.net runtime|python\.runtime|clr_loader|clrloader|netfx|pythonnet|mscoree|coreclr", chain):
+            return diagnostic("dotnet_unavailable", DOTNET)
         if winerror in (5, 126, 127, 14001) or re.search(r"webview2|edgechromium|corewebview|0x80070002|0x8007007e", reason):
             return diagnostic("webview2_unavailable", WEBVIEW)
         return diagnostic("desktop_view_failed", WEBVIEW + " 若仍失败，请查看本机 desktop-lifecycle.log。")

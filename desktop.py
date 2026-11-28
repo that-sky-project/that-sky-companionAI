@@ -688,6 +688,68 @@ class Backend:
         self.web = None
 
 
+def _error_detail(exc, limit=600):
+    """Exception text and causes for diagnosis; home directory and user name are masked."""
+    parts, seen = [], set()
+    while exc is not None and id(exc) not in seen and len(parts) < 4:
+        seen.add(id(exc))
+        parts.append("%s: %s" % (type(exc).__name__, " ".join(str(exc).split())))
+        exc = exc.__cause__ or exc.__context__
+    return _mask_private(" <- ".join(parts))[:limit]
+
+
+def _mask_private(text):
+    home = str(Path.home())
+    user = os.environ.get("USERNAME") or ""
+    for secret in sorted({home, home.replace("\\", "/"), user}, key=len, reverse=True):
+        if secret and len(secret) > 2:
+            text = text.replace(secret, "~" if secret != user else "<user>")
+    return text
+
+
+def _error_trace(exc, limit=3000):
+    """Tail of the formatted traceback (with causes) for desktop-lifecycle.log."""
+    import traceback
+    try:
+        text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    except Exception:
+        return ""
+    return _mask_private(text)[-limit:]
+
+
+BROWSER_FALLBACK = ("小光的桌面窗口组件在这台电脑上无法加载（原因已记在 desktop-lifecycle.log），"
+                    "已改用默认浏览器打开小光界面，功能照常使用。\n\n"
+                    "使用期间请保留这个提示框；点“确定”会退出小光。\n\n"
+                    "若想恢复独立窗口：{hint}")
+
+
+def _browser_fallback(backend, data, issue, *, opener=None, notify=None):
+    """WebView/.NET unavailable: serve the same local UI in the default browser.
+
+    The page is the local backend's own desktop page (127.0.0.1, one-use
+    bootstrap token); the process stays alive until the user dismisses the box.
+    """
+    if backend is None or getattr(backend, "process", None) is None or backend.process.poll() is not None:
+        return False
+    try:
+        url = backend.url()
+    except Exception:  # noqa: BLE001
+        return False
+    if not url.startswith("http://127.0.0.1:"):
+        return False
+    opener = opener or (os.startfile if os.name == "nt" else None)
+    if opener is None:
+        return False
+    try:
+        opener(url)
+    except OSError as exc:
+        _lifecycle_log(data, "browser_fallback_failed", error_type=type(exc).__name__)
+        return False
+    _lifecycle_log(data, "browser_fallback", code=issue.get("code"))
+    (notify or (lambda text: _message(text, error=False)))(BROWSER_FALLBACK.format(hint=issue.get("message", "")))
+    return True
+
+
 def _windows_exit_error(code):
     # Native loader errors usually have an NTSTATUS exit code, not a Win32 errno.
     reason = {0xC0000017: "out of memory", 0xC000009A: "out of memory",
@@ -762,7 +824,10 @@ def _run_desktop(a, root, data):
         else:
             issue = install_support.problem(exc, stage=stage, default=install_support.BACKEND)
             _lifecycle_log(data, "startup_failed", stage=stage, code=issue["code"],
-                           error_type=type(exc).__name__, winerror=getattr(exc, "winerror", None))
+                           error_type=type(exc).__name__, winerror=getattr(exc, "winerror", None),
+                           detail=_error_detail(exc), trace=_error_trace(exc))
+            if stage == "webview" and _browser_fallback(backend, data, issue):
+                return 0, False
             return 1, "小光桌面客户端启动未完成。\n" + issue["message"]
         return 1, False
     finally:

@@ -22,6 +22,8 @@ else:
 
 REPOSITORY = "that-sky-project/that-sky-companionAI"
 LATEST_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
+# API 被限流（共享代理出口常见 403）时，改读网页 latest 的 302 跳转拿 tag。
+PAGE_LATEST_URL = f"https://github.com/{REPOSITORY}/releases/latest"
 RELEASE_URL_PREFIX = f"https://github.com/{REPOSITORY}/releases/"
 USER_AGENT = "XiaoGuang-Updater"
 TIMEOUT = 8
@@ -258,6 +260,8 @@ class UpdateChecker:
             self._log("update_check_http_failure", status=exc.code)
             exc.close()
             state = "silent"
+            if exc.code in (403, 429):
+                release = self._page_fallback()
         except (OSError, http.client.HTTPException) as exc:
             self._log("update_check_network_failure", error=type(exc).__name__)
             state = "silent"
@@ -275,6 +279,31 @@ class UpdateChecker:
                     else:
                         self._state = state
                 self._worker = None
+
+    def _page_fallback(self):
+        """Rate-limited API: the public page redirects /releases/latest to /releases/tag/<tag>."""
+        request = Request(PAGE_LATEST_URL, headers={"User-Agent": USER_AGENT}, method="GET")
+        location = None
+        try:
+            with self._opener(request, timeout=self._timeout):
+                return None
+        except HTTPError as exc:
+            if exc.code in (301, 302, 303, 307, 308):
+                location = exc.headers.get("Location") if exc.headers is not None else None
+            exc.close()
+        except (OSError, http.client.HTTPException, ValueError) as exc:
+            self._log("update_check_fallback_failure", error=type(exc).__name__)
+            return None
+        tag_prefix = RELEASE_URL_PREFIX.rstrip("/") + "/tag/"
+        if not (isinstance(location, str) and location.startswith(tag_prefix) and valid_release_url(location)):
+            self._log("update_check_fallback_failure", error="no_redirect")
+            return None
+        tag = unquote(location[len(tag_prefix):].split("?", 1)[0].split("#", 1)[0])
+        version = parse_tag(tag)
+        if not version:
+            return None
+        self._log("update_check_fallback_used")
+        return Release(version, tag, tag, "", location)
 
     def set_auto(self, enabled):
         with self._lock:

@@ -1,7 +1,7 @@
 {
   "base_version": "1.0.5",
-  "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
-  "client_revision": "r10.2-terrainfix.19",
+  "release": "1.0.5-desktop-ui.10.2-terrainfix.20",
+  "client_revision": "r10.2-terrainfix.20",
   "frontend": "Twilight cloud-sea redesign (night/dawn themes, starfield, motion layer) over preserved r9 controls and APIs",
   "baseline_source_commit": "78f1d73e7b3e73b3f32d0d706405346dc196c590",
   "current_revision_verification": {
@@ -10,8 +10,8 @@
     "external_services_used": false,
     "published": false,
     "source_tests_status": "completed_with_missing_input_skip",
-    "source_unittest_cases_run": 1307,
-    "source_unittest_cases_passed": 1306,
+    "source_unittest_cases_run": 1317,
+    "source_unittest_cases_passed": 1316,
     "source_unittest_cases_failed": 0,
     "source_unittest_cases_skipped": 1,
     "candidate_live_game_retested": false,
@@ -1418,7 +1418,7 @@
   },
   "terrainfix.18": {
     "date": "2026-11-22",
-    "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
+    "release": "1.0.5-desktop-ui.10.2-terrainfix.20",
     "tests": {
       "modules": 65,
       "run": 1206,
@@ -1435,7 +1435,7 @@
   },
   "terrainfix.19": {
     "date": "2026-11-28",
-    "release": "1.0.5-desktop-ui.10.2-terrainfix.19",
+    "release": "1.0.5-desktop-ui.10.2-terrainfix.20",
     "tests": {
       "modules": 1,
       "run": 1307,
@@ -1446,6 +1446,22 @@
     },
     "summary": "启动联网检查更新（GitHub Release 弹窗、默认浏览器打开、可跳过此版本、设置里手动检查/自动检查开关）；MuMu 全面适配（MuMuManager 实时取实例地址，支持网络桥接/NAT/多开/DHCP 换 IP，局域网串号放行，自带 adb 优先且不再 kill 别人的 adb 服务，Root 开关/正式构建/进程权限/日志权限分别诊断，安卓 9/12/15 镜像，split APK 与随机安装目录，ABI 识别，显示安卓版本）；WebView2 缺失检测、安装与启动失败可重试的中文提示；同步服务器 T105（跑图被选房主采用选举场景）、T106/T106b（炸过花的房间进房前清零暗石，交替尝试）、T107（只在有可烧花的 26 张图清暗石）；巡游在客户端默认关闭（CLAUDEWORK_TOUR=1 才开）。",
     "finished_by": "Claude+Codex",
+    "deployed": false,
+    "published": false
+  },
+  "terrainfix.20": {
+    "date": "2026-11-28",
+    "release": "1.0.5-desktop-ui.10.2-terrainfix.20",
+    "tests": {
+      "modules": 1,
+      "run": 1317,
+      "failed": 0,
+      "skipped": 1,
+      "passed": 1316,
+      "failing_modules": []
+    },
+    "summary": "热修复：GitHub API 被限流（403/429）时改读 Release 页面跳转获取最新版本；桌面窗口启动失败时日志记录异常内容、原因链与堆栈（用户名/个人目录打码）；.NET 运行环境加载失败单独提示安装 .NET Framework 4.8 与 VC++ 运行库；桌面窗口组件（WebView2/.NET）无法加载时自动改用默认浏览器打开同一套本机界面，提示框保留期间小光照常运行。",
+    "finished_by": "Claude",
     "deployed": false,
     "published": false
   }
